@@ -2,6 +2,8 @@
 
 张倬玮的 AI Career Agent。它面向 AI 产品招聘经理和业务面试官，通过静态摘要、可追问对话、事实来源与能力边界，帮助招聘方快速获得可验证的候选人信息。
 
+在线演示：[ask-me-career-agent.vercel.app](https://ask-me-career-agent.vercel.app)。当前未配置生产 DeepSeek 密钥与最新版简历，仅用于验证公开内容、稳定问答和界面流程。
+
 ## 本地运行
 
 需要 Node.js 20.9 或更高版本。
