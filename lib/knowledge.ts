@@ -81,17 +81,21 @@ export function retrieveKnowledge(question: string, limitOrOptions: number | Ret
     .map(({ item }) => item);
 }
 
-export function matchStableAnswer(question: string) {
+export function matchStableAnswer(question: string, history: ChatMessage[] = []) {
   const normalizedQuestion = normalize(question);
+  const resolved = resolveRetrievalQuery(question, history);
+  const usesReference = referencePattern.test(question);
   const ranked = stableAnswers
     .filter(isPublicActive)
     .map((item) => {
+      if (usesReference && item.relatedProject && !resolved.matchedProjects.includes(item.relatedProject)) return { item, score: 0 };
       const exact = normalize(item.question) === normalizedQuestion ? 100 : 0;
       const keywordScore = item.matchKeywords.reduce((score, keyword) => {
         const normalizedKeyword = normalize(keyword);
         return score + (normalizedQuestion.includes(normalizedKeyword) ? Math.max(4, normalizedKeyword.length * 2) : 0);
       }, 0);
-      return { item, score: exact + keywordScore };
+      const projectScore = item.relatedProject && resolved.matchedProjects.includes(item.relatedProject) ? 20 : 0;
+      return { item, score: exact + keywordScore + projectScore };
     })
     .filter(({ score }) => score >= 4)
     .sort((left, right) => right.score - left.score || left.item.id.localeCompare(right.item.id));

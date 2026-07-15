@@ -97,7 +97,7 @@ export async function POST(request: NextRequest) {
 
   const history = body.messages.slice(0, -1).slice(-8);
   const items = retrieveKnowledge(assessment.question, { history, limit: 4 });
-  const stableAnswer = matchStableAnswer(assessment.question);
+  const stableAnswer = matchStableAnswer(assessment.question, history);
   const claimIds = stableAnswer ? [...stableAnswer.requiredClaimIds] : [...new Set(items.flatMap((item) => item.claimIds))];
   const sourceIds = stableAnswer ? [...stableAnswer.requiredSourceIds] : [...new Set(items.flatMap((item) => item.sourceIds))];
   const matchedSources = getSources(sourceIds);
