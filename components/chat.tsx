@@ -5,9 +5,14 @@ import {
   ArrowUpIcon,
   ArrowUpRightIcon,
   CaretDownIcon,
+  CheckCircleIcon,
+  EnvelopeSimpleIcon,
+  GithubLogoIcon,
+  PhoneIcon,
   StopIcon,
 } from "@phosphor-icons/react";
 import { suggestedQuestions } from "@/lib/knowledge";
+import { featuredProjects, profile } from "@/lib/profile";
 import type { ChatMessage, KnowledgeItem, Source } from "@/lib/types";
 
 interface DisplayMessage extends ChatMessage {
@@ -15,6 +20,19 @@ interface DisplayMessage extends ChatMessage {
   items?: KnowledgeItem[];
   mode?: "live" | "demo" | "guardrail";
 }
+
+const verificationLabels = {
+  externally_verified: "外部可定位",
+  self_attested: "候选人确认",
+  unverified: "尚未验证",
+} as const;
+
+const statusLabels = {
+  completed: "已完成",
+  in_progress: "进行中",
+  planned: "规划中",
+  archived: "已归档",
+} as const;
 
 function createSessionId() {
   if (typeof crypto !== "undefined" && crypto.randomUUID) return crypto.randomUUID();
@@ -42,6 +60,8 @@ export function Chat() {
   useEffect(() => {
     messageEndRef.current?.scrollIntoView({ block: "end" });
   }, [messages]);
+
+  useEffect(() => () => abortRef.current?.abort(), []);
 
   async function send(question: string, fromSuggestion = false) {
     const clean = question.trim();
@@ -127,19 +147,47 @@ export function Chat() {
       <div className="chat-scroll">
         {isEmpty ? (
           <div className="empty-state">
-            <span className="candidate-mark" aria-hidden="true">张</span>
-            <div className="welcome-copy">
-              <h1 id="chat-title">今天想了解张倬玮的什么？</h1>
-              <p>我会基于公开资料回答，并明确区分事实、候选人自述和待核实信息。</p>
-            </div>
-            <div className="suggestions" aria-label="推荐问题">
-              {suggestedQuestions.map((question) => (
-                <button key={question} type="button" onClick={() => void send(question, true)}>
-                  <span>{question}</span>
-                  <ArrowUpRightIcon size={17} aria-hidden="true" />
-                </button>
-              ))}
-            </div>
+            <section className="welcome" aria-labelledby="chat-title">
+              <div className="evidence-label"><CheckCircleIcon size={16} weight="fill" aria-hidden="true" /> 公开资料已更新</div>
+              <h1 id="chat-title">让证据先说话。</h1>
+              <p>我是 {profile.name} 的 AI Career Agent。你可以核实他的教育、审计经历、AI 项目、本人贡献和能力边界。</p>
+              <span className="education-line">{profile.education}</span>
+              <nav className="mobile-contact" aria-label="联系方式">
+                <a href={`mailto:${profile.email}`}><EnvelopeSimpleIcon size={15} aria-hidden="true" />邮件</a>
+                <a href={`tel:${profile.phone}`}><PhoneIcon size={15} aria-hidden="true" />电话</a>
+                <a href={profile.github} target="_blank" rel="noreferrer"><GithubLogoIcon size={15} aria-hidden="true" />GitHub</a>
+              </nav>
+            </section>
+
+            <section className="project-proof" aria-labelledby="project-title">
+              <div className="proof-heading">
+                <h2 id="project-title">可直接核验的项目</h2>
+                <a href={profile.github} target="_blank" rel="noreferrer"><GithubLogoIcon size={16} aria-hidden="true" />全部仓库</a>
+              </div>
+              <div className="project-grid">
+                {featuredProjects.map((project) => (
+                  <a className="project-link" href={project.url} target="_blank" rel="noreferrer" key={project.name}>
+                    <span className="project-status">{project.status}</span>
+                    <strong>{project.name}</strong>
+                    <p>{project.summary}</p>
+                    <small>{project.stack}</small>
+                    <ArrowUpRightIcon className="project-arrow" size={18} aria-hidden="true" />
+                  </a>
+                ))}
+              </div>
+            </section>
+
+            <section className="question-start" aria-labelledby="question-title">
+              <h2 id="question-title">从招聘方最关心的问题开始</h2>
+              <div className="suggestions" aria-label="推荐问题">
+                {suggestedQuestions.map((question) => (
+                  <button key={question} type="button" onClick={() => void send(question, true)}>
+                    <span>{question}</span>
+                    <ArrowUpRightIcon size={17} aria-hidden="true" />
+                  </button>
+                ))}
+              </div>
+            </section>
           </div>
         ) : (
           <div className="messages" aria-live="polite">
@@ -176,9 +224,12 @@ export function Chat() {
                           </summary>
                           <div className="source-detail">
                             <p>类型：{source.sourceType}</p>
-                            <p>验证状态：候选人自述，待外部核实</p>
+                            <p>验证状态：{verificationLabels[source.verification]}</p>
+                            {source.projectStatus && <p>项目状态：{statusLabels[source.projectStatus]}</p>}
                             <p>最后检查：{source.lastChecked}</p>
-                            {source.url && <a href={source.url}>查看公开来源</a>}
+                            <p>支持事实：{source.supports}</p>
+                            <p>证据边界：{source.limitations}</p>
+                            {source.url && <a href={source.url} target="_blank" rel="noreferrer">查看公开来源 <ArrowUpRightIcon size={14} aria-hidden="true" /></a>}
                           </div>
                         </details>
                       ))}

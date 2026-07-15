@@ -20,7 +20,8 @@ npm run dev
 - `DEEPSEEK_MODEL`：默认 `deepseek-v4-flash`。
 - `CHAT_DISABLED`：紧急关闭模型问答。
 - `DAILY_REQUEST_LIMIT`：单实例每日请求上限。
-- `NEXT_PUBLIC_RESUME_URL`、`NEXT_PUBLIC_PROJECT_URL`、`NEXT_PUBLIC_CONTACT_URL`：公开转化入口。未配置时不会展示虚假链接。
+
+公开 GitHub、邮箱和电话统一维护在 `lib/profile.ts`，与模型知识库隔离。简历仍在持续更新，页面通过邮件入口获取最新版，不托管过期文件。
 
 ## 验证
 
@@ -34,4 +35,4 @@ PRD 验收与完整评测设计见 `tests/prd-evaluation-draft.md`。
 
 ## 当前数据边界
 
-仓库目前只包含 PRD 已确认的候选人定位与 Ask Me 项目信息。教育、任职、其他项目、简历和联系方式未被提供，因此不会被模型推测或写入公开知识库。补齐真实资料并完成 Claim-Source 人工校验后，才能通过正式上线门槛。
+知识库已纳入候选人授权公开的教育、技能、审计经历和项目资料，并用 GitHub 仓库验证公开项目存在。GitHub 不能单独证明个人贡献比例、生产规模或业务效果，这些内容仍标记为待面试核实。联系方式独立于模型上下文，不进入检索和问题日志。

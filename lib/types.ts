@@ -8,6 +8,21 @@ export interface Source {
   url?: string;
   public: boolean;
   lastChecked: string;
+  verification: Verification;
+  projectStatus?: ProjectStatus;
+  supports: string;
+  limitations: string;
+}
+
+export interface Claim {
+  id: string;
+  statement: string;
+  claimType: "background" | "experience" | "project" | "skill" | "boundary";
+  candidateContribution: string;
+  aiAssistance: string;
+  verification: Verification;
+  sourceIds: string[];
+  limitations: string;
 }
 
 export interface KnowledgeItem {
@@ -20,6 +35,7 @@ export interface KnowledgeItem {
   candidateContribution: string;
   aiAssistance: string;
   limitations: string;
+  claimIds: string[];
   sourceIds: string[];
 }
 
