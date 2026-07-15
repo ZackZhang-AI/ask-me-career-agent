@@ -2,6 +2,7 @@ export type Verification = "externally_verified" | "self_attested" | "unverified
 export type ProjectStatus = "completed" | "in_progress" | "planned" | "archived";
 export type Visibility = "public" | "private";
 export type ContentStatus = "active" | "draft" | "archived";
+export type ResponseStatus = "completed" | "insufficient_evidence" | "refused" | "rate_limited" | "budget_exhausted" | "upstream_error";
 
 export interface ContentMetadata {
   visibility: Visibility;

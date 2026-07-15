@@ -1,20 +1,28 @@
-import type { KnowledgeItem } from "./types";
+import type { KnowledgeItem, StableAnswer } from "./types";
+import { getClaims } from "./knowledge.ts";
 
 export function buildContext(items: KnowledgeItem[]) {
-  return items.map((item) => [
-    `[${item.id}] ${item.title}`,
-    `事实：${item.content}`,
-    `项目状态：${item.projectStatus ?? "不适用"}`,
-    `验证状态：${item.verification}`,
-    `本人贡献：${item.candidateContribution}`,
-    `AI 辅助：${item.aiAssistance}`,
-    `边界：${item.limitations}`,
-    `事实声明：${item.claimIds.join(", ") || "未单独拆分"}`,
-    `来源：${item.sourceIds.join(", ")}`,
-  ].join("\n")).join("\n\n");
+  return items.map((item) => {
+    const itemClaims = getClaims(item.claimIds);
+    return [
+      `[${item.id}] ${item.title}`,
+      `事实：${item.content}`,
+      `项目状态：${item.projectStatus ?? "不适用"}`,
+      `验证状态：${item.verification}`,
+      `本人贡献：${item.candidateContribution}`,
+      `AI 辅助：${item.aiAssistance}`,
+      `边界：${item.limitations}`,
+      `事实声明：${itemClaims.map((claim) => `[${claim.id}] ${claim.statement}`).join("；")}`,
+      `来源：${item.sourceIds.join(", ")}`,
+    ].join("\n");
+  }).join("\n\n");
 }
 
-export function demoAnswer(question: string, items: KnowledgeItem[]) {
+export function demoAnswer(question: string, items: KnowledgeItem[], stableAnswer?: StableAnswer) {
+  if (stableAnswer) {
+    const citations = stableAnswer.requiredSourceIds.map((id) => `[${id}]`).join("");
+    return `${stableAnswer.standardAnswer} ${citations}\n\n证据边界\n\n${stableAnswer.limitations}`;
+  }
   if (!items.length) {
     return "现有公开资料不足以回答这个问题，我不会替候选人推测。建议改问他的 AI 产品项目、岗位匹配证据，或在面试中直接核实。";
   }

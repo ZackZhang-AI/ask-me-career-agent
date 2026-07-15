@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { ANALYTICS_EVENTS, sanitizeAnalyticsEvent } from "../lib/analytics.ts";
 import { checkRequestLimits, extractClientIp, resetLocalRateLimitsForTests } from "../lib/rate-limit.ts";
+import { GET as getResume } from "../app/resume/route.ts";
+import { NextRequest } from "next/server";
 
 test("分析事件白名单完整且不保留会话原值", () => {
   for (const event of ANALYTICS_EVENTS) {
@@ -63,4 +65,21 @@ test("未配置 Redis 时执行会话与每日 Token 预算", async () => {
 test("客户端 IP 只从代理头提取首个值", () => {
   const request = new Request("https://example.com", { headers: { "x-forwarded-for": "203.0.113.8, 10.0.0.1" } });
   assert.equal(extractClientIp(request), "203.0.113.8");
+});
+
+test("简历入口在未配置、非法和有效地址下返回可理解状态", async () => {
+  delete process.env.RESUME_BLOB_URL;
+  const missing = await getResume(new NextRequest("http://localhost/resume"));
+  assert.equal(missing.status, 404);
+  assert.match(await missing.text(), /最新版简历正在更新/);
+
+  process.env.RESUME_BLOB_URL = "javascript:alert(1)";
+  const invalid = await getResume(new NextRequest("http://localhost/resume"));
+  assert.equal(invalid.status, 500);
+
+  process.env.RESUME_BLOB_URL = "https://example.com/resume.pdf";
+  const valid = await getResume(new NextRequest("http://localhost/resume"));
+  assert.equal(valid.status, 307);
+  assert.equal(valid.headers.get("location"), "https://example.com/resume.pdf");
+  delete process.env.RESUME_BLOB_URL;
 });

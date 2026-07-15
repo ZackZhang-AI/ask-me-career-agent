@@ -8,21 +8,21 @@ import {
   ShieldCheckIcon,
 } from "@phosphor-icons/react/dist/ssr";
 import { Chat } from "@/components/chat";
+import { InteractionTracker } from "@/components/interaction-tracker";
 import { strengths } from "@/lib/knowledge";
 import { profile } from "@/lib/profile";
 
-const resumeRequest = `mailto:${profile.email}?subject=${encodeURIComponent("索取张倬玮最新版简历")}`;
-
 const publicLinks = [
-  { label: "GitHub 项目", href: profile.github, icon: GithubLogoIcon, external: true },
-  { label: "发送邮件", href: `mailto:${profile.email}`, icon: EnvelopeSimpleIcon },
-  { label: "电话联系", href: `tel:${profile.phone}`, icon: PhoneIcon },
-  { label: "获取最新简历", href: resumeRequest, icon: FileTextIcon },
+  { label: "GitHub 项目", href: profile.github, icon: GithubLogoIcon, external: true, event: "project_opened", target: "github" },
+  { label: "发送邮件", href: `mailto:${profile.email}`, icon: EnvelopeSimpleIcon, event: "contact_opened", target: "email" },
+  { label: "电话联系", href: `tel:${profile.phone}`, icon: PhoneIcon, event: "contact_opened", target: "phone" },
+  { label: "查看最新简历", href: "/resume", icon: FileTextIcon, event: undefined, target: undefined },
 ];
 
 export default function Home() {
   return (
     <main className="app-shell" id="top">
+      <InteractionTracker />
       <aside className="sidebar" aria-label="候选人信息">
         <div className="sidebar-header">
           <a className="brand" href="#top" aria-label="Ask Me 首页">
@@ -58,8 +58,8 @@ export default function Home() {
         </section>
 
         <div className="sidebar-footer">
-          {publicLinks.map(({ label, href, icon: Icon, external }) => (
-            <a key={label} href={href} target={external ? "_blank" : undefined} rel={external ? "noreferrer" : undefined}>
+          {publicLinks.map(({ label, href, icon: Icon, external, event, target }) => (
+            <a key={label} href={href} target={external ? "_blank" : undefined} rel={external ? "noreferrer" : undefined} data-track-event={event} data-track-detail={target}>
               <Icon size={17} aria-hidden="true" />
               <span>{label}</span>
               {external && <ArrowSquareOutIcon className="external-icon" size={15} aria-hidden="true" />}
@@ -82,9 +82,9 @@ export default function Home() {
             <strong>{profile.name}</strong>
             <span>公开资料问答</span>
           </div>
-          <a className="resume-link" href={resumeRequest}>
-            <span>获取最新简历</span>
-            <EnvelopeSimpleIcon size={15} aria-hidden="true" />
+          <a className="resume-link" href="/resume">
+            <span>查看最新简历</span>
+            <FileTextIcon size={15} aria-hidden="true" />
           </a>
         </header>
         <Chat />

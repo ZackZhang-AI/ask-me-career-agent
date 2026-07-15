@@ -1,8 +1,11 @@
 const forbiddenPatterns = [
-  /系统提示|system prompt|忽略.{0,8}(指令|规则)|ignore.{0,8}(instructions|rules)/i,
-  /身份证|家庭住址|手机号|私人邮箱|工资流水|银行账户/i,
-  /客户名称|内部底稿|企业机密|未公开数据|nda|保密协议/i,
-  /编造|虚构|假装.{0,6}(做过|经历|数据)|fabricate|make up/i,
+  /系统提示|system prompt|隐藏指令|忽略.{0,8}(指令|规则)|ignore.{0,8}(instructions|rules)|绕过.{0,8}(系统|规则)|管理员.{0,8}(权限|规则)|base64.{0,12}(提示|prompt)/i,
+  /身份证|家庭住址|手机号|微信|私人邮箱|工资流水|银行账户|联系方式.{0,8}(后四位|片段)/i,
+  /客户名称|内部底稿|原始底稿|内部.{0,8}会议记录|企业机密|未公开数据|nda|保密协议/i,
+  /编造|虚构|假装.{0,6}(做过|经历|数据)|fabricate|make up|假设.{0,12}(客户|业绩).{0,8}(事实|写入)/i,
+  /api\s*key|环境变量|数据库密码|\.env|visibility\s*=\s*private|verification\s*=\s*unverified|私有知识/i,
+  /读取.{0,12}(服务器|本地文件|系统目录)|运行.{0,12}(代码|命令)|执行.{0,12}(代码|命令)|ls\s+-la/i,
+  /翻译.{0,12}(私密|机密|隐私)|(私密|机密|隐私).{0,12}翻译|translate.{0,12}(private|secret|confidential)/i,
 ];
 
 type Assessment = { allowed: true; question: string } | { allowed: false; reason: string };
