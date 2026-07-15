@@ -5,33 +5,71 @@ import {
   ArrowUpIcon,
   ArrowUpRightIcon,
   CaretDownIcon,
+  CheckCircleIcon,
+  EnvelopeSimpleIcon,
+  FileTextIcon,
+  GithubLogoIcon,
+  PhoneIcon,
   StopIcon,
 } from "@phosphor-icons/react";
 import { suggestedQuestions } from "@/lib/knowledge";
-import type { ChatMessage, KnowledgeItem, Source } from "@/lib/types";
+import { featuredProjects, profile } from "@/lib/profile";
+import { getBrowserSessionId } from "@/lib/client-session";
+import type { ChatMessage, KnowledgeItem, ResponseStatus, Source } from "@/lib/types";
 
 interface DisplayMessage extends ChatMessage {
   sources?: Source[];
   items?: KnowledgeItem[];
-  mode?: "live" | "demo" | "guardrail";
+  mode?: "live" | "stable" | "demo" | "guardrail";
+  responseStatus?: ResponseStatus;
+  claimIds?: string[];
+  sourceIds?: string[];
+  latencyMs?: number;
 }
 
-function createSessionId() {
-  if (typeof crypto !== "undefined" && crypto.randomUUID) return crypto.randomUUID();
-  return `session-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+const verificationLabels = {
+  externally_verified: "外部可定位",
+  self_attested: "候选人确认",
+  unverified: "尚未验证",
+} as const;
+
+const statusLabels = {
+  completed: "已完成",
+  in_progress: "进行中",
+  planned: "规划中",
+  archived: "已归档",
+} as const;
+
+function questionCategory(question: string) {
+  if (/项目|rag|agent|deepflow/i.test(question)) return "project";
+  if (/匹配|岗位/.test(question)) return "fit";
+  if (/实习|经历|审计/.test(question)) return "experience";
+  if (/技能|技术|英语|证书/.test(question)) return "skills";
+  if (/短板|不足|缺口|核实/.test(question)) return "gaps";
+  if (/隐私|机密|提示词|忽略|编造/.test(question)) return "security";
+  if (/介绍|背景|教育|张倬玮/.test(question)) return "profile";
+  return "other";
 }
 
-function track(event: string, sessionId: string, detail = "") {
+function track(event: string, sessionId: string, detail = "", metadata: Partial<DisplayMessage> & { questionCategory?: string } = {}) {
   void fetch("/api/events", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ event, sessionId, detail }),
+    body: JSON.stringify({
+      event,
+      sessionId,
+      detail,
+      responseStatus: metadata.responseStatus,
+      claimIds: metadata.claimIds,
+      sourceIds: metadata.sourceIds,
+      latencyMs: metadata.latencyMs,
+      questionCategory: metadata.questionCategory,
+    }),
     keepalive: true,
   });
 }
 
 export function Chat() {
-  const [sessionId] = useState(createSessionId);
   const [messages, setMessages] = useState<DisplayMessage[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -43,9 +81,12 @@ export function Chat() {
     messageEndRef.current?.scrollIntoView({ block: "end" });
   }, [messages]);
 
+  useEffect(() => () => abortRef.current?.abort(), []);
+
   async function send(question: string, fromSuggestion = false) {
     const clean = question.trim();
     if (!clean || loading) return;
+    const sessionId = getBrowserSessionId();
 
     setInput("");
     setError("");
@@ -53,7 +94,8 @@ export function Chat() {
     const userMessage: DisplayMessage = { role: "user", content: clean };
     const nextMessages = [...messages, userMessage];
     setMessages([...nextMessages, { role: "assistant", content: "" }]);
-    track(fromSuggestion ? "suggestion_clicked" : "question_sent", sessionId, clean);
+    track(fromSuggestion ? "suggestion_clicked" : "question_sent", sessionId, "", { questionCategory: questionCategory(clean) });
+    if (messages.some((message) => message.role === "user")) track("followup_sent", sessionId);
 
     const abort = new AbortController();
     abortRef.current = abort;
@@ -86,13 +128,21 @@ export function Chat() {
         for (const row of rows) {
           if (!row.trim()) continue;
           const event = JSON.parse(row);
-          if (event.type === "meta") metadata = { sources: event.sources, items: event.items, mode: event.mode };
+          if (event.type === "meta") metadata = {
+            sources: event.sources,
+            items: event.items,
+            mode: event.mode,
+            responseStatus: event.responseStatus,
+            claimIds: event.claimIds,
+            sourceIds: event.sourceIds,
+          };
           if (event.type === "delta") answer += event.content;
+          if (event.type === "done") metadata = { ...metadata, responseStatus: event.responseStatus, latencyMs: event.latencyMs };
           if (event.type === "error") throw new Error(event.message);
           setMessages([...nextMessages, { role: "assistant", content: answer, ...metadata }]);
         }
       }
-      track("answer_completed", sessionId, metadata.mode);
+      track("answer_completed", sessionId, "", { ...metadata, questionCategory: questionCategory(clean) });
     } catch (caught) {
       if (caught instanceof Error && caught.name === "AbortError") {
         setError("已停止生成，你可以修改问题后重试。");
@@ -127,19 +177,48 @@ export function Chat() {
       <div className="chat-scroll">
         {isEmpty ? (
           <div className="empty-state">
-            <span className="candidate-mark" aria-hidden="true">张</span>
-            <div className="welcome-copy">
-              <h1 id="chat-title">今天想了解张倬玮的什么？</h1>
-              <p>我会基于公开资料回答，并明确区分事实、候选人自述和待核实信息。</p>
-            </div>
-            <div className="suggestions" aria-label="推荐问题">
-              {suggestedQuestions.map((question) => (
-                <button key={question} type="button" onClick={() => void send(question, true)}>
-                  <span>{question}</span>
-                  <ArrowUpRightIcon size={17} aria-hidden="true" />
-                </button>
-              ))}
-            </div>
+            <section className="welcome" aria-labelledby="chat-title">
+              <div className="evidence-label"><CheckCircleIcon size={16} weight="fill" aria-hidden="true" /> 公开资料已更新</div>
+              <h1 id="chat-title">让证据先说话。</h1>
+              <p>我是 {profile.name} 的 AI Career Agent。你可以核实他的教育、审计经历、AI 项目、本人贡献和能力边界。</p>
+              <span className="education-line">{profile.education}</span>
+              <nav className="mobile-contact" aria-label="联系方式">
+                <a href={`mailto:${profile.email}`} data-track-event="contact_opened" data-track-detail="email"><EnvelopeSimpleIcon size={15} aria-hidden="true" />邮件</a>
+                <a href={`tel:${profile.phone}`} data-track-event="contact_opened" data-track-detail="phone"><PhoneIcon size={15} aria-hidden="true" />电话</a>
+                <a href={profile.github} target="_blank" rel="noreferrer" data-track-event="project_opened" data-track-detail="github"><GithubLogoIcon size={15} aria-hidden="true" />GitHub</a>
+                <a href="/resume"><FileTextIcon size={15} aria-hidden="true" />简历</a>
+              </nav>
+            </section>
+
+            <section className="project-proof" aria-labelledby="project-title">
+              <div className="proof-heading">
+                <h2 id="project-title">可直接核验的项目</h2>
+                <a href={profile.github} target="_blank" rel="noreferrer" data-track-event="project_opened" data-track-detail="all-repositories"><GithubLogoIcon size={16} aria-hidden="true" />全部仓库</a>
+              </div>
+              <div className="project-grid">
+                {featuredProjects.map((project) => (
+                  <a className="project-link" href={project.url} target="_blank" rel="noreferrer" key={project.name} data-track-event="project_opened" data-track-detail={project.name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}>
+                    <span className="project-status">{project.status}</span>
+                    <strong>{project.name}</strong>
+                    <p>{project.summary}</p>
+                    <small>{project.stack}</small>
+                    <ArrowUpRightIcon className="project-arrow" size={18} aria-hidden="true" />
+                  </a>
+                ))}
+              </div>
+            </section>
+
+            <section className="question-start" aria-labelledby="question-title">
+              <h2 id="question-title">从招聘方最关心的问题开始</h2>
+              <div className="suggestions" aria-label="推荐问题">
+                {suggestedQuestions.map((question) => (
+                  <button key={question} type="button" onClick={() => void send(question, true)}>
+                    <span>{question}</span>
+                    <ArrowUpRightIcon size={17} aria-hidden="true" />
+                  </button>
+                ))}
+              </div>
+            </section>
           </div>
         ) : (
           <div className="messages" aria-live="polite">
@@ -162,13 +241,16 @@ export function Chat() {
                   {message.mode === "demo" && (
                     <p className="mode-note">当前为演示模式，回答来自本地公开知识库。</p>
                   )}
+                  {message.mode === "stable" && (
+                    <p className="mode-note">这是结构化证据约束的核心稳定回答，关键事实仍建议面试核实。</p>
+                  )}
                   {message.sources && message.sources.length > 0 && (
                     <div className="sources">
                       <p>事实来源</p>
                       {message.sources.map((source) => (
                         <details
                           key={source.id}
-                          onToggle={(event) => event.currentTarget.open && track("source_opened", sessionId, source.id)}
+                          onToggle={(event) => event.currentTarget.open && track("source_opened", getBrowserSessionId(), source.id)}
                         >
                           <summary>
                             <span>[{source.id}] {source.title}</span>
@@ -176,9 +258,12 @@ export function Chat() {
                           </summary>
                           <div className="source-detail">
                             <p>类型：{source.sourceType}</p>
-                            <p>验证状态：候选人自述，待外部核实</p>
+                            <p>验证状态：{verificationLabels[source.verification]}</p>
+                            {source.projectStatus && <p>项目状态：{statusLabels[source.projectStatus]}</p>}
                             <p>最后检查：{source.lastChecked}</p>
-                            {source.url && <a href={source.url}>查看公开来源</a>}
+                            <p>支持事实：{source.supports}</p>
+                            <p>证据边界：{source.limitations}</p>
+                            {source.url && <a href={source.url} target="_blank" rel="noreferrer">查看公开来源 <ArrowUpRightIcon size={14} aria-hidden="true" /></a>}
                           </div>
                         </details>
                       ))}

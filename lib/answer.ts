@@ -1,31 +1,40 @@
-import type { KnowledgeItem } from "./types";
+import type { KnowledgeItem, StableAnswer } from "./types";
+import { getClaims } from "./knowledge.ts";
 
 export function buildContext(items: KnowledgeItem[]) {
-  return items.map((item) => [
-    `[${item.id}] ${item.title}`,
-    `事实：${item.content}`,
-    `项目状态：${item.projectStatus ?? "不适用"}`,
-    `验证状态：${item.verification}`,
-    `本人贡献：${item.candidateContribution}`,
-    `AI 辅助：${item.aiAssistance}`,
-    `边界：${item.limitations}`,
-    `来源：${item.sourceIds.join(", ")}`,
-  ].join("\n")).join("\n\n");
+  return items.map((item) => {
+    const itemClaims = getClaims(item.claimIds);
+    return [
+      `[${item.id}] ${item.title}`,
+      `事实：${item.content}`,
+      `项目状态：${item.projectStatus ?? "不适用"}`,
+      `验证状态：${item.verification}`,
+      `本人贡献：${item.candidateContribution}`,
+      `AI 辅助：${item.aiAssistance}`,
+      `边界：${item.limitations}`,
+      `事实声明：${itemClaims.map((claim) => `[${claim.id}] ${claim.statement}`).join("；")}`,
+      `来源：${item.sourceIds.join(", ")}`,
+    ].join("\n");
+  }).join("\n\n");
 }
 
-export function demoAnswer(question: string, items: KnowledgeItem[]) {
+export function demoAnswer(question: string, items: KnowledgeItem[], stableAnswer?: StableAnswer) {
+  if (stableAnswer) {
+    const citations = stableAnswer.requiredSourceIds.map((id) => `[${id}]`).join("");
+    return `${stableAnswer.standardAnswer} ${citations}\n\n证据边界\n\n${stableAnswer.limitations}`;
+  }
   if (!items.length) {
     return "现有公开资料不足以回答这个问题，我不会替候选人推测。建议改问他的 AI 产品项目、岗位匹配证据，或在面试中直接核实。";
   }
   const isMatch = /匹配|岗位|短板|缺口|核实/.test(question);
   if (isMatch) {
-    return `匹配证据\n\n他具备数据与指标意识、企业流程与风险理解，以及把 AI 产品想法落成原型的执行能力。[S1][S2]\n\n能力缺口\n\n当前公开资料不足以证明大规模线上 AI 产品商业化和跨职能团队管理经验。[S1]\n\n待核实问题\n\n建议在面试中核实项目实际使用规模、本人独立完成范围，以及上线后的业务结果。`;
+    return `匹配证据\n\n他具备应用统计学与评测意识，有财务审计和 IT 审计的业务经历，并公开实现了 RAG 知识库、DeepFlow 多 Agent 工作台及多款效率工具。[S1][S3][S4]\n\n能力缺口\n\n当前证据不足以证明大规模商业化 AI 产品、真实用户增长与长期跨职能团队管理经验。[S1][S10]\n\n待核实问题\n\n建议核实项目真实用户规模、独立贡献比例、生产稳定性，以及实习中的具体决策权限。`;
   }
   if (/项目|代表|产品能力|rag|agent/i.test(question)) {
-    return `最具代表性的公开项目是 Ask Me。它从招聘信息不对称出发，用静态摘要、可追问对话、事实引用和状态管理，让招聘方快速获得可验证信息。[S1][S2]\n\n候选人负责需求洞察、PRD、信息架构、可信回答机制、评测方案和工程审核。AI 编程 Agent 参与代码生成与测试，不能被表述为候选人独立手写全部代码。项目目前仍在开发与验证阶段。`;
+    return `最具代表性的公开项目是 RAG Knowledge Base System。它从审计非结构化文档检索痛点出发，覆盖多格式解析、混合检索、Rerank、引用溯源和自动评测，能同时体现业务洞察、AI 产品设计和工程落地。[S1][S3]\n\nDeepFlow 则补充证明了多 Agent 分工、人审确认、过程可解释性和成果物设计能力。[S4]\n\n候选人主导产品定位、检索与评测设计；AI 编程工具参与实现。生产规模、独立贡献比例和真实用户效果仍需核实。`;
   }
   if (/60秒|介绍|背景|优势|张倬玮/.test(question.replace(/\s/g, ""))) {
-    return `张倬玮的能力主线可以概括为 Data × Business × AI × Product × Execution。[S1]\n\n第一，他有数据分析与指标意识，重视证据能否支持结论。第二，他理解审计、企业流程和风险约束。第三，他能借助 AI 与工程工具，把产品假设快速转化为可运行原型。[S1][S2]\n\n需要注意：教育、任职细节和实际项目结果仍应以正式简历及面试核实为准。`;
+    return `张倬玮是东北大学应用统计学 2027 届学生，目标方向为 AI 产品经理。[S1]\n\n他的三个差异点是：用统计与评测方法分析 AI 效果；理解财务审计、IT 审计和企业数据边界；持续将 RAG、Multi-Agent 和效率工具想法转化为公开代码。[S1][S3][S4][S10]\n\n当前短板是缺少公开的大规模用户与商业化结果。教育、任职细节和个人贡献仍应通过正式材料及面试核实。`;
   }
   return `根据当前公开资料，可以确认以下内容：\n\n${items.map((item) => `${item.content} [${item.sourceIds.join("][")}]`).join("\n\n")}\n\n证据边界：${items.map((item) => item.limitations).join("；")}`;
 }

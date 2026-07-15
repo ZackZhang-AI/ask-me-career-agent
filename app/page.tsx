@@ -1,21 +1,28 @@
 import {
   ArrowSquareOutIcon,
+  EnvelopeSimpleIcon,
   FileTextIcon,
+  GithubLogoIcon,
+  PhoneIcon,
   PlusIcon,
   ShieldCheckIcon,
 } from "@phosphor-icons/react/dist/ssr";
 import { Chat } from "@/components/chat";
+import { InteractionTracker } from "@/components/interaction-tracker";
 import { strengths } from "@/lib/knowledge";
+import { profile } from "@/lib/profile";
 
 const publicLinks = [
-  ["简历", process.env.NEXT_PUBLIC_RESUME_URL],
-  ["项目", process.env.NEXT_PUBLIC_PROJECT_URL],
-  ["联系我", process.env.NEXT_PUBLIC_CONTACT_URL],
-].filter((item): item is [string, string] => Boolean(item[1]));
+  { label: "GitHub 项目", href: profile.github, icon: GithubLogoIcon, external: true, event: "project_opened", target: "github" },
+  { label: "发送邮件", href: `mailto:${profile.email}`, icon: EnvelopeSimpleIcon, event: "contact_opened", target: "email" },
+  { label: "电话联系", href: `tel:${profile.phone}`, icon: PhoneIcon, event: "contact_opened", target: "phone" },
+  { label: "查看最新简历", href: "/resume", icon: FileTextIcon, event: undefined, target: undefined },
+];
 
 export default function Home() {
   return (
     <main className="app-shell" id="top">
+      <InteractionTracker />
       <aside className="sidebar" aria-label="候选人信息">
         <div className="sidebar-header">
           <a className="brand" href="#top" aria-label="Ask Me 首页">
@@ -37,8 +44,8 @@ export default function Home() {
           <div className="profile-summary">
             <span className="profile-avatar" aria-hidden="true">张</span>
             <div>
-              <strong>张倬玮</strong>
-              <p>AI 产品经理候选人</p>
+              <strong>{profile.name}</strong>
+              <p>{profile.role}</p>
             </div>
           </div>
           <ul className="strength-nav">
@@ -51,11 +58,11 @@ export default function Home() {
         </section>
 
         <div className="sidebar-footer">
-          {publicLinks.map(([label, href]) => (
-            <a key={label} href={href} target="_blank" rel="noreferrer">
-              <FileTextIcon size={17} aria-hidden="true" />
+          {publicLinks.map(({ label, href, icon: Icon, external, event, target }) => (
+            <a key={label} href={href} target={external ? "_blank" : undefined} rel={external ? "noreferrer" : undefined} data-track-event={event} data-track-detail={target}>
+              <Icon size={17} aria-hidden="true" />
               <span>{label}</span>
-              <ArrowSquareOutIcon className="external-icon" size={15} aria-hidden="true" />
+              {external && <ArrowSquareOutIcon className="external-icon" size={15} aria-hidden="true" />}
             </a>
           ))}
           <div className="privacy-note">
@@ -72,15 +79,13 @@ export default function Home() {
             <strong>Ask Me</strong>
           </a>
           <div className="chat-context">
-            <strong>张倬玮</strong>
+            <strong>{profile.name}</strong>
             <span>公开资料问答</span>
           </div>
-          {publicLinks[0] && (
-            <a className="resume-link" href={publicLinks[0][1]} target="_blank" rel="noreferrer">
-              查看简历
-              <ArrowSquareOutIcon size={15} aria-hidden="true" />
-            </a>
-          )}
+          <a className="resume-link" href="/resume">
+            <span>查看最新简历</span>
+            <FileTextIcon size={15} aria-hidden="true" />
+          </a>
         </header>
         <Chat />
       </section>
