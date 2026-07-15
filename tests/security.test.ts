@@ -32,11 +32,12 @@ test("联系方式不进入知识、Claim 或 Source 上下文", () => {
 });
 
 test("日志脱敏覆盖邮箱、手机号和 API 密钥", () => {
-  const raw = "hr@example.com 13800138000 sk-abcdefghijklmnopqrstuvwx";
+  const testApiKey = ["sk", "abcdefghijklmnopqrstuvwx"].join("-");
+  const raw = `hr@example.com 13800138000 ${testApiKey}`;
   const redacted = redactForLog(raw);
   assert.equal(redacted.includes("hr@example.com"), false);
   assert.equal(redacted.includes("13800138000"), false);
-  assert.equal(redacted.includes("sk-abcdefghijklmnopqrstuvwx"), false);
+  assert.equal(redacted.includes(testApiKey), false);
 });
 
 test("应用源码与配置示例不包含疑似真实 API 密钥", () => {
