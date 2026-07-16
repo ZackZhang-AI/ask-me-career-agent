@@ -62,6 +62,23 @@ test("安全拒答、证据不足与核心稳定回答返回标准 NDJSON 状态
   assert.equal(typeof verified.at(-1).latencyMs, "number");
 });
 
+test("60 秒介绍返回足够完整的招聘视角回答", async () => {
+  const responseEvents = await events(await POST(request({
+    sessionId: "api-introduction",
+    messages: [{ role: "user", content: "60 秒了解张倬玮。" }],
+  })));
+  const answer = responseEvents
+    .filter((event) => event.type === "delta")
+    .map((event) => event.content)
+    .join("");
+
+  assert.equal(responseEvents[0].mode, "stable");
+  assert.match(answer, /一句话判断/);
+  assert.match(answer, /核心证据/);
+  assert.match(answer, /岗位判断/);
+  assert.equal(answer.length >= 300, true);
+});
+
 test("模型上游过载和超时返回稳定错误码", async () => {
   process.env.DEEPSEEK_API_KEY = "test-only-placeholder";
   const question = "请详细说明 Milvus 检索与 Rerank 的产品取舍";

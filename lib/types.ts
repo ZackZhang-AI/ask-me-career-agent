@@ -71,6 +71,7 @@ export interface StableAnswer extends ContentMetadata {
   id: string;
   question: string;
   standardAnswer: string;
+  details?: string[];
   limitations: string;
   claimIds: string[];
   sourceIds: string[];

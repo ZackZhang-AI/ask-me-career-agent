@@ -79,6 +79,7 @@ export const stableAnswerSchema = z.object({
   id: z.string().regex(/^A\d+$/),
   question: z.string().min(1),
   standardAnswer: z.string().min(1),
+  details: z.array(z.string().min(1)).min(2).max(5).optional(),
   limitations: z.string().min(1),
   claimIds: z.array(z.string().regex(/^C\d+$/)).min(1),
   sourceIds: z.array(z.string().regex(/^S\d+$/)).min(1),

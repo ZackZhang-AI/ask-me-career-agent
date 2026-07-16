@@ -35,6 +35,21 @@ test("核心问题稳定匹配标准答案和评测要求", () => {
   assert.equal(matched?.requiredSourceIds.includes("S3"), true);
 });
 
+test("60 秒介绍提供招聘判断、核心证据与完整来源", () => {
+  const matched = matchStableAnswer("60 秒了解张倬玮。");
+  assert.equal(matched?.id, "A01");
+  assert.equal((matched?.details?.length ?? 0) >= 4, true);
+  assert.equal(matched?.requiredSourceIds.includes("S3"), true);
+  assert.equal(matched?.requiredSourceIds.includes("S4"), true);
+});
+
+test("招聘方高频问题都有结构化证据", () => {
+  const priorityIds = new Set(["A01", "A02", "A03", "A14", "A15"]);
+  const priorityAnswers = stableAnswers.filter((answer) => priorityIds.has(answer.id));
+  assert.equal(priorityAnswers.length, priorityIds.size);
+  for (const answer of priorityAnswers) assert.equal((answer.details?.length ?? 0) >= 4, true, answer.id);
+});
+
 test("项目别名和最近上下文可解析多轮指代", () => {
   const explicit = resolveRetrievalQuery("DeepFlow 有什么限制？");
   assert.equal(explicit.matchedProjects.includes("deepflow"), true);

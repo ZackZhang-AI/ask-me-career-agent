@@ -21,7 +21,10 @@ export function buildContext(items: KnowledgeItem[]) {
 export function demoAnswer(question: string, items: KnowledgeItem[], stableAnswer?: StableAnswer) {
   if (stableAnswer) {
     const citations = stableAnswer.requiredSourceIds.map((id) => `[${id}]`).join("");
-    return `${stableAnswer.standardAnswer} ${citations}\n\n证据边界\n\n${stableAnswer.limitations}`;
+    const details = stableAnswer.details?.length
+      ? `\n\n核心证据\n\n${stableAnswer.details.map((detail, index) => `${index + 1}. ${detail}`).join("\n\n")}`
+      : "";
+    return `${stableAnswer.standardAnswer}${details} ${citations}\n\n证据边界\n\n${stableAnswer.limitations}`;
   }
   if (!items.length) {
     return "现有公开资料不足以回答这个问题，我不会替候选人推测。建议改问他的 AI 产品项目、岗位匹配证据，或在面试中直接核实。";
