@@ -3,9 +3,9 @@ import { resolve } from "node:path";
 
 async function main() {
   const source = process.argv[2];
-  const token = process.env.BLOB_READ_WRITE_TOKEN;
+  const token = process.env.RESUME_BLOB_READ_WRITE_TOKEN;
   if (!source) throw new Error("用法：npm run upload:resume -- <简历.pdf>");
-  if (!token) throw new Error("缺少 BLOB_READ_WRITE_TOKEN，请先同步 Vercel 环境变量。");
+  if (!token) throw new Error("缺少 RESUME_BLOB_READ_WRITE_TOKEN，请先同步 Vercel 环境变量。");
 
   const file = await readFile(resolve(source));
   if (file.subarray(0, 5).toString("ascii") !== "%PDF-") throw new Error("只允许上传有效的 PDF 简历。");

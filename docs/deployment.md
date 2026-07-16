@@ -29,7 +29,7 @@
 | `DAILY_TOKEN_LIMIT` | 否 | `300000` |
 | `TOKEN_RESERVATION` | 否 | `1500`，请求前预留的 Token 预算 |
 | `DATABASE_URL` | Production 必需 | Neon 连接字符串 |
-| `BLOB_READ_WRITE_TOKEN` | 上传时必需 | 只用于本地简历上传，不暴露给浏览器 |
+| `RESUME_BLOB_READ_WRITE_TOKEN` | 上传时必需 | 只用于本地简历上传，不暴露给浏览器 |
 | `RESUME_BLOB_URL` | Production 必需 | 上传脚本输出的 HTTPS URL；手动同步至 Vercel |
 | `CRON_SECRET` | Production 必需 | 保护 `/api/cron/events` |
 | `CHAT_DISABLED` | 否 | 紧急停用模型问答时设为 `true` |
