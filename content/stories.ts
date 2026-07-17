@@ -1,0 +1,17 @@
+const confirmed = {
+  visibility: "public",
+  status: "active",
+  verification: "self_attested",
+  lastUpdated: "2026-07-17",
+} as const;
+
+export const starStoryContent = [
+  { ...confirmed, id: "ST1", title: "从专业文档问答到 RAG 知识库", relatedProject: "rag-knowledge-base", situation: "专业文档问答容易出现答案看似完整、依据却难以复核的问题。", task: "我希望把文档摄入、检索、生成和评测串成一条可持续优化的产品链路。", action: "我先梳理 Dense Retrieval 主链路，再把混合检索、Rerank、引用溯源和自动评测拆成可逐项验证的迭代方向，并明确已实现内容与规划项。", result: "我完成了公开仓库和方案文档，也形成了从检索质量、引用支持度到 Bad Case 回流的评测框架。", limitations: "目前没有企业生产规模或真实用户效果数据，高级能力仍需结合代码和运行结果逐项验证。", claimIds: ["C3"], supportsClaimIds: ["C3"], sourceIds: ["S1", "S3"] },
+  { ...confirmed, id: "ST2", title: "设计 DeepFlow 多 Agent 研究流程", relatedProject: "deepflow", situation: "复杂研究任务如果一次性交给模型，过程容易失控，证据和最终结论也难以追踪。", task: "我需要把研究过程拆成职责清晰、关键节点可确认的协作流程。", action: "我设计了 Coordinator、Planner、Researcher、Coder 和 Reporter 等角色，并在计划确认等高成本节点加入人审，而不是让 Agent 无限制自主执行。", result: "我形成了可演示的研究工作台闭环和公开仓库，能够从任务澄清推进到带引用的报告输出。", limitations: "真实用户规模、生产并发、权限审计、时延和成本尚未获得独立验证。", claimIds: ["C4"], supportsClaimIds: ["C4"], sourceIds: ["S1", "S4"] },
+  { ...confirmed, id: "ST3", title: "用本地优先工具恢复工作上下文", relatedProject: "thirty-minute-brain", situation: "频繁切换任务后，我需要重新寻找文件和回忆短期上下文，恢复成本较高。", task: "我想验证一个不依赖云端上传、能够帮助恢复工作状态的桌面工具。", action: "我采用 Tauri、React、Rust 和本地数据能力实现原型，并把本地优先和数据边界作为产品约束。", result: "我完成了可公开检查的 Thirty-Minute Brain 仓库和桌面原型。", limitations: "目前只有原型与个人使用场景，尚无长期使用、节省时间或外部用户验证数据。", claimIds: ["C5"], supportsClaimIds: ["C5"], sourceIds: ["S1", "S5"] },
+  { ...confirmed, id: "ST4", title: "将审计资料整理抽象为归档助手", relatedProject: "audit-tools", situation: "审计资料字段分散，重复整理会占用较多时间，同时真实业务资料不能直接用于公开开发。", task: "我希望在不接触真实业务数据的前提下验证智能归档思路。", action: "我把场景拆成字段提取、归档建议和辅助生成三个环节，并使用演示数据实现公开原型。", result: "我完成了审计资料智能归档助手仓库，验证了从业务问题到工具原型的转换路径。", limitations: "项目未使用真实客户数据，也没有第三方提效测量，不能表述为生产环境验证。", claimIds: ["C7"], supportsClaimIds: ["C7"], sourceIds: ["S1", "S8"] },
+  { ...confirmed, id: "ST5", title: "把 IT 日志核查规则产品化", relatedProject: "audit-tools", situation: "IT 审计日志抽查需要把审计关注点转成一致、可重复执行的检查规则。", task: "我希望构建一个可公开演示的日志抽查辅助工具。", action: "我设计了规则检查、异常提示和审计关注点输出，并用演示数据验证基本流程。", result: "我完成了 IT 审计日志抽查助手公开仓库，展示了业务规则如何转化为产品能力。", limitations: "演示数据不代表企业真实环境，规则覆盖度和实际提效尚无外部测量。", claimIds: ["C7"], supportsClaimIds: ["C7"], sourceIds: ["S1", "S9"] },
+  { ...confirmed, id: "ST6", title: "德勤 IT 审计实习中的证据核查", situation: "IT 审计需要围绕系统输出和日志建立可以复核的证据链。", task: "我参与了 IPE 与日志核查相关工作，需要按要求完成资料核对和异常检查。", action: "我按照审计程序核对资料、检查日志并整理可复核记录，在不确定处及时确认口径。", result: "我完成了职责范围内的核查工作，也加深了对企业系统、风险和证据边界的理解。", limitations: "仅公开职责和能力总结，不披露客户、系统明细、底稿或其他受限信息；具体工作结果以正式材料为准。", claimIds: ["C9"], supportsClaimIds: ["C9"], sourceIds: ["S1"] },
+  { ...confirmed, id: "ST7", title: "容诚财务审计实习中的现场协作", situation: "财务审计现场工作需要多人围绕底稿、函证和盘点保持信息一致。", task: "我负责职责范围内的基础审计工作，并配合团队完成现场流程。", action: "我参与底稿整理、函证和盘点等工作，按审计要求记录过程并与团队及时核对。", result: "我完成了分配的现场工作，也形成了对业务流程、风险判断和协作节奏的基础认识。", limitations: "仅公开职责和能力总结，不披露客户、底稿或业务数据；项目范围和结果以正式材料为准。", claimIds: ["C10"], supportsClaimIds: ["C10"], sourceIds: ["S1"] },
+  { ...confirmed, id: "ST8", title: "为招聘场景建立 Ask Me 证据模型", relatedProject: "ask-me", situation: "普通简历很难在短时间内同时提供可追问的信息和可核验的证据。", task: "我希望设计一个受证据约束、能帮助面试官快速了解候选人的求职数字分身。", action: "我完成了 PRD、信息架构、Claim-Source 模型、回答状态、安全边界和工程验收设计，并持续用自动评测检查事实与引用。", result: "我完成了可持续迭代的 Ask Me 产品，实现了摘要、追问、证据引用和稳定简历入口。", limitations: "项目尚无足够的招聘转化和大规模使用数据，效果仍需通过真人软测试验证。", claimIds: ["C12"], supportsClaimIds: ["C12"], sourceIds: ["S2"] },
+] as const;

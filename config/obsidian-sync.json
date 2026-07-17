@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "includeFiles": [
+    "02-知识库/项目/企业级RAG知识库问答系统.md",
+    "02-知识库/项目/DeepFlow.md"
+  ],
+  "excludePathPrefixes": [
+    ".agents",
+    ".claude",
+    ".claudian",
+    ".git",
+    ".obsidian",
+    "01-原始资料",
+    "90-系统"
+  ],
+  "excludePathContains": [
+    "百度"
+  ],
+  "restrictedTerms": [
+    "百度",
+    "Baidu"
+  ],
+  "maxFileBytes": 524288,
+  "maxCandidateChars": 1200
+}
