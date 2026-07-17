@@ -84,7 +84,7 @@ jobs:
       - name: Check public source links
         shell: bash
         run: |
-          node --experimental-strip-types --input-type=module <<'NODE'
+          npx tsx - <<'NODE'
           import { sources } from './lib/knowledge.ts';
           const urls = [...new Set(sources.filter((source) => source.public && source.url).map((source) => source.url))];
           const failures = [];
