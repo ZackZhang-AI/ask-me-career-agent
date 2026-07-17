@@ -1,8 +1,10 @@
 import { NextRequest } from "next/server";
-import { buildContext, demoAnswer, systemPrompt } from "@/lib/answer";
+import { buildAnswerPlan, buildContext, demoAnswer, systemPrompt } from "@/lib/answer";
+import { repairInstruction, validateAnswer } from "@/lib/answer-quality";
+import { DeepSeekUpstreamError, generateDeepSeekAnswer } from "@/lib/deepseek";
 import { assessQuestion } from "@/lib/guardrails";
 import { getClaims, getSources, matchStableAnswer, retrieveKnowledge, serializeKnowledgeItems } from "@/lib/knowledge";
-import { checkRequestLimits, extractClientIp, recordTokenUsage } from "@/lib/rate-limit";
+import { checkRequestLimits, extractClientIp, recordTokenUsage, reserveAdditionalModelCall } from "@/lib/rate-limit";
 import type { ChatMessage, ResponseStatus } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -27,7 +29,7 @@ function errorResponse(code: ResponseStatus, message: string, status: number, re
 
 function textStream(input: {
   answer: string;
-  mode: "stable" | "demo" | "guardrail";
+  mode: "stable" | "demo" | "guardrail" | "live";
   responseStatus: ResponseStatus;
   claimIds: string[];
   sourceIds: string[];
@@ -35,6 +37,8 @@ function textStream(input: {
   items: ReturnType<typeof retrieveKnowledge>;
   startedAt: number;
   tokenReservation: number;
+  actualTokens?: number;
+  claims?: ReturnType<typeof getClaims>;
 }) {
   return new Response(new ReadableStream({ async start(controller) {
     controller.enqueue(line({
@@ -45,12 +49,13 @@ function textStream(input: {
       sourceIds: input.sourceIds,
       sources: input.sources,
       items: serializeKnowledgeItems(input.items),
+      ...(input.claims ? { claims: input.claims } : {}),
     }));
     for (let index = 0; index < input.answer.length; index += 12) {
       controller.enqueue(line({ type: "delta", content: input.answer.slice(index, index + 12) }));
       await new Promise((resolve) => setTimeout(resolve, 12));
     }
-    await recordTokenUsage({ actualTokens: 0, tokenReservation: input.tokenReservation });
+    await recordTokenUsage({ actualTokens: input.actualTokens ?? 0, tokenReservation: input.tokenReservation });
     controller.enqueue(line({ type: "done", responseStatus: input.responseStatus, latencyMs: Date.now() - input.startedAt }));
     controller.close();
   }}), { headers: { "Content-Type": "application/x-ndjson; charset=utf-8", "Cache-Control": "no-store" } });
@@ -76,7 +81,7 @@ export async function POST(request: NextRequest) {
   const latest = [...body.messages].reverse().find((message) => message.role === "user");
   if (!latest) return errorResponse("upstream_error", "没有找到有效问题。", 400);
 
-  const estimatedTokens = Math.min(4_000, Math.ceil(JSON.stringify(body.messages.slice(-8)).length / 3) + 1_100);
+  const estimatedTokens = Math.min(6_000, Math.ceil(JSON.stringify(body.messages.slice(-8)).length / 3) + 3_000);
   const rate = await checkRequestLimits({ ip: extractClientIp(request), sessionId: body.sessionId, estimatedTokens });
   if (!rate.ok) return errorResponse(rate.code, rate.message, rate.code === "rate_limited" ? 429 : 503, rate.retryAfterSeconds);
 
@@ -102,21 +107,7 @@ export async function POST(request: NextRequest) {
   const sourceIds = stableAnswer ? [...stableAnswer.requiredSourceIds] : [...new Set(items.flatMap((item) => item.sourceIds))];
   const matchedSources = getSources(sourceIds);
 
-  if (stableAnswer) {
-    return textStream({
-      answer: demoAnswer(assessment.question, items, stableAnswer),
-      mode: "stable",
-      responseStatus: "completed",
-      claimIds,
-      sourceIds,
-      sources: matchedSources,
-      items,
-      startedAt,
-      tokenReservation: rate.tokenReservation,
-    });
-  }
-
-  if (!items.length || !claimIds.length || !sourceIds.length) {
+  if (!stableAnswer && (!items.length || !claimIds.length || !sourceIds.length)) {
     return textStream({
       answer: demoAnswer(assessment.question, []),
       mode: "demo",
@@ -133,8 +124,8 @@ export async function POST(request: NextRequest) {
   const apiKey = process.env.DEEPSEEK_API_KEY;
   if (!apiKey) {
     return textStream({
-      answer: demoAnswer(assessment.question, items),
-      mode: "demo",
+      answer: demoAnswer(assessment.question, items, stableAnswer),
+      mode: stableAnswer ? "stable" : "demo",
       responseStatus: "completed",
       claimIds,
       sourceIds,
@@ -148,77 +139,100 @@ export async function POST(request: NextRequest) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 45_000);
   request.signal.addEventListener("abort", () => controller.abort(), { once: true });
-
-  let upstream: Response;
+  const plan = buildAnswerPlan(assessment.question, items, stableAnswer, history);
+  const contextMessage = `以下是本轮回答计划和公开事实，只能据此回答：\n${buildContext(items, plan)}`;
+  let totalTokens = 0;
+  let totalReservation = rate.tokenReservation;
+  let firstTriggers: string[] = [];
   try {
-    upstream = await fetch(`${process.env.DEEPSEEK_BASE_URL ?? "https://api.deepseek.com"}/chat/completions`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify({
-        model: process.env.DEEPSEEK_MODEL ?? "deepseek-v4-flash",
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "system", content: `以下是本轮检索到的公开证据，只能据此回答：\n${buildContext(items)}` },
-          ...body.messages.slice(-8),
-        ],
-        thinking: { type: "disabled" },
-        stream: true,
-        max_tokens: 1_100,
-      }),
+    const first = await generateDeepSeekAnswer({
+      apiKey,
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "system", content: contextMessage },
+        ...body.messages.slice(-8),
+      ],
       signal: controller.signal,
+    });
+    totalTokens += first.totalTokens;
+    const firstGate = validateAnswer(first.text, plan);
+    firstTriggers = firstGate.triggers;
+
+    let answer = first.text;
+    let path: "generated" | "repaired" | "fallback" = "generated";
+    let rewriteCount = 0;
+    let finalTriggers = firstGate.triggers;
+
+    if (!firstGate.passed) {
+      rewriteCount = 1;
+      const retryBudget = await reserveAdditionalModelCall(estimatedTokens);
+      if (!retryBudget.ok) {
+        answer = plan.fallbackAnswer;
+        path = "fallback";
+        finalTriggers = [...firstGate.triggers, "repair_budget_exhausted"];
+      } else {
+        totalReservation += retryBudget.tokenReservation;
+        const repaired = await generateDeepSeekAnswer({
+          apiKey,
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "system", content: contextMessage },
+            { role: "system", content: repairInstruction(plan, firstGate.triggers) },
+            ...body.messages.slice(-8),
+          ],
+          signal: controller.signal,
+        });
+        totalTokens += repaired.totalTokens;
+        const repairedGate = validateAnswer(repaired.text, plan);
+        finalTriggers = repairedGate.triggers;
+        if (repairedGate.passed) {
+          answer = repaired.text;
+          path = "repaired";
+        } else {
+          answer = plan.fallbackAnswer;
+          path = "fallback";
+        }
+      }
+    }
+
+    clearTimeout(timeout);
+    console.info("ask-me-quality", JSON.stringify({ intent: plan.intent, path, rewriteCount, initialTriggers: firstTriggers, finalTriggers }));
+    return textStream({
+      answer,
+      mode: path === "fallback" ? (stableAnswer ? "stable" : "demo") : "live",
+      responseStatus: "completed",
+      claimIds,
+      sourceIds,
+      sources: matchedSources,
+      items,
+      claims: getClaims(claimIds),
+      startedAt,
+      tokenReservation: totalReservation,
+      actualTokens: totalTokens,
     });
   } catch (error) {
     clearTimeout(timeout);
-    await recordTokenUsage({ actualTokens: 0, tokenReservation: rate.tokenReservation });
-    const message = error instanceof Error && error.name === "AbortError" ? "回答超时，请重试。" : "暂时无法连接问答服务，请稍后重试。";
-    return errorResponse("upstream_error", message, 504);
-  }
-
-  if (!upstream.ok || !upstream.body) {
-    clearTimeout(timeout);
-    await recordTokenUsage({ actualTokens: 0, tokenReservation: rate.tokenReservation });
+    if (stableAnswer) {
+      return textStream({
+        answer: plan.fallbackAnswer,
+        mode: "stable",
+        responseStatus: "completed",
+        claimIds,
+        sourceIds,
+        sources: matchedSources,
+        items,
+        startedAt,
+        tokenReservation: totalReservation,
+        actualTokens: totalTokens,
+      });
+    }
+    await recordTokenUsage({ actualTokens: totalTokens, tokenReservation: totalReservation });
+    const status = error instanceof DeepSeekUpstreamError ? error.status : 504;
     const errors: Record<number, string> = { 401: "模型服务配置无效。", 402: "模型服务余额不足。", 429: "模型服务繁忙，请稍后重试。", 503: "模型服务暂时过载。" };
-    return errorResponse(upstream.status === 402 ? "budget_exhausted" : "upstream_error", errors[upstream.status] ?? "问答服务暂时不可用。", upstream.status >= 500 ? 503 : 502);
+    const timeoutMessage = error instanceof Error && error.name === "AbortError" ? "回答超时，请重试。" : undefined;
+    const message = timeoutMessage ?? errors[status] ?? "问答服务暂时不可用。";
+    return errorResponse(status === 402 ? "budget_exhausted" : "upstream_error", message, status >= 500 ? (status === 504 ? 504 : 503) : 502);
+  } finally {
+    clearTimeout(timeout);
   }
-
-  const claims = getClaims(claimIds);
-  const stream = new ReadableStream({
-    async start(output) {
-      output.enqueue(line({ type: "meta", sources: matchedSources, items: serializeKnowledgeItems(items), claims, mode: "live", responseStatus: "completed", claimIds, sourceIds }));
-      const reader = upstream.body!.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-      let actualTokens = rate.tokenReservation;
-      try {
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          buffer += decoder.decode(value, { stream: true });
-          const rows = buffer.split("\n");
-          buffer = rows.pop() ?? "";
-          for (const row of rows) {
-            if (!row.startsWith("data:")) continue;
-            const data = row.slice(5).trim();
-            if (!data || data === "[DONE]") continue;
-            try {
-              const payload = JSON.parse(data);
-              const content = payload.choices?.[0]?.delta?.content;
-              if (content) output.enqueue(line({ type: "delta", content }));
-              if (payload.usage?.total_tokens) actualTokens = Number(payload.usage.total_tokens);
-            } catch { /* Ignore incomplete or keep-alive frames. */ }
-          }
-        }
-        output.enqueue(line({ type: "done", responseStatus: "completed", latencyMs: Date.now() - startedAt }));
-      } catch {
-        output.enqueue(line({ type: "error", code: "upstream_error", message: "流式回答中断，请重试。" }));
-      } finally {
-        clearTimeout(timeout);
-        await recordTokenUsage({ actualTokens, tokenReservation: rate.tokenReservation });
-        output.close();
-      }
-    },
-    cancel() { controller.abort(); clearTimeout(timeout); },
-  });
-
-  return new Response(stream, { headers: { "Content-Type": "application/x-ndjson; charset=utf-8", "Cache-Control": "no-store" } });
 }

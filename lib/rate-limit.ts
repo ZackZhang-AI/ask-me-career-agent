@@ -58,6 +58,18 @@ if tokens == tonumber(ARGV[5]) then redis.call("EXPIRE", KEYS[4], ARGV[8]) end
 return {0, minute, session, requests, tokens}
 `;
 
+const RETRY_BUDGET_SCRIPT = `
+local requests = tonumber(redis.call("GET", KEYS[1]) or "0")
+local tokens = tonumber(redis.call("GET", KEYS[2]) or "0")
+if requests >= tonumber(ARGV[1]) then return {3, requests} end
+if tokens + tonumber(ARGV[3]) > tonumber(ARGV[2]) then return {4, tokens} end
+requests = redis.call("INCR", KEYS[1])
+tokens = redis.call("INCRBY", KEYS[2], ARGV[3])
+if requests == 1 then redis.call("EXPIRE", KEYS[1], ARGV[4]) end
+if tokens == tonumber(ARGV[3]) then redis.call("EXPIRE", KEYS[2], ARGV[4]) end
+return {0, requests, tokens}
+`;
+
 function positiveInteger(value: string | undefined, fallback: number): number {
   const parsed = Number(value);
   return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : fallback;
@@ -172,6 +184,42 @@ export async function checkRequestLimits(input: CheckRequestLimitsInput): Promis
   } catch (error) {
     console.warn("ask-me-rate-limit: Redis request failed; using local fallback", error instanceof Error ? error.message : "unknown error");
     return localCheck(ipHash, sessionHash, reservation, now);
+  }
+}
+
+/** 为质量修复产生的第二次真实模型调用单独预留每日请求数和 Token。 */
+export async function reserveAdditionalModelCall(estimatedTokens: number): Promise<RequestLimitResult> {
+  const config = limits();
+  const reservation = Math.max(0, Math.min(Math.floor(estimatedTokens), config.dailyTokens));
+  const now = Date.now();
+  const day = new Date(now).toISOString().slice(0, 10);
+  const requestKey = counterKey("requests", day);
+  const tokenKey = counterKey("tokens", day);
+  const redis = await getRedis();
+
+  if (!redis) {
+    if (getLocal(requestKey, now) >= config.dailyRequests || getLocal(tokenKey, now) + reservation > config.dailyTokens) {
+      return { ok: false, status: "budget_exhausted", code: "budget_exhausted", message: "今日 AI 服务额度已用完，请明天再试。" };
+    }
+    const dayEnd = new Date(`${day}T00:00:00.000Z`).getTime() + 86_400_000;
+    setLocal(requestKey, getLocal(requestKey, now) + 1, dayEnd + 86_400_000);
+    setLocal(tokenKey, getLocal(tokenKey, now) + reservation, dayEnd + 86_400_000);
+    return { ok: true, status: "allowed", tokenReservation: reservation };
+  }
+
+  try {
+    const result = await redis.eval(RETRY_BUDGET_SCRIPT, [requestKey, tokenKey], [config.dailyRequests, config.dailyTokens, reservation, 2 * 86_400]);
+    const values = Array.isArray(result) ? result.map(Number) : [4];
+    if (values[0] === 0) return { ok: true, status: "allowed", tokenReservation: reservation };
+    return { ok: false, status: "budget_exhausted", code: "budget_exhausted", message: "今日 AI 服务额度已用完，请明天再试。" };
+  } catch (error) {
+    console.warn("ask-me-rate-limit: retry budget failed; using local fallback", error instanceof Error ? error.message : "unknown error");
+    if (getLocal(requestKey, now) >= config.dailyRequests || getLocal(tokenKey, now) + reservation > config.dailyTokens) {
+      return { ok: false, status: "budget_exhausted", code: "budget_exhausted", message: "今日 AI 服务额度已用完，请明天再试。" };
+    }
+    setLocal(requestKey, getLocal(requestKey, now) + 1, now + 2 * 86_400_000);
+    setLocal(tokenKey, getLocal(tokenKey, now) + reservation, now + 2 * 86_400_000);
+    return { ok: true, status: "allowed", tokenReservation: reservation };
   }
 }
 

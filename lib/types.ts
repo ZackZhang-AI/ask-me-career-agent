@@ -4,6 +4,52 @@ export type Visibility = "public" | "private";
 export type ContentStatus = "active" | "draft" | "archived";
 export type ResponseStatus = "completed" | "insufficient_evidence" | "refused" | "rate_limited" | "budget_exhausted" | "upstream_error";
 export type EvidenceBasis = "confirmed_fact" | "source_view" | "user_statement" | "inference";
+export type AnswerIntent =
+  | "introduction"
+  | "role_fit"
+  | "representative_project"
+  | "project_overview"
+  | "project_problem"
+  | "contribution"
+  | "ai_collaboration"
+  | "challenge"
+  | "result"
+  | "limitation"
+  | "skills"
+  | "experience"
+  | "experience_value"
+  | "privacy"
+  | "education"
+  | "credentials"
+  | "hiring_recommendation"
+  | "general";
+
+export interface AnswerFactSkeleton {
+  intent: AnswerIntent;
+  thesis: string;
+  mustInclude: string[];
+  allowedFacts: string[];
+  allowedNumbers: string[];
+  allowedOrganizations: string[];
+  allowedProjectStatuses: string[];
+  boundaryTriggers: string[];
+  forbiddenDetails: string[];
+}
+
+export interface AnswerPlan {
+  intent: AnswerIntent;
+  thesis: string;
+  mustInclude: string[];
+  allowedFacts: string[];
+  allowedNumbers: string[];
+  allowedOrganizations: string[];
+  allowedProjectStatuses: string[];
+  forbiddenDetails: string[];
+  shouldMentionLimitations: boolean;
+  limitations?: string;
+  relatedStoryId?: string;
+  fallbackAnswer: string;
+}
 
 export interface ContentMetadata {
   visibility: Visibility;
@@ -89,6 +135,7 @@ export interface StableAnswer extends ContentMetadata {
   requiredClaimIds: string[];
   requiredSourceIds: string[];
   matchKeywords: string[];
+  factSkeleton: AnswerFactSkeleton;
 }
 
 export interface ChatMessage { role: "user" | "assistant"; content: string }

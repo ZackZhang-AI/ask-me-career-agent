@@ -18,6 +18,11 @@ async function events(response: Response) {
   return (await response.text()).trim().split("\n").filter(Boolean).map((row) => JSON.parse(row));
 }
 
+function deepSeekStream(content: string, totalTokens = 100) {
+  const frame = JSON.stringify({ choices: [{ delta: { content } }], usage: { total_tokens: totalTokens } });
+  return new Response(`data: ${frame}\n\ndata: [DONE]\n\n`, { status: 200 });
+}
+
 beforeEach(() => {
   resetLocalRateLimitsForTests();
   delete process.env.DEEPSEEK_API_KEY;
@@ -94,4 +99,53 @@ test("模型上游过载和超时返回稳定错误码", async () => {
   const timeout = await POST(request({ sessionId: "api-timeout", messages: [{ role: "user", content: question }] }));
   assert.equal(timeout.status, 504);
   assert.equal((await timeout.json()).code, "upstream_error");
+});
+
+test("核心回答在模型幻觉连续失败后回退稳定事实骨架", async () => {
+  process.env.DEEPSEEK_API_KEY = "test-only-placeholder";
+  let calls = 0;
+  globalThis.fetch = async () => {
+    calls += 1;
+    return deepSeekStream("我做了校园数据门户，访谈 30 人，满意度提升到 90%。");
+  };
+
+  const responseEvents = await events(await POST(request({
+    sessionId: "api-quality-fallback",
+    messages: [{ role: "user", content: "哪个项目最能代表他的 AI 产品能力？" }],
+  })));
+  const answer = responseEvents.filter((event) => event.type === "delta").map((event) => event.content).join("");
+  assert.equal(calls, 2);
+  assert.equal(responseEvents[0].mode, "stable");
+  assert.match(answer, /RAG Knowledge Base System/);
+  assert.doesNotMatch(answer, /校园数据门户|30 人|90%/);
+  assert.equal(responseEvents.at(-1).responseStatus, "completed");
+});
+
+test("核心回答在模型不可用时仍返回稳定答案", async () => {
+  process.env.DEEPSEEK_API_KEY = "test-only-placeholder";
+  globalThis.fetch = async () => new Response(null, { status: 503 });
+  const responseEvents = await events(await POST(request({
+    sessionId: "api-stable-upstream-fallback",
+    messages: [{ role: "user", content: "为什么选择你来做这个岗位？" }],
+  })));
+  assert.equal(responseEvents[0].mode, "stable");
+  assert.equal(responseEvents.at(-1).responseStatus, "completed");
+});
+
+test("质量重写预算不足时不发起第二次模型调用", async () => {
+  process.env.DEEPSEEK_API_KEY = "test-only-placeholder";
+  process.env.DAILY_REQUEST_LIMIT = "1";
+  let calls = 0;
+  globalThis.fetch = async () => {
+    calls += 1;
+    return deepSeekStream("我协调工程团队完成客户交付，并获得积极反馈。");
+  };
+  const responseEvents = await events(await POST(request({
+    sessionId: "api-repair-budget",
+    messages: [{ role: "user", content: "哪个项目最能代表他的 AI 产品能力？" }],
+  })));
+  const answer = responseEvents.filter((event) => event.type === "delta").map((event) => event.content).join("");
+  assert.equal(calls, 1);
+  assert.equal(responseEvents[0].mode, "stable");
+  assert.doesNotMatch(answer, /工程团队|客户交付|积极反馈/);
 });

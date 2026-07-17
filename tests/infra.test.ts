@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { ANALYTICS_EVENTS, sanitizeAnalyticsEvent } from "../lib/analytics.ts";
-import { checkRequestLimits, extractClientIp, resetLocalRateLimitsForTests } from "../lib/rate-limit.ts";
+import { checkRequestLimits, extractClientIp, reserveAdditionalModelCall, resetLocalRateLimitsForTests } from "../lib/rate-limit.ts";
 import { GET as getResume } from "../app/resume/route.ts";
 import { NextRequest } from "next/server";
 
@@ -62,6 +62,25 @@ test("未配置 Redis 时执行会话与每日 Token 预算", async () => {
   const budgetDenied = await checkRequestLimits({ ip: "203.0.113.4", sessionId: "other", estimatedTokens: 5 });
   assert.equal(budgetDenied.ok, false);
   if (!budgetDenied.ok) assert.equal(budgetDenied.code, "budget_exhausted");
+});
+
+test("质量重写在第二次模型调用前再次检查请求与 Token 预算", async () => {
+  process.env.RATE_LIMIT_PER_MINUTE = "50";
+  process.env.SESSION_QUESTION_LIMIT = "20";
+  process.env.DAILY_REQUEST_LIMIT = "2";
+  process.env.DAILY_TOKEN_LIMIT = "10";
+  resetLocalRateLimitsForTests();
+  assert.equal((await checkRequestLimits({ ip: "203.0.113.5", sessionId: "retry", estimatedTokens: 6 })).ok, true);
+  const tokenDenied = await reserveAdditionalModelCall(5);
+  assert.equal(tokenDenied.ok, false);
+  if (!tokenDenied.ok) assert.equal(tokenDenied.code, "budget_exhausted");
+
+  process.env.DAILY_REQUEST_LIMIT = "1";
+  process.env.DAILY_TOKEN_LIMIT = "100";
+  resetLocalRateLimitsForTests();
+  assert.equal((await checkRequestLimits({ ip: "203.0.113.6", sessionId: "retry-requests", estimatedTokens: 5 })).ok, true);
+  const requestDenied = await reserveAdditionalModelCall(5);
+  assert.equal(requestDenied.ok, false);
 });
 
 test("客户端 IP 只从代理头提取首个值", () => {

@@ -22,8 +22,8 @@ test("默认回答采用面试表达，不机械展示证据与免责声明", ()
   const answer = demoAnswer("他为什么适合 AI 产品经理岗位？", retrieveKnowledge(stable.question), stable);
   assert.match(answer, /我适合 AI 产品经理/);
   assert.doesNotMatch(answer, /证据边界|待核实问题|\[S\d+\]|录用结论/);
-  assert.match(systemPrompt, /适度美化/);
-  assert.match(systemPrompt, /不要机械追加/);
+  assert.match(systemPrompt, /适度美化表达/);
+  assert.match(systemPrompt, /不得新增事件/);
 });
 
 test("稳定回答只在面试官直接询问完成边界时补充说明", () => {
@@ -31,8 +31,8 @@ test("稳定回答只在面试官直接询问完成边界时补充说明", () =>
   assert.ok(stable);
   const normal = demoAnswer("哪个项目最能代表他的 AI 产品能力？", [], stable);
   const boundary = demoAnswer("哪个项目最能代表他的 AI 产品能力？请说明当前完成边界。", [], stable);
-  assert.doesNotMatch(normal, /需要补充的是/);
-  assert.match(boundary, /需要补充的是/);
+  assert.doesNotMatch(normal, /\*\*当前阶段\*\*/);
+  assert.match(boundary, /\*\*当前阶段\*\*/);
 });
 
 test("招聘高频表达稳定匹配对应面试回答", () => {
@@ -48,8 +48,8 @@ test("招聘高频表达稳定匹配对应面试回答", () => {
 test("只有被问到短板或边界时，回退回答才自然补充限制", () => {
   const normal = demoAnswer("介绍一下 RAG 项目", retrieveKnowledge("介绍一下 RAG 项目"));
   const boundary = demoAnswer("RAG 项目还有哪些不足？", retrieveKnowledge("RAG 项目还有哪些不足？"));
-  assert.doesNotMatch(normal, /需要补充的是/);
-  assert.match(boundary, /需要补充的是/);
+  assert.doesNotMatch(normal, /\*\*当前阶段\*\*/);
+  assert.match(boundary, /\*\*当前阶段\*\*/);
 });
 
 test("项目挑战类问题自动调用对应公开 STAR 故事", () => {
@@ -57,13 +57,23 @@ test("项目挑战类问题自动调用对应公开 STAR 故事", () => {
   const stories = getRelatedStarStories(items);
   const answer = demoAnswer("RAG 项目遇到什么挑战？", items);
   assert.equal(stories[0]?.relatedProject, "rag-knowledge-base");
-  assert.match(answer, /这个经历说明|核心判断|具体行动/);
+  assert.match(answer, /\*\*当时的问题\*\*/);
+  assert.match(answer, /\*\*我的取舍\*\*/);
   assert.doesNotMatch(answer, /\[S\d+\]|证据边界/);
 });
 
 test("项目别名只用于检索，不会把所有 RAG 追问误配成代表项目标准答案", () => {
   assert.equal(matchStableAnswer("RAG 的混合检索为什么还要做 Rerank？"), undefined);
   assert.equal(retrieveKnowledge("RAG 的混合检索为什么还要做 Rerank？")[0]?.id, "K4");
+});
+
+test("省略项目名的贡献追问沿用最近项目，不误答成 RAG", () => {
+  const history = [
+    { role: "user" as const, content: "介绍一下 DeepFlow。" },
+    { role: "assistant" as const, content: "DeepFlow 是多 Agent 研究工作台。" },
+  ];
+  assert.notEqual(matchStableAnswer("你做了什么？", history)?.id, "A05");
+  assert.equal(retrieveKnowledge("你做了什么？", { history })[0]?.relatedProject, "deepflow");
 });
 
 test("无模型时按问题组织检索证据，而不是返回固定项目套话", () => {

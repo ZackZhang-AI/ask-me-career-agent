@@ -26,11 +26,11 @@ test("DeepFlow 公开口径是可演示 MVP，不冒充生产完成", () => {
   assert.match(answer.limitations, /生产并发|长期稳定/);
 });
 
-test("模型上下文显式标记来源观点、用户陈述和推断边界", () => {
+test("模型上下文只提供自然事实材料，不暴露内部证据标签", () => {
   const context = buildContext(knowledge.filter((item) => ["K1", "K4", "K11"].includes(item.id)));
-  assert.match(context, /\[C1\]\[user_statement\]/);
-  assert.match(context, /\[C3\]\[source_view\]/);
-  assert.match(context, /\[C8\]\[inference\]/);
+  assert.match(context, /主题：候选人定位/);
+  assert.match(context, /事实：张倬玮是东北大学/);
+  assert.doesNotMatch(context, /Claim|Source|验证状态|\[C\d+\]/);
   assert.equal(claims.some((claim) => claim.evidenceBasis === "inference" && claim.claimType !== "boundary"), false);
 });
 
