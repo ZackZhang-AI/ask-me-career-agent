@@ -12,9 +12,41 @@ type AnswerInput = {
   matchKeywords: string[];
   verification?: "externally_verified" | "self_attested";
   relatedProject?: string;
+  intent?: import("../lib/types").AnswerIntent;
+  mustInclude?: string[];
+  allowedFacts?: string[];
+  allowedNumbers?: string[];
+  allowedOrganizations?: string[];
+  allowedProjectStatuses?: string[];
+  boundaryTriggers?: string[];
+  forbiddenDetails?: string[];
 };
 
+const answerIntentById: Record<string, import("../lib/types").AnswerIntent> = {
+  A01: "introduction", A02: "role_fit", A03: "representative_project", A04: "project_problem",
+  A05: "contribution", A06: "project_overview", A07: "ai_collaboration", A08: "skills",
+  A09: "experience_value", A10: "experience", A11: "experience", A12: "project_overview",
+  A13: "privacy", A14: "limitation", A15: "challenge", A16: "education",
+  A17: "credentials", A18: "project_overview", A19: "result", A20: "hiring_recommendation",
+};
+
+const knownOrganizations = ["东北大学", "德勤", "容诚", "ACCA"];
+const defaultBoundaryTriggers = ["短板", "不足", "限制", "风险", "真实数据", "用户规模", "生产状态", "个人贡献", "未完成"];
+const defaultForbiddenDetails = [
+  "未在资料中出现的任职、日期或组织",
+  "未在资料中出现的用户访谈、满意度、增长、效率或业务结果数字",
+  "把规划中或待验证的能力描述为已经完成",
+  "审计客户、底稿、企业机密或未公开个人信息",
+];
+
+function extractNumbers(values: string[]) {
+  return [...new Set(values.flatMap((value) => value.match(/\b\d+(?:\.\d+)?%?\b/g) ?? []))];
+}
+
 function answer(input: AnswerInput) {
+  const facts = [input.standardAnswer, ...(input.details ?? [])];
+  const allowedOrganizations = input.allowedOrganizations
+    ?? knownOrganizations.filter((organization) => facts.some((fact) => fact.includes(organization)));
   return {
     ...publicActive,
     ...input,
@@ -22,6 +54,17 @@ function answer(input: AnswerInput) {
     supportsClaimIds: input.claimIds,
     requiredClaimIds: input.claimIds,
     requiredSourceIds: input.sourceIds,
+    factSkeleton: {
+      intent: input.intent ?? answerIntentById[input.id] ?? "general",
+      thesis: input.standardAnswer,
+      mustInclude: input.mustInclude ?? (input.details?.slice(0, 3) ?? [input.standardAnswer]),
+      allowedFacts: input.allowedFacts ?? facts,
+      allowedNumbers: input.allowedNumbers ?? extractNumbers(facts),
+      allowedOrganizations,
+      allowedProjectStatuses: input.allowedProjectStatuses ?? facts.filter((fact) => /MVP|原型|规划|验证阶段|已实现|已完成|持续优化/.test(fact)),
+      boundaryTriggers: input.boundaryTriggers ?? defaultBoundaryTriggers,
+      forbiddenDetails: [...defaultForbiddenDetails, ...(input.forbiddenDetails ?? [])],
+    },
   };
 }
 
@@ -74,10 +117,10 @@ export const stableAnswerContent = [
     relatedProject: "rag-knowledge-base",
   }),
   answer({ id: "A04", question: "RAG 项目解决了什么问题？", matchKeywords: ["rag解决", "rag项目", "知识库问题"], standardAnswer: "这个项目解决的是专业文档“找得到但用不好”的问题：资料分散、检索效率低、生成答案缺少上下文。我的设计以文档摄入、切片、Embedding、Dense Retrieval 和回答生成为主链路，并围绕混合检索、Rerank、引用溯源和自动评测持续优化。", limitations: "公开 README 可以证明设计声明，不等同于所有功能已通过独立验证。", claimIds: ["C3"], sourceIds: ["S1", "S3"], verification: "externally_verified", relatedProject: "rag-knowledge-base" }),
-  answer({ id: "A05", question: "他在 RAG 项目中的个人贡献是什么？", matchKeywords: ["rag贡献", "rag个人贡献", "rag负责", "具体做了什么", "个人具体完成", "你做了什么", "你负责什么", "你的贡献", "如何评测", "评测设计"], standardAnswer: "我在 RAG 项目里重点负责产品定位、检索策略、评测设计和整体落地推进。具体来说，我先定义专业文档问答的核心问题，再设计摄入—检索—生成链路，并把 Bad Case、引用质量和后续评测纳入迭代。AI 编程工具主要帮助我加快代码实现、调试和文档整理，需求判断、方案取舍和最终验收由我负责。", limitations: "当前仍缺少按功能对应的提交记录、任务记录或运行证据，因此不把“参与”扩大为已验证的独立主导。", claimIds: ["C3"], sourceIds: ["S1", "S3"], relatedProject: "rag-knowledge-base" }),
-  answer({ id: "A06", question: "DeepFlow 是什么？", matchKeywords: ["deepflow是什么", "deepflow介绍", "研究工作台"], standardAnswer: "DeepFlow 是我围绕复杂研究任务设计的多 Agent 工作台。它通过 Coordinator、Planner、Researcher、Coder 和 Reporter 等角色，把需求澄清、计划确认、资料检索、分析和报告生成组织成一条可追踪流程，目前已经形成可演示 MVP。", limitations: "真实用户、生产并发、权限审计、工具状态持久化与长期稳定性尚未独立验证。", claimIds: ["C4"], sourceIds: ["S4"], verification: "externally_verified", relatedProject: "deepflow" }),
+  answer({ id: "A05", question: "他在 RAG 项目中的个人贡献是什么？", matchKeywords: ["rag贡献", "rag个人贡献", "rag负责", "具体做了什么", "个人具体完成", "你做了什么", "你负责什么", "你的贡献", "如何评测", "用于评测", "ragas", "评测设计"], standardAnswer: "我在 RAG 项目里重点负责产品定位、检索策略、评测设计和整体落地推进。具体来说，我先定义专业文档问答的核心问题，再设计摄入—检索—生成链路，并把 Bad Case、引用质量和后续评测纳入迭代。AI 编程工具主要帮助我加快代码实现、调试和文档整理，需求判断、方案取舍和最终验收由我负责。", details: ["评测目标不是追求一个好看的总分，而是判断检索是否找对内容、回答是否忠于上下文，以及引用能否支持结论。", "RAGAS 是我用于组织评测设计的方法之一，相关指标需要与人工检查和具体 Bad Case 一起解释，不把框架分数直接等同于产品价值。", "发现失败样本后，我会区分摄入、切片、召回和生成阶段的问题，再决定调整检索策略、提示词还是评测集。"], limitations: "当前仍缺少按功能对应的提交记录、任务记录或运行证据，因此不把“参与”扩大为已验证的独立主导。", claimIds: ["C3"], sourceIds: ["S1", "S3"], relatedProject: "rag-knowledge-base" }),
+  answer({ id: "A06", question: "DeepFlow 是什么？", matchKeywords: ["deepflow", "deepflow是什么", "deepflow介绍", "研究工作台"], standardAnswer: "DeepFlow 是我围绕复杂研究任务设计的多 Agent 工作台。它通过 Coordinator、Planner、Researcher、Coder 和 Reporter 等角色，把需求澄清、计划确认、资料检索、分析和报告生成组织成一条可追踪流程，目前已经形成可演示 MVP。", limitations: "真实用户、生产并发、权限审计、工具状态持久化与长期稳定性尚未独立验证。", claimIds: ["C4"], sourceIds: ["S4"], verification: "externally_verified", relatedProject: "deepflow" }),
   answer({ id: "A07", question: "他如何使用 AI 编程工具？", matchKeywords: ["ai编程", "如何使用ai", "ai辅助", "ai编程占比", "ai写了多少", "代码是不是ai写的"], standardAnswer: "我把 AI 编程工具当作高效率的工程协作者，而不是替我做产品判断。我负责定义需求、拆解任务、做方案取舍、设计验收标准和判断结果是否可用；AI 主要参与代码实现、调试、测试和资料整理。这让我能用更短时间把产品想法变成可以运行和验证的原型。", limitations: "不同项目中的具体贡献比例仍应逐项核实。", claimIds: ["C2", "C3", "C4", "C5", "C7", "C12"], sourceIds: ["S1", "S2", "S3", "S4", "S5", "S6", "S7", "S8", "S9"] }),
-  answer({ id: "A08", question: "他的核心技术能力有哪些？", matchKeywords: ["技术能力", "技术栈", "会什么"], standardAnswer: "我的技术能力主要服务于 AI 产品落地：能使用 SQL、Python 做数据处理和分析，能基于 FastAPI、Milvus 等组件理解并搭建 RAG 链路，也具备 Prompt、工作流、评测集和 RAGAS 相关实践。我的优势不是和纯工程师比底层深度，而是能理解技术约束，并把它转化成产品方案和验收标准。", limitations: "熟练程度需通过现场任务或面试核实。", claimIds: ["C2", "C3", "C4", "C5"], sourceIds: ["S1", "S3", "S4", "S5"] }),
+  answer({ id: "A08", question: "他的核心技术能力有哪些？", matchKeywords: ["技术能力", "技术栈", "会什么", "技能如何", "sql", "python", "fastapi"], standardAnswer: "我的技术能力主要服务于 AI 产品落地：能使用 SQL、Python 做数据处理和分析，能基于 FastAPI、Milvus 等组件理解并搭建 RAG 链路，也具备 Prompt、工作流、评测集和 RAGAS 相关实践。我的优势不是和纯工程师比底层深度，而是能理解技术约束，并把它转化成产品方案和验收标准。", limitations: "熟练程度需通过现场任务或面试核实。", claimIds: ["C2", "C3", "C4", "C5"], sourceIds: ["S1", "S3", "S4", "S5"] }),
   answer({ id: "A09", question: "审计经历如何帮助他做 AI 产品？", matchKeywords: ["审计经历", "审计帮助", "业务理解"], standardAnswer: "审计经历让我形成了很强的流程、风险和证据意识。做 AI 产品时，我会自然关注数据从哪里来、结果能否追溯、异常如何发现、权限和边界怎么控制。这也是我做知识库、日志抽查和资料归档类产品时，能比单纯技术视角更快理解企业真实需求的原因。", limitations: "客户、底稿与企业机密不在公开回答范围内。", claimIds: ["C6", "C7", "C9", "C10"], sourceIds: ["S1", "S8", "S9"] }),
   answer({ id: "A10", question: "他的德勤 IT 审计实习做了什么？", matchKeywords: ["德勤实习", "it审计实习", "ipe"], standardAnswer: "我在 2026 年 1 月至 4 月参与德勤 IT 审计实习，主要接触 IPE 与日志核查等工作。这段经历让我更熟悉企业系统中的数据来源、流程控制和异常验证，也强化了我做 B 端 AI 产品时对可靠性和数据边界的敏感度。", limitations: "不披露客户、底稿或企业机密；任职信息需正式材料核实。", claimIds: ["C9"], sourceIds: ["S1"] }),
   answer({ id: "A11", question: "他的容诚审计实习做了什么？", matchKeywords: ["容诚实习", "财务审计实习", "函证盘点"], standardAnswer: "我在 2025 年 1 月至 3 月参与容诚财务审计实习，主要接触底稿、函证和盘点工作。这让我对真实业务流程、证据链和一线执行有了更具体的理解，也帮助我在设计企业产品时更关注实际使用成本，而不是只看功能是否成立。", limitations: "不披露客户、底稿或企业机密；任职信息需正式材料核实。", claimIds: ["C10"], sourceIds: ["S1"] }),
@@ -101,7 +144,7 @@ export const stableAnswerContent = [
   answer({
     id: "A15",
     question: "面试中最应该核实什么？",
-    matchKeywords: ["面试核实", "待核实", "追问", "遇到什么困难", "项目困难", "失败案例", "项目挑战"],
+    matchKeywords: ["面试核实", "追问", "遇到什么困难", "项目困难", "失败案例", "项目挑战"],
     standardAnswer: "最值得深入聊的是三个问题：我如何做产品取舍、如何定位 AI 项目的失败案例，以及能否把现有方法迁移到新的企业场景。这三类问题最容易看出我的真实能力。",
     details: [
       "贡献边界：任选一个公开项目，请他现场拆解由本人决定、由 AI 工具辅助和由现成框架提供的部分。",

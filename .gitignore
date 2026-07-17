@@ -6,6 +6,7 @@ out/
 npm-debug.log*
 .DS_Store
 coverage/
+*.tsbuildinfo
 .playwright-cli/
 output/
 

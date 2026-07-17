@@ -110,6 +110,17 @@ export const stableAnswerSchema = z.object({
   requiredClaimIds: z.array(z.string().regex(/^C\d+$/)).min(1),
   requiredSourceIds: z.array(z.string().regex(/^S\d+$/)).min(1),
   matchKeywords: z.array(z.string().min(1)).min(1),
+  factSkeleton: z.object({
+    intent: z.enum(["introduction", "role_fit", "representative_project", "project_overview", "project_problem", "contribution", "ai_collaboration", "challenge", "result", "limitation", "skills", "experience", "experience_value", "privacy", "education", "credentials", "hiring_recommendation", "general"]),
+    thesis: z.string().min(1),
+    mustInclude: z.array(z.string().min(1)).min(1),
+    allowedFacts: z.array(z.string().min(1)).min(1),
+    allowedNumbers: z.array(z.string().min(1)),
+    allowedOrganizations: z.array(z.string().min(1)),
+    allowedProjectStatuses: z.array(z.string().min(1)),
+    boundaryTriggers: z.array(z.string().min(1)).min(1),
+    forbiddenDetails: z.array(z.string().min(1)).min(1),
+  }),
 });
 
 export const faqSchema = z.object({

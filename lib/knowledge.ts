@@ -14,6 +14,7 @@ export const suggestedQuestions = contentCatalog.suggestedQuestions;
 const sourceById = new Map(sources.map((source) => [source.id, source]));
 const claimById = new Map(claims.map((claim) => [claim.id, claim]));
 const referencePattern = /(这个|该项目|其中|它|上述|前者|后者|那个项目|这套系统)/;
+const implicitFollowupPattern = /你(?:本人)?做了什么|你负责什么|具体做了什么|你的贡献|遇到(?:什么)?(?:挑战|困难)|有什么结果|现在怎么样/;
 
 function isPublicActive(item: { visibility: string; status: string; verification: string; projectStatus?: string }) {
   return item.visibility === "public"
@@ -52,7 +53,7 @@ export interface RetrievalOptions {
 }
 
 export function resolveRetrievalQuery(question: string, history: ChatMessage[] = []) {
-  const recentContext = referencePattern.test(question)
+  const recentContext = (referencePattern.test(question) || implicitFollowupPattern.test(question))
     ? history.slice(-4).map((message) => message.content.slice(0, 300)).join(" ")
     : "";
   const base = `${question} ${recentContext}`;
@@ -74,18 +75,24 @@ export function retrieveKnowledge(question: string, limitOrOptions: number | Ret
   const resolved = resolveRetrievalQuery(question, options.history);
   const limit = Math.max(1, Math.min(options.limit ?? 4, 8));
 
-  return rankKnowledge({
+  const ranked = rankKnowledge({
     query: resolved.text,
     candidates: knowledge.filter(isRetrievable),
     matchedProjects: resolved.matchedProjects,
-    limit,
+    limit: resolved.matchedProjects.length > 1 ? 8 : limit,
   }).map(({ item }) => item);
+  if (resolved.matchedProjects.length < 2) return ranked.slice(0, limit);
+  const projectRepresentatives = resolved.matchedProjects
+    .map((project) => ranked.find((item) => item.relatedProject === project))
+    .filter((item): item is KnowledgeItem => Boolean(item));
+  return [...new Map([...projectRepresentatives, ...ranked].map((item) => [item.id, item])).values()].slice(0, limit);
 }
 
 export function matchStableAnswer(question: string, history: ChatMessage[] = []) {
   const normalizedQuestion = normalizeSearchText(question);
   const resolved = resolveRetrievalQuery(question, history);
-  const usesReference = referencePattern.test(question);
+  const usesReference = referencePattern.test(question) || implicitFollowupPattern.test(question);
+  if (resolved.matchedProjects.length > 1) return undefined;
   const ranked = stableAnswers
     .filter(isStableAnswerRetrievable)
     .map((item) => {
