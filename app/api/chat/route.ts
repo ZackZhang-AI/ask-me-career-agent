@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { buildContext, demoAnswer, systemPrompt } from "@/lib/answer";
 import { assessQuestion } from "@/lib/guardrails";
-import { getClaims, getSources, matchStableAnswer, retrieveKnowledge } from "@/lib/knowledge";
+import { getClaims, getSources, matchStableAnswer, retrieveKnowledge, serializeKnowledgeItems } from "@/lib/knowledge";
 import { checkRequestLimits, extractClientIp, recordTokenUsage } from "@/lib/rate-limit";
 import type { ChatMessage, ResponseStatus } from "@/lib/types";
 
@@ -44,7 +44,7 @@ function textStream(input: {
       claimIds: input.claimIds,
       sourceIds: input.sourceIds,
       sources: input.sources,
-      items: input.items,
+      items: serializeKnowledgeItems(input.items),
     }));
     for (let index = 0; index < input.answer.length; index += 12) {
       controller.enqueue(line({ type: "delta", content: input.answer.slice(index, index + 12) }));
@@ -158,7 +158,7 @@ export async function POST(request: NextRequest) {
         model: process.env.DEEPSEEK_MODEL ?? "deepseek-v4-flash",
         messages: [
           { role: "system", content: systemPrompt },
-          { role: "system", content: `可用公开知识：\n${buildContext(items)}` },
+          { role: "system", content: `以下是本轮检索到的公开证据，只能据此回答：\n${buildContext(items)}` },
           ...body.messages.slice(-8),
         ],
         thinking: { type: "disabled" },
@@ -184,7 +184,7 @@ export async function POST(request: NextRequest) {
   const claims = getClaims(claimIds);
   const stream = new ReadableStream({
     async start(output) {
-      output.enqueue(line({ type: "meta", sources: matchedSources, items, claims, mode: "live", responseStatus: "completed", claimIds, sourceIds }));
+      output.enqueue(line({ type: "meta", sources: matchedSources, items: serializeKnowledgeItems(items), claims, mode: "live", responseStatus: "completed", claimIds, sourceIds }));
       const reader = upstream.body!.getReader();
       const decoder = new TextDecoder();
       let buffer = "";

@@ -37,6 +37,8 @@ test("分析字段严格白名单并丢弃联系方式和非法引用", () => {
 test("未配置 Redis 时执行每 IP 分钟限流", async () => {
   delete process.env.UPSTASH_REDIS_REST_URL;
   delete process.env.UPSTASH_REDIS_REST_TOKEN;
+  delete process.env.KV_REST_API_URL;
+  delete process.env.KV_REST_API_TOKEN;
   process.env.RATE_LIMIT_PER_MINUTE = "2";
   process.env.SESSION_QUESTION_LIMIT = "20";
   resetLocalRateLimitsForTests();

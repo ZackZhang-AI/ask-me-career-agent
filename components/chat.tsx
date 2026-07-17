@@ -9,12 +9,18 @@ import {
   EnvelopeSimpleIcon,
   FileTextIcon,
   GithubLogoIcon,
+  HouseIcon,
   PhoneIcon,
   StopIcon,
 } from "@phosphor-icons/react";
-import { suggestedQuestions } from "@/lib/knowledge";
 import { featuredProjects, profile } from "@/lib/profile";
 import { getBrowserSessionId } from "@/lib/client-session";
+import {
+  getFollowUpQuestions,
+  inferQuestionCategory,
+  questionGroups,
+  type QuestionGroupId,
+} from "@/lib/question-suggestions";
 import type { ChatMessage, KnowledgeItem, ResponseStatus, Source } from "@/lib/types";
 
 interface DisplayMessage extends ChatMessage {
@@ -40,17 +46,6 @@ const statusLabels = {
   archived: "已归档",
 } as const;
 
-function questionCategory(question: string) {
-  if (/项目|rag|agent|deepflow/i.test(question)) return "project";
-  if (/匹配|岗位/.test(question)) return "fit";
-  if (/实习|经历|审计/.test(question)) return "experience";
-  if (/技能|技术|英语|证书/.test(question)) return "skills";
-  if (/短板|不足|缺口|核实/.test(question)) return "gaps";
-  if (/隐私|机密|提示词|忽略|编造/.test(question)) return "security";
-  if (/介绍|背景|教育|张倬玮/.test(question)) return "profile";
-  return "other";
-}
-
 function track(event: string, sessionId: string, detail = "", metadata: Partial<DisplayMessage> & { questionCategory?: string } = {}) {
   void fetch("/api/events", {
     method: "POST",
@@ -74,7 +69,9 @@ export function Chat() {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [activeQuestionGroup, setActiveQuestionGroup] = useState<QuestionGroupId>("screening");
   const abortRef = useRef<AbortController | null>(null);
+  const conversationEpochRef = useRef(0);
   const messageEndRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -87,6 +84,7 @@ export function Chat() {
     const clean = question.trim();
     if (!clean || loading) return;
     const sessionId = getBrowserSessionId();
+    const conversationEpoch = conversationEpochRef.current;
 
     setInput("");
     setError("");
@@ -94,7 +92,7 @@ export function Chat() {
     const userMessage: DisplayMessage = { role: "user", content: clean };
     const nextMessages = [...messages, userMessage];
     setMessages([...nextMessages, { role: "assistant", content: "" }]);
-    track(fromSuggestion ? "suggestion_clicked" : "question_sent", sessionId, "", { questionCategory: questionCategory(clean) });
+    track(fromSuggestion ? "suggestion_clicked" : "question_sent", sessionId, "", { questionCategory: inferQuestionCategory(clean) });
     if (messages.some((message) => message.role === "user")) track("followup_sent", sessionId);
 
     const abort = new AbortController();
@@ -121,6 +119,10 @@ export function Chat() {
       let metadata: Partial<DisplayMessage> = {};
       while (true) {
         const { done, value } = await reader.read();
+        if (conversationEpoch !== conversationEpochRef.current) {
+          await reader.cancel();
+          return;
+        }
         if (done) break;
         buffer += decoder.decode(value, { stream: true });
         const rows = buffer.split("\n");
@@ -142,8 +144,9 @@ export function Chat() {
           setMessages([...nextMessages, { role: "assistant", content: answer, ...metadata }]);
         }
       }
-      track("answer_completed", sessionId, "", { ...metadata, questionCategory: questionCategory(clean) });
+      track("answer_completed", sessionId, "", { ...metadata, questionCategory: inferQuestionCategory(clean) });
     } catch (caught) {
+      if (conversationEpoch !== conversationEpochRef.current) return;
       if (caught instanceof Error && caught.name === "AbortError") {
         setError("已停止生成，你可以修改问题后重试。");
       } else {
@@ -153,9 +156,27 @@ export function Chat() {
       }
       setMessages((current) => current.filter((message) => message.content));
     } finally {
-      setLoading(false);
-      abortRef.current = null;
+      if (conversationEpoch === conversationEpochRef.current) {
+        setLoading(false);
+        abortRef.current = null;
+      }
     }
+  }
+
+  function returnHome() {
+    conversationEpochRef.current += 1;
+    abortRef.current?.abort();
+    abortRef.current = null;
+    setMessages([]);
+    setInput("");
+    setError("");
+    setLoading(false);
+    setActiveQuestionGroup("screening");
+    window.history.replaceState(null, "", `${window.location.pathname}#top`);
+    requestAnimationFrame(() => {
+      document.querySelector<HTMLElement>(".chat-scroll")?.scrollTo({ top: 0, behavior: "smooth" });
+      document.getElementById("top")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
   }
 
   function submit(event: FormEvent) {
@@ -171,17 +192,35 @@ export function Chat() {
   }
 
   const isEmpty = messages.length === 0;
+  const activeQuestions = questionGroups.find((group) => group.id === activeQuestionGroup)?.questions ?? questionGroups[0].questions;
+  const askedQuestions = messages.filter((message) => message.role === "user").map((message) => message.content);
+  const lastQuestion = askedQuestions[askedQuestions.length - 1] ?? "";
+  const followUpQuestions = lastQuestion ? getFollowUpQuestions(lastQuestion, askedQuestions) : [];
+  const hasCompletedAnswer = messages.some((message) => message.role === "assistant" && message.content);
 
   return (
     <div className={`chat-shell ${isEmpty ? "is-empty" : "has-messages"}`}>
+      {!isEmpty && (
+        <button className="return-home" type="button" onClick={returnHome}>
+          <HouseIcon size={15} weight="bold" aria-hidden="true" />
+          回到主页
+        </button>
+      )}
       <div className="chat-scroll">
         {isEmpty ? (
           <div className="empty-state">
             <section className="welcome" aria-labelledby="chat-title">
               <div className="evidence-label"><CheckCircleIcon size={16} weight="fill" aria-hidden="true" /> 公开资料已更新</div>
-              <h1 id="chat-title">让证据先说话。</h1>
-              <p>我是 {profile.name} 的 AI Career Agent。你可以核实他的教育、审计经历、AI 项目、本人贡献和能力边界。</p>
-              <span className="education-line">{profile.education}</span>
+              <h1 id="chat-title">我是{profile.name}的 AI Career Agent</h1>
+              <p className="welcome-description">你可以向我了解他的教育经历、AI 项目、实习经验、能力优势等。</p>
+              <div className="education-line" aria-label={`${profile.school}，985、211、双一流，${profile.major}，${profile.graduation}`}>
+                <strong>{profile.school}</strong>
+                <span className="school-tags" aria-label="学校标签">
+                  {profile.schoolTags.map((tag) => <span key={tag}>{tag}</span>)}
+                </span>
+                <span className="education-detail">{profile.major}</span>
+                <span className="education-detail">{profile.graduation}</span>
+              </div>
               <nav className="mobile-contact" aria-label="联系方式">
                 <a href={`mailto:${profile.email}`} data-track-event="contact_opened" data-track-detail="email"><EnvelopeSimpleIcon size={15} aria-hidden="true" />邮件</a>
                 <a href={`tel:${profile.phone}`} data-track-event="contact_opened" data-track-detail="phone"><PhoneIcon size={15} aria-hidden="true" />电话</a>
@@ -209,9 +248,29 @@ export function Chat() {
             </section>
 
             <section className="question-start" aria-labelledby="question-title">
-              <h2 id="question-title">从招聘方最关心的问题开始</h2>
-              <div className="suggestions" aria-label="推荐问题">
-                {suggestedQuestions.map((question) => (
+              <h2 id="question-title">从您可能最关心的问题开始吧。</h2>
+              <div className="question-groups" role="tablist" aria-label="问题分类">
+                {questionGroups.map((group) => (
+                  <button
+                    id={`question-tab-${group.id}`}
+                    key={group.id}
+                    type="button"
+                    role="tab"
+                    aria-selected={activeQuestionGroup === group.id}
+                    aria-controls="question-panel"
+                    onClick={() => setActiveQuestionGroup(group.id)}
+                  >
+                    {group.label}
+                  </button>
+                ))}
+              </div>
+              <div
+                className="suggestions"
+                id="question-panel"
+                role="tabpanel"
+                aria-labelledby={`question-tab-${activeQuestionGroup}`}
+              >
+                {activeQuestions.map((question) => (
                   <button key={question} type="button" onClick={() => void send(question, true)}>
                     <span>{question}</span>
                     <ArrowUpRightIcon size={17} aria-hidden="true" />
@@ -278,6 +337,16 @@ export function Chat() {
       </div>
 
       <div className="composer-dock">
+        {hasCompletedAnswer && !loading && followUpQuestions.length > 0 && (
+          <div className="contextual-suggestions" aria-label="根据上一问题推荐的追问">
+            <span>接着了解</span>
+            <div>
+              {followUpQuestions.map((question) => (
+                <button key={question} type="button" onClick={() => void send(question, true)}>{question}</button>
+              ))}
+            </div>
+          </div>
+        )}
         {error && <div className="chat-error" role="alert">{error}</div>}
         <form className="composer" onSubmit={submit}>
           <label className="sr-only" htmlFor="question">向 Ask Me 提问</label>

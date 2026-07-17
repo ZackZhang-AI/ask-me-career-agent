@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { demoAnswer } from "../lib/answer.ts";
+import { demoAnswer, systemPrompt } from "../lib/answer.ts";
 import { assessQuestion, redactForLog } from "../lib/guardrails.ts";
-import { claims, knowledge, retrieveKnowledge, sources } from "../lib/knowledge.ts";
+import { claims, getRelatedStarStories, knowledge, matchStableAnswer, retrieveKnowledge, sources } from "../lib/knowledge.ts";
 
 test("召回岗位匹配知识并保留证据边界", () => {
   const result = retrieveKnowledge("他与 AI 产品经理岗位的匹配证据是什么？");
@@ -12,8 +12,71 @@ test("召回岗位匹配知识并保留证据边界", () => {
 
 test("未知问题不生成候选人事实", () => {
   const answer = demoAnswer("他最喜欢哪支球队？", []);
-  assert.match(answer, /资料不足/);
-  assert.match(answer, /不会.*推测/);
+  assert.match(answer, /没有记录/);
+  assert.match(answer, /AI 产品项目|产品方法/);
+});
+
+test("默认回答采用面试表达，不机械展示证据与免责声明", () => {
+  const stable = matchStableAnswer("他为什么适合 AI 产品经理岗位？");
+  assert.ok(stable);
+  const answer = demoAnswer("他为什么适合 AI 产品经理岗位？", retrieveKnowledge(stable.question), stable);
+  assert.match(answer, /我适合 AI 产品经理/);
+  assert.doesNotMatch(answer, /证据边界|待核实问题|\[S\d+\]|录用结论/);
+  assert.match(systemPrompt, /适度美化/);
+  assert.match(systemPrompt, /不要机械追加/);
+});
+
+test("稳定回答只在面试官直接询问完成边界时补充说明", () => {
+  const stable = matchStableAnswer("哪个项目最能代表他的 AI 产品能力？");
+  assert.ok(stable);
+  const normal = demoAnswer("哪个项目最能代表他的 AI 产品能力？", [], stable);
+  const boundary = demoAnswer("哪个项目最能代表他的 AI 产品能力？请说明当前完成边界。", [], stable);
+  assert.doesNotMatch(normal, /需要补充的是/);
+  assert.match(boundary, /需要补充的是/);
+});
+
+test("招聘高频表达稳定匹配对应面试回答", () => {
+  assert.equal(matchStableAnswer("为什么选择你来做这个岗位？")?.id, "A02");
+  assert.equal(matchStableAnswer("如果入职，你能为团队做什么？")?.id, "A02");
+  assert.equal(matchStableAnswer("你在 RAG 项目里具体做了什么？")?.id, "A05");
+  assert.equal(matchStableAnswer("你是如何评测 RAG 效果的？")?.id, "A05");
+  assert.equal(matchStableAnswer("AI 编程占比多少？")?.id, "A07");
+  assert.equal(matchStableAnswer("请讲一个失败案例。")?.id, "A15");
+  assert.equal(matchStableAnswer("你建议让他进入下一轮吗？")?.id, "A20");
+});
+
+test("只有被问到短板或边界时，回退回答才自然补充限制", () => {
+  const normal = demoAnswer("介绍一下 RAG 项目", retrieveKnowledge("介绍一下 RAG 项目"));
+  const boundary = demoAnswer("RAG 项目还有哪些不足？", retrieveKnowledge("RAG 项目还有哪些不足？"));
+  assert.doesNotMatch(normal, /需要补充的是/);
+  assert.match(boundary, /需要补充的是/);
+});
+
+test("项目挑战类问题自动调用对应公开 STAR 故事", () => {
+  const items = retrieveKnowledge("RAG 项目遇到什么挑战？");
+  const stories = getRelatedStarStories(items);
+  const answer = demoAnswer("RAG 项目遇到什么挑战？", items);
+  assert.equal(stories[0]?.relatedProject, "rag-knowledge-base");
+  assert.match(answer, /这个经历说明|核心判断|具体行动/);
+  assert.doesNotMatch(answer, /\[S\d+\]|证据边界/);
+});
+
+test("项目别名只用于检索，不会把所有 RAG 追问误配成代表项目标准答案", () => {
+  assert.equal(matchStableAnswer("RAG 的混合检索为什么还要做 Rerank？"), undefined);
+  assert.equal(retrieveKnowledge("RAG 的混合检索为什么还要做 Rerank？")[0]?.id, "K4");
+});
+
+test("无模型时按问题组织检索证据，而不是返回固定项目套话", () => {
+  const question = "DeepFlow 中各个 Agent 是怎么协作的？";
+  const answer = demoAnswer(question, retrieveKnowledge(question));
+  assert.match(answer, /DeepFlow/);
+  assert.match(answer, /Coordinator/);
+  assert.doesNotMatch(answer, /最具代表性的公开项目/);
+});
+
+test("自然语言改写仍能召回正确经历", () => {
+  assert.equal(retrieveKnowledge("他在德勤那段经历具体负责了哪些事情？")[0]?.id, "K8");
+  assert.equal(retrieveKnowledge("容诚实习期间主要参与了什么？")[0]?.id, "K9");
 });
 
 test("隐私、注入与编造请求均被拒绝", () => {

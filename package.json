@@ -9,7 +9,9 @@
     "start": "next start",
     "lint": "eslint .",
     "test": "tsx --test tests/*.test.ts",
-    "upload:resume": "dotenv -e .env.local -- tsx scripts/upload-resume.ts"
+    "upload:resume": "dotenv -e .env.local -- tsx scripts/upload-resume.ts",
+    "knowledge:sync": "dotenv -e .env.local -- tsx scripts/sync-obsidian.ts",
+    "eval:interview": "dotenv -e .env.local -- tsx scripts/run-interview-eval.ts"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.1.0",

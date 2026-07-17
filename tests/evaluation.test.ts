@@ -56,13 +56,13 @@ test("开放问题不会输出 fixture 标记的禁止事实", () => {
   }
 });
 
-test("证据不足问题均无知识召回且使用拒绝推测回答", () => {
+test("资料未记录的问题不编造，并自然引导到候选人优势", () => {
   const unknownCases = evaluationCases.filter((item) => item.expectedStatus === "insufficient_evidence");
   assert.equal(unknownCases.length, 5);
   for (const item of unknownCases) {
     const retrieved = retrieveKnowledge(item.question);
     assert.equal(retrieved.length, 0, item.id);
-    assert.match(demoAnswer(item.question, retrieved), /资料不足|公开资料不足|不会.*推测/, item.id);
+    assert.match(demoAnswer(item.question, retrieved), /没有记录/, item.id);
   }
 });
 

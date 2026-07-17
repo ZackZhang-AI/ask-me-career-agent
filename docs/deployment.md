@@ -6,22 +6,22 @@
 
 在 Vercel 中连接 GitHub 仓库，并准备以下外部资源：
 
-- DeepSeek API：只使用轮换后的密钥。此前出现在对话或日志中的密钥一律撤销，不能复用。
+- DeepSeek API：密钥只保存在 Vercel 服务端环境变量中，不进入聊天正文、命令输出、Git、浏览器 Bundle 或应用日志；发现泄露迹象时立即轮换。
 - Upstash Redis：用于跨实例分钟限流、会话次数和每日请求/Token 预算。
 - Neon Postgres：用于匿名漏斗事件。首次写入或清理时会自动创建 `ask_me_events` 表及索引，无需手工迁移。
 - Vercel Blob：通过本地上传脚本固定覆盖 `resume/latest.pdf`；脚本输出 Blob URL，但不会修改 Vercel 环境变量。
 
 ## 2. 环境变量
 
-敏感变量只写入 Vercel Environment Variables，不提交 `.env` 文件。Preview 和 Production 使用隔离的 Redis、Neon 与预算；Production 密钥仅对 Production 开放。
+敏感变量只写入 Vercel Environment Variables，不提交 `.env` 文件。Preview 和 Production 使用独立预算；Preview 不复用 Production 的模型密钥、Redis 或 Neon 数据，Production 密钥仅对 Production 开放。
 
 | 变量 | 必需 | 默认值 / 说明 |
 | --- | --- | --- |
-| `DEEPSEEK_API_KEY` | Production 必需 | 轮换后的服务端密钥 |
+| `DEEPSEEK_API_KEY` | Production 必需 | 仅服务端可读的 Sensitive 密钥 |
 | `DEEPSEEK_BASE_URL` | 否 | `https://api.deepseek.com` |
 | `DEEPSEEK_MODEL` | 否 | `deepseek-v4-flash` |
-| `UPSTASH_REDIS_REST_URL` | Production 必需 | Upstash REST URL |
-| `UPSTASH_REDIS_REST_TOKEN` | Production 必需 | Upstash REST Token |
+| `UPSTASH_REDIS_REST_URL` / `KV_REST_API_URL` | Production 必需 | Upstash REST URL；Marketplace 默认注入后者 |
+| `UPSTASH_REDIS_REST_TOKEN` / `KV_REST_API_TOKEN` | Production 必需 | Upstash REST Token；Marketplace 默认注入后者 |
 | `PRIVACY_HASH_SALT` | Production 必需 | 至少 32 位随机值，用于 IP 单向哈希 |
 | `RATE_LIMIT_PER_MINUTE` | 否 | `5` |
 | `SESSION_QUESTION_LIMIT` | 否 | `20` |
@@ -29,7 +29,8 @@
 | `DAILY_TOKEN_LIMIT` | 否 | `300000` |
 | `TOKEN_RESERVATION` | 否 | `1500`，请求前预留的 Token 预算 |
 | `DATABASE_URL` | Production 必需 | Neon 连接字符串 |
-| `BLOB_READ_WRITE_TOKEN` | 上传时必需 | 只用于本地简历上传，不暴露给浏览器 |
+| `RESUME_READ_WRITE_TOKEN` | 上传方式一 | Public Blob 连接自动注入；只用于本地简历上传，不暴露给浏览器 |
+| `VERCEL_OIDC_TOKEN` + `RESUME_STORE_ID` | 上传方式二 | CLI 同步的短期 OIDC 凭据与 Blob Store ID；无需读取 Sensitive Token |
 | `RESUME_BLOB_URL` | Production 必需 | 上传脚本输出的 HTTPS URL；手动同步至 Vercel |
 | `CRON_SECRET` | Production 必需 | 保护 `/api/cron/events` |
 | `CHAT_DISABLED` | 否 | 紧急停用模型问答时设为 `true` |

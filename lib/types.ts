@@ -3,6 +3,7 @@ export type ProjectStatus = "completed" | "in_progress" | "planned" | "archived"
 export type Visibility = "public" | "private";
 export type ContentStatus = "active" | "draft" | "archived";
 export type ResponseStatus = "completed" | "insufficient_evidence" | "refused" | "rate_limited" | "budget_exhausted" | "upstream_error";
+export type EvidenceBasis = "confirmed_fact" | "source_view" | "user_statement" | "inference";
 
 export interface ContentMetadata {
   visibility: Visibility;
@@ -11,6 +12,14 @@ export interface ContentMetadata {
   lastUpdated: string;
   relatedProject?: string;
   supportsClaimIds: string[];
+}
+
+export interface ObsidianProvenance {
+  provider: "obsidian";
+  candidateId: string;
+  sourceSha256: string;
+  section: string;
+  reviewedAt: string;
 }
 
 export interface Source extends ContentMetadata {
@@ -29,6 +38,7 @@ export interface Claim extends ContentMetadata {
   id: string;
   statement: string;
   claimType: "background" | "experience" | "project" | "skill" | "boundary";
+  evidenceBasis: EvidenceBasis;
   candidateContribution: string;
   aiAssistance: string;
   sourceIds: string[];
@@ -46,6 +56,7 @@ export interface KnowledgeItem extends ContentMetadata {
   limitations: string;
   claimIds: string[];
   sourceIds: string[];
+  provenance?: ObsidianProvenance;
 }
 
 export interface StarStory extends ContentMetadata {
@@ -71,6 +82,7 @@ export interface StableAnswer extends ContentMetadata {
   id: string;
   question: string;
   standardAnswer: string;
+  details?: string[];
   limitations: string;
   claimIds: string[];
   sourceIds: string[];

@@ -3,12 +3,20 @@ import { knowledgeContent, projectAliases, strengthContent, suggestedQuestionCon
 import { faqContent, stableAnswerContent } from "../content/qa.ts";
 import { sourceContent, claimContent } from "../content/sources-claims.ts";
 import { starStoryContent } from "../content/stories.ts";
+import obsidianApprovedKnowledgeContent from "../content/obsidian-approved.json";
 
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "必须使用 YYYY-MM-DD 日期");
 const verification = z.enum(["externally_verified", "self_attested", "unverified"]);
 const visibility = z.enum(["public", "private"]);
 const status = z.enum(["active", "draft", "archived"]);
 const projectStatus = z.enum(["completed", "in_progress", "planned", "archived"]);
+const obsidianProvenanceSchema = z.object({
+  provider: z.literal("obsidian"),
+  candidateId: z.string().regex(/^obs_[a-f0-9]{16}$/),
+  sourceSha256: z.string().regex(/^[a-f0-9]{64}$/),
+  section: z.string().min(1),
+  reviewedAt: isoDate,
+}).strict();
 
 const metadata = {
   visibility,
@@ -41,6 +49,7 @@ export const claimSchema = z.object({
   id: z.string().regex(/^C\d+$/),
   statement: z.string().min(1),
   claimType: z.enum(["background", "experience", "project", "skill", "boundary"]),
+  evidenceBasis: z.enum(["confirmed_fact", "source_view", "user_statement", "inference"]),
   candidateContribution: z.string().min(1),
   aiAssistance: z.string().min(1),
   sourceIds: z.array(z.string().regex(/^S\d+$/)).min(1),
@@ -59,7 +68,22 @@ export const knowledgeItemSchema = z.object({
   limitations: z.string().min(1),
   claimIds: z.array(z.string().regex(/^C\d+$/)).min(1),
   sourceIds: z.array(z.string().regex(/^S\d+$/)).min(1),
+  provenance: obsidianProvenanceSchema.optional(),
 });
+
+export const obsidianApprovedKnowledgeSchema = z.array(knowledgeItemSchema.extend({
+  provenance: obsidianProvenanceSchema,
+})).superRefine((items, context) => {
+  const seen = new Set<string>();
+  items.forEach((item, index) => {
+    if (seen.has(item.provenance.candidateId)) {
+      context.addIssue({ code: "custom", path: [index, "provenance", "candidateId"], message: "重复的 Obsidian 候选项批准" });
+    }
+    seen.add(item.provenance.candidateId);
+  });
+});
+
+const obsidianApprovedKnowledge = obsidianApprovedKnowledgeSchema.parse(obsidianApprovedKnowledgeContent);
 
 export const starStorySchema = z.object({
   ...metadata,
@@ -79,6 +103,7 @@ export const stableAnswerSchema = z.object({
   id: z.string().regex(/^A\d+$/),
   question: z.string().min(1),
   standardAnswer: z.string().min(1),
+  details: z.array(z.string().min(1)).min(2).max(5).optional(),
   limitations: z.string().min(1),
   claimIds: z.array(z.string().regex(/^C\d+$/)).min(1),
   sourceIds: z.array(z.string().regex(/^S\d+$/)).min(1),
@@ -145,11 +170,32 @@ export const contentCatalogSchema = z.object({
 
   const publicClaims = new Set(catalog.claims.filter((item) => item.visibility === "public" && item.status === "active" && item.verification !== "unverified").map((item) => item.id));
   const publicSources = new Set(catalog.sources.filter((item) => item.visibility === "public" && item.status === "active" && item.verification !== "unverified").map((item) => item.id));
-  catalog.knowledge.forEach((item, index) => {
-    if (item.visibility !== "public" || item.status !== "active") return;
-    if (!item.claimIds.every((id) => publicClaims.has(id)) || !item.sourceIds.every((id) => publicSources.has(id))) {
-      context.addIssue({ code: "custom", path: ["knowledge", index], message: "公开知识只能引用公开、有效且已验证的 Claim/Source" });
+  const isPublicActive = (item: { visibility: string; status: string; verification: string }) => item.visibility === "public" && item.status === "active" && item.verification !== "unverified";
+  const ensurePublicReferences = (items: Array<{ visibility: string; status: string; verification: string; claimIds?: string[]; sourceIds?: string[]; requiredClaimIds?: string[]; requiredSourceIds?: string[] }>, path: string) => {
+    items.forEach((item, index) => {
+      if (!isPublicActive(item)) return;
+      const referencedClaims = [...(item.claimIds ?? []), ...(item.requiredClaimIds ?? [])];
+      const referencedSources = [...(item.sourceIds ?? []), ...(item.requiredSourceIds ?? [])];
+      if (!referencedClaims.every((id) => publicClaims.has(id)) || !referencedSources.every((id) => publicSources.has(id))) {
+        context.addIssue({ code: "custom", path: [path, index], message: "公开内容只能引用公开、有效且已验证的 Claim/Source" });
+      }
+    });
+  };
+  catalog.claims.forEach((claim, index) => {
+    if (isPublicActive(claim) && !claim.sourceIds.every((id) => publicSources.has(id))) {
+      context.addIssue({ code: "custom", path: ["claims", index], message: "公开 Claim 只能引用公开、有效且已验证的 Source" });
     }
+    if (isPublicActive(claim) && claim.evidenceBasis === "inference" && claim.claimType !== "boundary") {
+      context.addIssue({ code: "custom", path: ["claims", index, "evidenceBasis"], message: "公开推断只能作为证据边界，不得作为候选人事实" });
+    }
+  });
+  ensurePublicReferences(catalog.knowledge, "knowledge");
+  ensurePublicReferences(catalog.starStories, "starStories");
+  ensurePublicReferences(catalog.stableAnswers, "stableAnswers");
+  catalog.faqs.forEach((faq, index) => {
+    if (!isPublicActive(faq)) return;
+    const answer = catalog.stableAnswers.find((item) => item.id === faq.answerId);
+    if (!answer || !isPublicActive(answer)) context.addIssue({ code: "custom", path: ["faqs", index], message: "公开 FAQ 只能引用公开、有效且已验证的稳定回答" });
   });
 });
 
@@ -157,7 +203,7 @@ export const contentCatalog = contentCatalogSchema.parse({
   strengths: strengthContent,
   sources: sourceContent,
   claims: claimContent,
-  knowledge: knowledgeContent,
+  knowledge: [...knowledgeContent, ...obsidianApprovedKnowledge],
   starStories: starStoryContent,
   faqs: faqContent,
   stableAnswers: stableAnswerContent,
