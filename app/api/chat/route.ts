@@ -3,7 +3,7 @@ import { buildAnswerPlan, buildContext, demoAnswer, systemPrompt } from "@/lib/a
 import { repairInstruction, validateAnswer } from "@/lib/answer-quality";
 import { DeepSeekUpstreamError, generateDeepSeekAnswer } from "@/lib/deepseek";
 import { assessQuestion } from "@/lib/guardrails";
-import { getClaims, getSources, matchStableAnswer, retrieveKnowledge, serializeKnowledgeItems } from "@/lib/knowledge";
+import { getClaims, getSources, matchStableAnswer, resolveRetrievalQuery, retrieveKnowledge, serializeKnowledgeItems } from "@/lib/knowledge";
 import { getFollowUpQuestions } from "@/lib/question-suggestions";
 import { checkRequestLimits, extractClientIp, recordTokenUsage, reserveAdditionalModelCall } from "@/lib/rate-limit";
 import type { ChatMessage, ResponseStatus } from "@/lib/types";
@@ -115,6 +115,15 @@ export async function POST(request: NextRequest) {
   const sourceIds = stableAnswer ? [...stableAnswer.requiredSourceIds] : [...new Set(items.flatMap((item) => item.sourceIds))];
   const matchedSources = getSources(sourceIds);
   const plan = buildAnswerPlan(assessment.question, items, stableAnswer, history);
+  const retrievalTrace = resolveRetrievalQuery(assessment.question, history);
+  console.info("ask-me-retrieval", JSON.stringify({
+    version: "context-v2",
+    historyCount: history.length,
+    contextApplied: retrievalTrace.text !== assessment.question,
+    matchedProjects: retrievalTrace.matchedProjects,
+    itemIds: items.map((item) => item.id),
+    stableAnswerId: stableAnswer?.id,
+  }));
 
   if (!stableAnswer && (!items.length || !claimIds.length || !sourceIds.length)) {
     return textStream({
