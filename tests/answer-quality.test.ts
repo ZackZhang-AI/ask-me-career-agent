@@ -65,3 +65,8 @@ test("质量门禁拒绝过度加粗和整句加粗", () => {
   assert.equal(validateAnswer(overformatted, plan).triggers.includes("excessive_emphasis"), true);
   assert.equal(validateAnswer(longEmphasis, plan).triggers.includes("long_emphasis"), true);
 });
+
+test("有序列表编号不会被误判为候选人的业务数字", () => {
+  const numbered = plan.fallbackAnswer.replace("**问题判断**", "1. **问题判断**");
+  assert.equal(validateAnswer(numbered, plan).triggers.includes("unsupported_number"), false);
+});
