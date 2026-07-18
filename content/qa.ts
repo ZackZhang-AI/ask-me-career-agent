@@ -1,7 +1,7 @@
 import { candidateNarrative } from "./narrative.ts";
 import type { AnswerIntent, ResponseShape } from "../lib/types.ts";
 
-const updated = "2026-07-17";
+const updated = "2026-07-18";
 const publicActive = { visibility: "public", status: "active", lastUpdated: updated } as const;
 
 type AnswerInput = {
@@ -39,6 +39,7 @@ const answerIntentById: Record<string, AnswerIntent> = {
   A09: "experience_value", A10: "experience", A11: "experience", A12: "project_overview",
   A13: "privacy", A14: "limitation", A15: "challenge", A16: "education",
   A17: "credentials", A18: "project_overview", A19: "result", A20: "hiring_recommendation",
+  A21: "experience_value", A22: "experience_value", A23: "skills",
 };
 
 const knownOrganizations = ["东北大学", "德勤", "容诚", "ACCA"];
@@ -396,6 +397,52 @@ export const stableAnswerContent = [
     responseShape: "recommendation", targetLength: { min: 360, max: 500 }, preferredStoryIds: [],
     followUpQuestions: ["请现场拆解一次最关键的产品取舍。", "给你一个新的企业 AI 场景，你会如何定义 MVP？", "你希望下一轮重点展示哪项能力？"],
     closingPurpose: "明确下一轮验证方向和候选人培养潜力。",
+  }),
+  answer({
+    id: "A21",
+    question: "他对企业级 AI 场景有哪些理解？",
+    matchKeywords: ["企业级ai场景", "企业ai场景", "企业级ai理解", "企业ai理解", "企业场景理解"],
+    standardAnswer: "我对企业级 AI 的理解，核心不是“把模型接进系统”，而是让它在真实流程里同时做到有价值、可控、可验证。审计经历让我看到，企业场景中的难点往往不只是生成答案，而是数据从哪里来、结论能否复核、异常由谁处理，以及新工具是否真的降低一线执行成本。\n\n**先判断流程价值**：我会从高频任务、信息断点和重复确认入手，判断问题更适合规则、检索、模型还是流程改造，而不是为了使用 AI 强行寻找场景。\n\n**再设计责任边界**：低风险、可回退的步骤可以自动化；方向性、高成本或涉及敏感数据的节点保留人工确认。RAG 的引用支持和 DeepFlow 的人审节点，都是这种思路的体现。\n\n**最后建立验证闭环**：先用轻量方案跑通核心任务，再通过评测集、Bad Case 和流程反馈决定下一轮投入。对我来说，企业 AI 产品的竞争力不只来自模型能力，更来自业务理解、可控流程和持续验证三者的结合。",
+    details: ["企业 AI 先判断真实流程价值", "按风险与责任设计自动化和人审边界", "以评测集和 Bad Case 建立迭代闭环", "审计、RAG 与 DeepFlow 提供场景实践"],
+    limitations: "不把原型阶段的企业场景理解描述为大规模生产经验。",
+    claimIds: ["C3", "C4", "C6", "C7"], sourceIds: ["S1", "S3", "S4", "S8", "S9"],
+    evaluationGoal: "展示对企业 AI 价值、责任边界和验证方式的系统理解，而不是重复项目介绍。",
+    exclusivePoints: ["从流程价值而非模型能力出发", "自动化与人工确认的责任边界", "轻量验证后再逐步升级"],
+    mustInclude: ["流程价值", "责任边界", "轻量方案"],
+    avoidRepeating: ["完整审计经历", "逐项罗列 RAG 技术栈", "再次复述三项个人优势"],
+    responseShape: "fit_mapping", targetLength: { min: 390, max: 520 }, preferredStoryIds: ["ST6", "ST7"],
+    followUpQuestions: ["你如何判断一个企业流程值得被 AI 改造？", "哪些 Agent 节点必须保留人工确认？", "你会如何设计企业 AI 的第一轮验证？"],
+    closingPurpose: "落到企业 AI 产品的价值、控制与验证三项判断。",
+  }),
+  answer({
+    id: "A22",
+    question: "他如何把业务问题转化为 AI 产品方案？",
+    matchKeywords: ["业务问题转化为ai产品", "业务问题转化", "转化为ai产品方案", "业务转产品方案", "形成ai产品方案"],
+    standardAnswer: "我把业务问题转化为 AI 产品方案时，不会先列模型能力，而是先把“谁在什么流程里遇到什么阻力”说清楚，再决定 AI 应该介入哪一步。审计资料整理、专业文档问答和复杂研究任务虽然不同，但我的转化方法基本一致。\n\n**第一步是定义问题**：拆出目标用户、核心任务、现有处理方式和真正的高成本环节。例如资料分散、上下文缺失、重复核对或结论难以追溯，分别对应不同的产品切入点。\n\n**第二步是划分方案边界**：稳定规则交给确定性流程，语义理解和内容生成交给模型，高风险判断保留人工确认；再把输入、关键状态、异常路径和输出资产设计完整。\n\n**第三步是建立验证闭环**：先用最小链路验证任务能否完成，再检查检索质量、回答忠实度、引用支持、流程阻力和 Bad Case。只有核心问题被验证后，我才会继续增加 Rerank、多 Agent 或更复杂的自动化能力。这样做能让技术选择始终服务于业务问题，也让每一轮迭代都有明确理由。",
+    details: ["从用户、任务和流程阻力定义问题", "区分规则、模型和人工确认的职责", "用最小链路与 Bad Case 验证", "验证后再增加复杂能力"],
+    limitations: "方法来自已公开的审计、RAG、DeepFlow 与工具项目，不虚构正式商业交付。",
+    claimIds: ["C3", "C4", "C6", "C7", "C12"], sourceIds: ["S1", "S2", "S3", "S4", "S8", "S9"],
+    evaluationGoal: "讲清从业务洞察到 AI 方案、责任边界和验证闭环的完整方法。",
+    exclusivePoints: ["先定义用户任务和流程阻力", "划分规则、模型与人工责任", "最小链路验证后再升级"],
+    avoidRepeating: ["只罗列项目名称", "从技术栈开始回答", "泛泛强调产品闭环"],
+    responseShape: "project_arc", targetLength: { min: 400, max: 540 }, preferredStoryIds: ["ST1", "ST7"],
+    followUpQuestions: ["请用 RAG 项目具体演示这套方法。", "你如何选择规则、模型和人工确认？", "最小验证方案应该包含哪些指标？"],
+    closingPurpose: "体现从业务问题到可验证 AI 产品的结构化转化能力。",
+  }),
+  answer({
+    id: "A23",
+    question: "他在数据分析与 AI 评测方面有哪些实践？",
+    matchKeywords: ["数据分析与ai评测", "数据分析实践", "ai评测实践", "评测方面的实践", "数据评测实践"],
+    standardAnswer: "我在数据分析与 AI 评测上的实践，重点不是展示一组工具名，而是用数据帮助产品做判断：先定义什么叫有效，再选择指标和样本，最后把失败案例转成下一轮迭代任务。\n\n**数据分析基础**：应用统计学训练让我习惯关注样本、指标、误差和结论可靠性；项目中可以使用 SQL、Python 处理数据、检查质量并理解指标变化。我不会只看平均结果，也会关注哪些类型的问题持续失败。\n\n**AI 评测实践**：在 RAG 项目中，我把效果拆成召回内容是否相关、回答是否忠于上下文、引用能否支持结论，并结合 RAGAS 等方法组织评测；在 DeepFlow 中，我更关注任务过程是否可见、关键节点是否经过确认、最终报告能否追溯到研究过程。\n\n**迭代方式**：先建立 Dense Retrieval 等可重复检查的基线，再逐项验证混合检索、Rerank 或自动评测，避免多个变量同时变化。对我来说，评测不是上线前的一次打分，而是连接问题定位、产品取舍和版本优先级的持续机制。",
+    details: ["统计学形成样本、指标和误差意识", "SQL 与 Python 支持数据处理和质量检查", "RAG 关注召回、忠实度、引用和 RAGAS", "以基线和 Bad Case 驱动迭代"],
+    limitations: "不补充未记录的评测集规模、准确率提升或业务结果数字。",
+    claimIds: ["C1", "C2", "C3", "C4"], sourceIds: ["S1", "S3", "S4"],
+    evaluationGoal: "证明数据分析和 AI 评测如何实际支持产品判断与迭代。",
+    exclusivePoints: ["从指标、样本和误差定义效果", "拆解 RAG 与 Agent 的评测对象", "用基线和 Bad Case 推动迭代"],
+    avoidRepeating: ["完整学校介绍", "只罗列 SQL 和 Python", "虚构评测提升数字"],
+    responseShape: "fit_mapping", targetLength: { min: 390, max: 520 }, preferredStoryIds: ["ST1", "ST8"],
+    followUpQuestions: ["你会如何建立第一版 RAG 评测集？", "Bad Case 如何转成产品优先级？", "你如何避免评测指标和用户价值脱节？"],
+    closingPurpose: "落到用数据和评测支持产品取舍的能力。",
   }),
 ] as const;
 
