@@ -21,14 +21,14 @@ export const interviewRoles = [
 ] as const;
 
 export const questionCategories = [
-  { id: "sixty_second_intro", name: "60 秒介绍", question: "请用 60 秒介绍张倬玮，并说明最值得继续面试的三个差异点。", anchors: ["AI 产品", "数据", "业务"], targetLength: { min: 240, max: 340 } },
-  { id: "role_fit", name: "岗位匹配", question: "他为什么适合初级 AI 产品经理岗位？", anchors: ["AI 产品", "评测", "业务"], targetLength: { min: 230, max: 360 } },
-  { id: "representative_project", name: "代表项目", question: "哪个项目最能代表他的 AI 产品能力？请说明项目价值。", anchors: ["RAG", "检索", "产品"], targetLength: { min: 260, max: 420 } },
-  { id: "personal_contribution", name: "个人贡献", question: "他在 RAG 项目中具体做了什么？请区分本人判断与 AI 辅助。", anchors: ["负责", "AI", "判断"], targetLength: { min: 240, max: 400 } },
-  { id: "ai_coding_share", name: "AI 编程占比", question: "这些项目里 AI 编程工具承担了多少工作？请说明候选人本人判断与 AI 辅助的边界。", anchors: ["AI", "负责", "工具"], targetLength: { min: 180, max: 320 } },
-  { id: "challenge_or_failure", name: "挑战或失败", question: "请讲一个项目中的真实挑战或失败，并说明如何定位、调整和验证。", anchors: ["问题", "取舍", "验证"], targetLength: { min: 260, max: 440 } },
-  { id: "user_business_value", name: "用户与业务价值", question: "这些项目服务什么用户、解决什么业务问题，目前有什么价值？", anchors: ["问题", "产品", "价值"], targetLength: { min: 220, max: 380 } },
-  { id: "next_round_recommendation", name: "是否建议进入下一轮", question: "基于当前公开信息，你是否建议安排下一轮初步面试？请给出理由，不要给录用结论。", anchors: ["下一轮", "价值", "能力"], targetLength: { min: 180, max: 320 } },
+  { id: "sixty_second_intro", name: "60 秒介绍", question: "请用 60 秒介绍张倬玮，并说明最值得继续面试的三个差异点。", anchors: ["AI 产品", "数据", "业务"], targetLength: { min: 450, max: 560 } },
+  { id: "role_fit", name: "岗位匹配", question: "他为什么适合初级 AI 产品经理岗位？", anchors: ["AI 产品", "评测", "业务"], targetLength: { min: 360, max: 480 } },
+  { id: "representative_project", name: "代表项目", question: "哪个项目最能代表他的 AI 产品能力？请说明项目价值。", anchors: ["RAG", "检索", "产品"], targetLength: { min: 390, max: 520 } },
+  { id: "personal_contribution", name: "个人贡献", question: "他在 RAG 项目中具体做了什么？请区分本人判断与 AI 辅助。", anchors: ["负责", "AI", "判断"], targetLength: { min: 400, max: 560 } },
+  { id: "ai_coding_share", name: "AI 编程占比", question: "这些项目里 AI 编程工具承担了多少工作？请说明候选人本人判断与 AI 辅助的边界。", anchors: ["AI", "负责", "工具"], targetLength: { min: 350, max: 500 } },
+  { id: "challenge_or_failure", name: "挑战或失败", question: "请讲一个项目中的真实挑战或失败，并说明如何定位、调整和验证。", anchors: ["问题", "取舍", "验证"], targetLength: { min: 400, max: 560 } },
+  { id: "user_business_value", name: "用户与业务价值", question: "这些项目服务什么用户、解决什么业务问题，目前有什么价值？", anchors: ["问题", "产品", "价值"], targetLength: { min: 320, max: 460 } },
+  { id: "next_round_recommendation", name: "是否建议进入下一轮", question: "基于当前公开信息，你是否建议安排下一轮初步面试？请给出理由，不要给录用结论。", anchors: ["下一轮", "价值", "能力"], targetLength: { min: 320, max: 460 } },
 ] as const;
 
 export const scoreDimensions = ["清晰度", "差异化", "可信度", "追问承受力", "面试转化意愿"] as const;

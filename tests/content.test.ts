@@ -140,7 +140,7 @@ test("百度占位经历与联系方式不进入内容目录", () => {
 test("30、60、90 秒介绍独立成稿且时长层次清晰", () => {
   const introductions = candidateNarrative.introductions;
   assert.equal(introductions.seconds30.length >= 150 && introductions.seconds30.length < introductions.seconds60.length, true);
-  assert.equal(introductions.seconds60.length >= 240 && introductions.seconds60.length <= 340, true);
+  assert.equal(introductions.seconds60.length >= 450 && introductions.seconds60.length <= 560, true);
   assert.equal(introductions.seconds90.length > introductions.seconds60.length, true);
   assert.equal(new Set(Object.values(introductions)).size, 3);
   for (const answer of Object.values(introductions)) assert.doesNotMatch(answer, /百度|Claim|Source|证据边界/);
