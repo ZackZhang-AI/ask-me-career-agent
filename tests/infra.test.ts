@@ -34,6 +34,13 @@ test("分析字段严格白名单并丢弃联系方式和非法引用", () => {
   assert.equal(sanitizeAnalyticsEvent({ event: "unknown", sessionId: "x" }), null);
 });
 
+test("回答反馈仅记录匿名枚举值", () => {
+  const event = sanitizeAnalyticsEvent({ event: "answer_feedback", sessionId: "feedback-session", detail: "helpful" });
+  assert.ok(event);
+  assert.equal(event.targetType, "feedback");
+  assert.equal(event.targetId, "helpful");
+});
+
 test("未配置 Redis 时执行每 IP 分钟限流", async () => {
   delete process.env.UPSTASH_REDIS_REST_URL;
   delete process.env.UPSTASH_REDIS_REST_TOKEN;

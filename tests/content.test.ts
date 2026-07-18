@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { candidateNarrative } from "../content/narrative.ts";
+import { answerSimilarity } from "../lib/answer-quality.ts";
 import { contentCatalog, contentCatalogSchema } from "../lib/content.ts";
 import { claims, faqs, knowledge, matchStableAnswer, resolveRetrievalQuery, retrieveKnowledge, sources, stableAnswers, starStories } from "../lib/knowledge.ts";
 
@@ -89,7 +91,8 @@ test("核心问题稳定匹配标准答案和评测要求", () => {
   const matched = matchStableAnswer("哪个项目最能代表他的 AI 产品能力？");
   assert.equal(matched?.id, "A03");
   assert.match(matched?.standardAnswer ?? "", /RAG Knowledge Base System/);
-  assert.deepEqual(matched?.requiredClaimIds, ["C3", "C4"]);
+  assert.deepEqual(matched?.requiredClaimIds, ["C3"]);
+  assert.equal(matched?.requiredSourceIds.includes("S4"), false);
   assert.equal(matched?.requiredSourceIds.includes("S3"), true);
 });
 
@@ -132,4 +135,24 @@ test("百度占位经历与联系方式不进入内容目录", () => {
   assert.equal(serialized.includes("百度"), false);
   assert.equal(serialized.includes("zackzhang124@163.com"), false);
   assert.equal(serialized.includes("15812106204"), false);
+});
+
+test("30、60、90 秒介绍独立成稿且时长层次清晰", () => {
+  const introductions = candidateNarrative.introductions;
+  assert.equal(introductions.seconds30.length >= 150 && introductions.seconds30.length < introductions.seconds60.length, true);
+  assert.equal(introductions.seconds60.length >= 240 && introductions.seconds60.length <= 340, true);
+  assert.equal(introductions.seconds90.length > introductions.seconds60.length, true);
+  assert.equal(new Set(Object.values(introductions)).size, 3);
+  for (const answer of Object.values(introductions)) assert.doesNotMatch(answer, /百度|Claim|Source|证据边界/);
+});
+
+test("核心问题拥有独立判断任务，不复用同一份回答", () => {
+  assert.equal(stableAnswers.every((answer) => answer.evaluationGoal && answer.exclusivePoints.length && answer.followUpQuestions.length), true);
+  const priority = ["A01", "A02", "A03", "A05", "A15"].map((id) => stableAnswers.find((answer) => answer.id === id)!);
+  assert.equal(new Set(priority.map((answer) => answer.responseShape)).size >= 4, true);
+  for (let left = 0; left < priority.length; left += 1) {
+    for (let right = left + 1; right < priority.length; right += 1) {
+      assert.equal(answerSimilarity(priority[left].standardAnswer, priority[right].standardAnswer) < 0.72, true, `${priority[left].id}/${priority[right].id}`);
+    }
+  }
 });

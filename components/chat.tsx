@@ -32,6 +32,7 @@ interface DisplayMessage extends ChatMessage {
   claimIds?: string[];
   sourceIds?: string[];
   latencyMs?: number;
+  followUpQuestions?: string[];
 }
 
 const verificationLabels = {
@@ -71,6 +72,7 @@ export function Chat() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [activeQuestionGroup, setActiveQuestionGroup] = useState<QuestionGroupId>("screening");
+  const [answerFeedback, setAnswerFeedback] = useState<Record<number, "helpful" | "not_helpful">>({});
   const abortRef = useRef<AbortController | null>(null);
   const conversationEpochRef = useRef(0);
   const messageEndRef = useRef<HTMLDivElement | null>(null);
@@ -138,6 +140,7 @@ export function Chat() {
             responseStatus: event.responseStatus,
             claimIds: event.claimIds,
             sourceIds: event.sourceIds,
+            followUpQuestions: event.followUpQuestions,
           };
           if (event.type === "delta") answer += event.content;
           if (event.type === "done") metadata = { ...metadata, responseStatus: event.responseStatus, latencyMs: event.latencyMs };
@@ -173,6 +176,7 @@ export function Chat() {
     setError("");
     setLoading(false);
     setActiveQuestionGroup("screening");
+    setAnswerFeedback({});
     window.history.replaceState(null, "", `${window.location.pathname}#top`);
     requestAnimationFrame(() => {
       document.querySelector<HTMLElement>(".chat-scroll")?.scrollTo({ top: 0, behavior: "smooth" });
@@ -196,7 +200,9 @@ export function Chat() {
   const activeQuestions = questionGroups.find((group) => group.id === activeQuestionGroup)?.questions ?? questionGroups[0].questions;
   const askedQuestions = messages.filter((message) => message.role === "user").map((message) => message.content);
   const lastQuestion = askedQuestions[askedQuestions.length - 1] ?? "";
-  const followUpQuestions = lastQuestion ? getFollowUpQuestions(lastQuestion, askedQuestions) : [];
+  const latestAssistant = [...messages].reverse().find((message) => message.role === "assistant" && message.content);
+  const followUpQuestions = latestAssistant?.followUpQuestions?.filter((question) => !askedQuestions.includes(question)).slice(0, 3)
+    ?? (lastQuestion ? getFollowUpQuestions(lastQuestion, askedQuestions) : []);
   const hasCompletedAnswer = messages.some((message) => message.role === "assistant" && message.content);
 
   return (
@@ -300,22 +306,16 @@ export function Chat() {
                       ? <FormattedAnswer content={message.content} />
                       : <div className="message-content">{message.content}</div>
                   )}
-                  {message.mode === "demo" && (
-                    <p className="mode-note">当前为演示模式，回答来自本地公开知识库。</p>
-                  )}
-                  {message.mode === "stable" && (
-                    <p className="mode-note">这是结构化证据约束的核心稳定回答，关键事实仍建议面试核实。</p>
-                  )}
                   {message.sources && message.sources.length > 0 && (
                     <div className="sources">
-                      <p>事实来源</p>
+                      <p>进一步了解</p>
                       {message.sources.map((source) => (
                         <details
                           key={source.id}
                           onToggle={(event) => event.currentTarget.open && track("source_opened", getBrowserSessionId(), source.id)}
                         >
                           <summary>
-                            <span>[{source.id}] {source.title}</span>
+                            <span>{source.title}</span>
                             <CaretDownIcon size={15} aria-hidden="true" />
                           </summary>
                           <div className="source-detail">
@@ -323,12 +323,33 @@ export function Chat() {
                             <p>验证状态：{verificationLabels[source.verification]}</p>
                             {source.projectStatus && <p>项目状态：{statusLabels[source.projectStatus]}</p>}
                             <p>最后检查：{source.lastChecked}</p>
-                            <p>支持事实：{source.supports}</p>
-                            <p>证据边界：{source.limitations}</p>
+                            <p>相关内容：{source.supports}</p>
+                            <p>适用说明：{source.limitations}</p>
                             {source.url && <a href={source.url} target="_blank" rel="noreferrer">查看公开来源 <ArrowUpRightIcon size={14} aria-hidden="true" /></a>}
                           </div>
                         </details>
                       ))}
+                    </div>
+                  )}
+                  {message.role === "assistant" && message.content && message.responseStatus === "completed" && (
+                    <div className="answer-feedback" aria-label="回答反馈">
+                      <span>这个回答有帮助吗？</span>
+                      <button
+                        type="button"
+                        aria-pressed={answerFeedback[index] === "helpful"}
+                        onClick={() => {
+                          setAnswerFeedback((current) => ({ ...current, [index]: "helpful" }));
+                          track("answer_feedback", getBrowserSessionId(), "helpful");
+                        }}
+                      >有帮助</button>
+                      <button
+                        type="button"
+                        aria-pressed={answerFeedback[index] === "not_helpful"}
+                        onClick={() => {
+                          setAnswerFeedback((current) => ({ ...current, [index]: "not_helpful" }));
+                          track("answer_feedback", getBrowserSessionId(), "not_helpful");
+                        }}
+                      >需改进</button>
                     </div>
                   )}
                 </div>

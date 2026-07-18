@@ -92,6 +92,7 @@ export function matchStableAnswer(question: string, history: ChatMessage[] = [])
   const normalizedQuestion = normalizeSearchText(question);
   const resolved = resolveRetrievalQuery(question, history);
   const usesReference = referencePattern.test(question) || implicitFollowupPattern.test(question);
+  const asksForOutcomeEvidence = /用户测试|满意度|用户规模|真实用户|增长|留存|生产状态|商业化|结果数据/.test(question);
   if (resolved.matchedProjects.length > 1) return undefined;
   const ranked = stableAnswers
     .filter(isStableAnswerRetrievable)
@@ -103,7 +104,8 @@ export function matchStableAnswer(question: string, history: ChatMessage[] = [])
         return score + (normalizedQuestion.includes(normalizedKeyword) ? Math.max(4, normalizedKeyword.length * 2) : 0);
       }, 0);
       const projectScore = item.relatedProject && resolved.matchedProjects.includes(item.relatedProject) ? 20 : 0;
-      return { item, score: exact + keywordScore + projectScore, hasAnswerMatch: exact > 0 || keywordScore >= 4 };
+      const outcomeEvidenceScore = item.id === "A19" && asksForOutcomeEvidence ? 80 : 0;
+      return { item, score: exact + keywordScore + projectScore + outcomeEvidenceScore, hasAnswerMatch: exact > 0 || keywordScore >= 4 || outcomeEvidenceScore > 0 };
     })
     .filter(({ hasAnswerMatch }) => hasAnswerMatch)
     .sort((left, right) => right.score - left.score || left.item.id.localeCompare(right.item.id));
@@ -132,6 +134,11 @@ export function getRelatedStarStories(items: KnowledgeItem[], limit = 2) {
     .sort((left, right) => right.score - left.score || left.story.id.localeCompare(right.story.id))
     .slice(0, Math.max(1, Math.min(limit, 4)))
     .map(({ story }) => story);
+}
+
+export function getStarStoriesByIds(ids: readonly string[]) {
+  const wanted = new Set(ids);
+  return starStories.filter((story) => wanted.has(story.id) && isPublicActive(story));
 }
 
 export function serializeKnowledgeItems(items: KnowledgeItem[]) {
