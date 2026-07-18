@@ -159,6 +159,27 @@ test("第 4 轮开放追问延续项目语境且不拼接原始字段", () => {
   assert.equal(validateAnswer(plan.fallbackAnswer, plan).passed, true);
 });
 
+test("深层指代变体继承最近项目且不误匹配固定项目介绍", () => {
+  const history = [
+    { role: "user" as const, content: "你会如何用 Bad Case 决定 RAG 下一轮迭代优先级？" },
+    { role: "assistant" as const, content: "我会把 Bad Case 映射到检索、回答、引用和评测环节。" },
+  ];
+  const questions = [
+    "如果这套方法没有改善效果，你下一步会优先排查什么？",
+    "如果这种做法没有改善效果，你下一步会优先排查什么？",
+    "沿着上述思路继续，你会先看什么？",
+  ];
+
+  for (const question of questions) {
+    const items = retrieveKnowledge(question, { history, limit: 4 });
+    assert.ok(items.length >= 1, question);
+    assert.ok(items.every((item) => item.relatedProject === "rag-knowledge-base"), question);
+    assert.equal(matchStableAnswer(question, history), undefined, question);
+  }
+
+  assert.equal(matchStableAnswer("如果把 RAG 项目迁移到企业内部知识管理场景，你会优先判断什么？", history), undefined);
+});
+
 test("自然语言改写仍能召回正确经历", () => {
   assert.equal(retrieveKnowledge("他在德勤那段经历具体负责了哪些事情？")[0]?.id, "K8");
   assert.equal(retrieveKnowledge("容诚实习期间主要参与了什么？")[0]?.id, "K9");

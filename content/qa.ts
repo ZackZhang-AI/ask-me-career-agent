@@ -39,7 +39,7 @@ const answerIntentById: Record<string, AnswerIntent> = {
   A09: "experience_value", A10: "experience", A11: "experience", A12: "project_overview",
   A13: "privacy", A14: "limitation", A15: "challenge", A16: "education",
   A17: "credentials", A18: "project_overview", A19: "result", A20: "hiring_recommendation",
-  A21: "experience_value", A22: "experience_value", A23: "skills",
+  A21: "experience_value", A22: "experience_value", A23: "skills", A24: "result",
 };
 
 const knownOrganizations = ["东北大学", "德勤", "容诚", "ACCA"];
@@ -146,7 +146,7 @@ export const stableAnswerContent = [
   answer({
     id: "A04",
     question: "RAG 项目解决了什么问题？",
-    matchKeywords: ["rag解决", "rag项目", "知识库问题"],
+    matchKeywords: ["rag解决", "rag项目解决", "知识库问题"],
     standardAnswer: "**用户问题**：这个项目解决的不是“企业没有文档”，而是专业资料很多、真正需要答案时却很难快速找到正确内容，也很难判断生成结论依据了哪段原文。传统关键词搜索要求用户自己不断换词、打开文档和拼接信息；直接让模型回答，又可能得到看似流畅但无法追溯的结论。\n\n**产品目标**：我把它定义为三个连续环节——先让不同文档能够被统一摄入和检索，再让回答严格基于召回内容生成，最后通过引用与评测判断答案是否可靠。当前先用 Dense Retrieval 跑通主链路，再逐步验证混合检索、Rerank 和引用溯源。核心价值不是增加一个聊天入口，而是降低用户获得可信答案、检查依据和继续行动的成本，让回答真正成为专业决策的信息入口。",
     details: ["专业资料难以快速找到正确内容", "生成结论缺少原文依据", "摄入、检索、生成和评测链路"],
     limitations: "公开仓库证明当前设计与部分实现，不等同于所有规划能力均已运行验证。",
@@ -443,6 +443,22 @@ export const stableAnswerContent = [
     responseShape: "fit_mapping", targetLength: { min: 390, max: 520 }, preferredStoryIds: ["ST1", "ST8"],
     followUpQuestions: ["你会如何建立第一版 RAG 评测集？", "Bad Case 如何转成产品优先级？", "你如何避免评测指标和用户价值脱节？"],
     closingPurpose: "落到用数据和评测支持产品取舍的能力。",
+  }),
+  answer({
+    id: "A24",
+    question: "RAG 项目的引用准确率提升了多少？",
+    matchKeywords: ["引用准确率", "准确率提升", "评测提升数字", "提升了多少", "效果提升数字"],
+    standardAnswer: "目前没有可以公开、复现的引用准确率提升数字，这一点需要直接说清楚。现有材料能确认的是 RAG 已形成 Dense Retrieval 主链路，并把引用支持和自动评测纳入产品方案；但没有一组使用同一数据集、同一基线和同一口径完成的前后对照结果，所以我不会把方案设计包装成已经取得的准确率提升。\n\n**已经做到的部分**：我把回答质量拆成召回内容是否相关、回答是否忠于上下文、引用能否支持结论，并通过 Bad Case 观察问题来自摄入、召回、排序还是生成。\n\n**如何得到可信数字**：下一步应固定评测问题和标准证据，先记录 Dense Retrieval 基线，再一次只改变一个变量，分别比较召回命中、引用支持和回答忠实度。只有评测集、口径和结果都能复现后，我才会对外说明提升幅度。对我来说，评测数字的价值不是让项目看起来更漂亮，而是帮助产品判断下一轮投入是否有效。",
+    details: ["没有公开且可复现的引用准确率提升数字", "当前支持 Dense Retrieval 主链路与引用评测方案", "应使用固定评测集、基线和单变量对照"],
+    limitations: "不补充未记录的准确率、提升比例或评测集规模。",
+    claimIds: ["C3"], sourceIds: ["S1", "S3"], verification: "externally_verified", relatedProject: "rag-knowledge-base",
+    evaluationGoal: "直接回答数字边界，并证明候选人知道如何建立可信、可复现的 RAG 评测。",
+    exclusivePoints: ["当前没有公开提升数字", "区分现有主链路与评测结果", "用固定基线和单变量对照验证"],
+    mustInclude: ["没有可以公开、复现的引用准确率提升数字", "Dense Retrieval 主链路", "固定评测问题和标准证据"],
+    avoidRepeating: ["重新介绍整个 RAG 项目", "虚构准确率或提升比例", "泛泛强调持续优化"],
+    responseShape: "shortcoming", targetLength: { min: 330, max: 470 }, preferredStoryIds: ["ST1"],
+    followUpQuestions: ["你会如何建立第一版 RAG 评测集？", "引用支持应该如何人工抽检？", "Bad Case 如何转成下一轮优先级？"],
+    closingPurpose: "落到用可复现评测支持产品取舍。",
   }),
 ] as const;
 
