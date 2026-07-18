@@ -44,7 +44,8 @@ const DOMAIN_TERMS = [
 ];
 
 function normalizedNumbers(value: string) {
-  return new Set((value.match(NUMBER_PATTERN) ?? []).map((item) => item.replace(/％/g, "%")));
+  const withoutListMarkers = value.replace(/^\s*\d{1,2}[.)、]\s*/gm, "");
+  return new Set((withoutListMarkers.match(NUMBER_PATTERN) ?? []).map((item) => item.replace(/％/g, "%")));
 }
 
 function containsAllowedPhrase(phrase: string, allowedText: string) {

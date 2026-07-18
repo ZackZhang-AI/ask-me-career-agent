@@ -5,11 +5,23 @@ import { getFollowUpQuestions } from "./question-suggestions.ts";
 
 const boundaryPattern = /短板|不足|限制|边界|风险|真实性|真实数据|用户(?:数|规模|反馈|测试)|增长|留存|生产(?:状态|规模|环境)|完成(?:了吗|情况)|未完成|个人贡献(?:比例|边界)/;
 const knownOrganizations = ["东北大学", "德勤", "容诚", "ACCA"];
+const diagnosticMethodFacts = [
+  "如果同一组 Bad Case 没有改善，优先确认评测口径与失败分类是否稳定，避免把指标波动误判为方案变化。",
+  "随后沿知识摄入、检索、回答、引用链路逐段定位：先看召回证据是否相关且完整，再看回答是否忠实使用证据，最后检查引用与评测是否正确归因。",
+  "排查时一次只改变一个关键变量，并复用同一组 Bad Case 做前后对比，才能判断问题来自数据、检索策略还是生成环节。",
+];
+const diagnosticFallback = [
+  "如果同一组 Bad Case 没有改善，我会先验证“测量是否可信”，再定位“链路哪里失真”，而不是立刻换模型或继续堆功能。",
+  "**先查评测**：固定问题集、判定标准和对照版本，重新检查失败分类。如果样本分层或评价口径不稳定，后面的优化结论就不可信。",
+  "**再拆链路**：沿知识摄入、检索、回答和引用逐段看。优先检查召回证据是否相关、完整；证据没问题，再看回答是否忠实使用证据，以及引用和评测有没有错误归因。",
+  "**单变量验证**：每轮只调整一个关键变量，并用同一组 Bad Case 前后对比。这样我能判断瓶颈究竟来自数据、检索策略还是生成环节，再决定下一轮投入。",
+].join("\n\n");
 
 const intentPatterns: Array<[AnswerIntent, RegExp]> = [
   ["ai_collaboration", /AI\s*(?:编程|写|生成)|代码.*AI|AI.*占比|用了多少\s*AI/i],
   ["contribution", /个人贡献|你做了什么|你负责|具体做了|你的工作|主导/],
   ["challenge", /挑战|困难|失败|取舍|踩坑|复盘|怎么推进|如何推进/],
+  ["diagnosis", /没有改善|没改善|没有效果|没效果|优先排查|先排查|先.{0,3}看什么|定位问题|为什么没有/],
   ["privacy", /隐私|机密|企业数据|数据边界/],
   ["experience_value", /企业级?\s*AI|企业\s*AI|企业场景|业务问题.{0,8}(?:转化|转成|变成).{0,8}(?:AI|产品)|(?:AI|产品)方案/i],
   ["skills", /技术能力|技术栈|会什么|数据分析|(?:AI\s*)?评测|如何评估|有哪些实践/i],
@@ -23,7 +35,7 @@ const intentPatterns: Array<[AnswerIntent, RegExp]> = [
 const defaultShapeByIntent: Record<AnswerIntent, ResponseShape> = {
   introduction: "narrative", role_fit: "fit_mapping", representative_project: "project_arc",
   project_overview: "project_arc", project_problem: "direct", contribution: "contribution",
-  ai_collaboration: "direct", challenge: "star", result: "shortcoming", limitation: "shortcoming",
+  ai_collaboration: "direct", challenge: "star", diagnosis: "direct", result: "shortcoming", limitation: "shortcoming",
   skills: "fit_mapping", experience: "direct", experience_value: "fit_mapping", privacy: "direct",
   education: "direct", credentials: "direct", hiring_recommendation: "recommendation", general: "direct",
 };
@@ -68,6 +80,7 @@ function detectIntent(question: string, stableAnswer?: StableAnswer): AnswerInte
 
 function projectFacts(items: KnowledgeItem[], intent: AnswerIntent) {
   const facts = items.flatMap((item) => [item.content]);
+  if (intent === "diagnosis") return [...diagnosticMethodFacts, ...facts];
   if (["contribution", "challenge", "representative_project", "role_fit", "general"].includes(intent)) {
     return items.flatMap((item) => [item.content, item.candidateContribution]);
   }
@@ -157,6 +170,9 @@ function openAnswer(plan: Omit<AnswerPlan, "fallbackAnswer">, facts: string[], s
 }
 
 function openThesis(question: string, intent: AnswerIntent, items: KnowledgeItem[], depth: ConversationDepth, story?: StarStory) {
+  if (intent === "diagnosis") {
+    return "如果同一组 Bad Case 没有改善，我会先验证测量是否可信，再定位链路哪里失真，而不是立刻换模型或继续堆功能。";
+  }
   if (intent === "challenge" && story) return `我遇到的核心挑战是：${story.situation}`;
   if (intent === "skills" && /数据|评测|指标|分析/.test(question)) {
     return "我会把数据分析和 AI 评测放在同一条产品迭代链路里：先定义效果，再定位问题，最后用失败样本决定下一轮动作。";
@@ -202,7 +218,8 @@ export function buildAnswerPlan(
   const thesis = skeleton?.thesis
     ?? multiProjectResult
     ?? openThesis(question, intent, items, depth, relatedStory);
-  const exclusivePoints = stableAnswer?.exclusivePoints ?? unique([thesis, ...storyFacts.slice(2), ...itemFacts.slice(0, 2)]).slice(0, 3);
+  const exclusivePoints = stableAnswer?.exclusivePoints
+    ?? (intent === "diagnosis" ? diagnosticMethodFacts : unique([thesis, ...storyFacts.slice(2), ...itemFacts.slice(0, 2)]).slice(0, 3));
   const factEntries = allowedFacts.map((fact, index) => ({ id: stableAnswer ? `${stableAnswer.id}:F${index + 1}` : items[index]?.id ?? `OPEN:F${index + 1}`, fact }));
   const usedFactEntries = factEntries.filter(({ fact }) => appearsInHistory(fact, historyText));
   const usedStoryIds = getRelatedStarStories(items, 4).filter((story) => storyUsed(story, historyText)).map((story) => story.id);
@@ -240,7 +257,8 @@ export function buildAnswerPlan(
     recentAnswers: history.filter((message) => message.role === "assistant").slice(-3).map((message) => message.content),
   };
   const fallbackFacts = intent === "challenge" ? [...storyFacts, ...itemFacts] : [...itemFacts, ...storyFacts];
-  const baseAnswer = stableAnswer?.standardAnswer ?? openAnswer(partialPlan, fallbackFacts, relatedStory);
+  const baseAnswer = stableAnswer?.standardAnswer
+    ?? (intent === "diagnosis" ? diagnosticFallback : openAnswer(partialPlan, fallbackFacts, relatedStory));
   const fallbackAnswer = !stableAnswer && shouldMentionLimitations && limitations && !baseAnswer.includes(limitations)
     ? `${baseAnswer}\n\n**当前阶段**：${limitations}`
     : baseAnswer;

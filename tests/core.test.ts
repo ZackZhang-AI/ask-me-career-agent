@@ -177,6 +177,10 @@ test("深层指代变体继承最近项目且不误匹配固定项目介绍", ()
     assert.ok(items.length >= 1, question);
     assert.ok(items.every((item) => item.relatedProject === "rag-knowledge-base"), question);
     assert.equal(matchStableAnswer(question, history), undefined, question);
+    const plan = buildAnswerPlan(question, items, undefined, history);
+    assert.equal(plan.intent, "diagnosis", question);
+    assert.match(plan.fallbackAnswer, /先查评测|再拆链路|单变量验证/, question);
+    assert.equal(validateAnswer(plan.fallbackAnswer, plan).passed, true, question);
   }
 
   assert.equal(matchStableAnswer("如果把 RAG 项目迁移到企业内部知识管理场景，你会优先判断什么？", history), undefined);
