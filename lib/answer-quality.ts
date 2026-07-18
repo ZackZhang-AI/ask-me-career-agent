@@ -104,7 +104,10 @@ export function validateAnswer(candidate: string, plan: AnswerPlan): QualityGate
 
   if (clean.length < 260) triggers.push("answer_too_short");
   if (clean.length > 600) triggers.push("answer_too_long");
-  if ((clean.match(/\*\*[^*]+\*\*/g) ?? []).length < 2) triggers.push("weak_structure");
+  const emphasized = [...clean.matchAll(/\*\*([^*]+)\*\*/g)].map((match) => match[1].trim());
+  if (emphasized.length < 2) triggers.push("weak_structure");
+  if (emphasized.length > 3) triggers.push("excessive_emphasis");
+  if (emphasized.some((text) => text.length > 12 || /[。！？；：]/.test(text))) triggers.push("long_emphasis");
 
   plan.mustInclude.forEach((required, index) => {
     if (!semanticallyCovered(required, clean)) triggers.push(`missing_required:${index + 1}`);
@@ -154,7 +157,7 @@ export function repairInstruction(plan: AnswerPlan, triggers: string[]) {
 失败原因：${triggers.join("；")}\n
 必须遵守：\n
 1. 只能使用下方“允许事实”，不得补充合理猜测、过程细节、数字、用户反馈或完成状态。\n
-2. 300–500 个中文字符；第一段直接回答，随后使用 2–3 个加粗短标题，最后落到 AI 产品岗位价值。\n
+2. 300–500 个中文字符；第一段直接回答，随后只使用 2–3 个不超过 12 字的加粗短标题，最后落到 AI 产品岗位价值。不要加粗完整句子或大段正文。\n
 3. 不使用寒暄、Claim/Source、证据边界、核实提醒或免责声明。\n
 4. 必答点：${plan.mustInclude.join("；")}\n
 5. 允许事实：${plan.allowedFacts.join("；")}\n

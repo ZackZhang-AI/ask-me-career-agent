@@ -13,6 +13,7 @@ import {
   PhoneIcon,
   StopIcon,
 } from "@phosphor-icons/react";
+import { FormattedAnswer } from "./formatted-answer";
 import { featuredProjects, profile } from "@/lib/profile";
 import { getBrowserSessionId } from "@/lib/client-session";
 import {
@@ -295,7 +296,9 @@ export function Chat() {
                       <span />
                     </div>
                   ) : (
-                    <div className="message-content">{message.content}</div>
+                    message.role === "assistant"
+                      ? <FormattedAnswer content={message.content} />
+                      : <div className="message-content">{message.content}</div>
                   )}
                   {message.mode === "demo" && (
                     <p className="mode-note">当前为演示模式，回答来自本地公开知识库。</p>
