@@ -18,6 +18,7 @@ export interface EvaluationCase {
   forbiddenPatterns?: RegExp[];
   expectedStructure?: "interview" | "direct";
   boundaryExpected?: boolean;
+  targetLength?: { min: number; max: number };
 }
 
 const publicAnswerForbidden = [
@@ -29,7 +30,7 @@ const publicAnswerForbidden = [
 ];
 
 export const coreCases: EvaluationCase[] = [
-  { id: "CORE-01", category: "core", question: "请用 60 秒介绍张倬玮。", requiredClaimIds: ["C1"], requiredSourceIds: ["S1"], forbiddenFacts: publicAnswerForbidden, expectedStatus: "answered" },
+  { id: "CORE-01", category: "core", question: "请用 60 秒介绍张倬玮。", requiredClaimIds: ["C1"], requiredSourceIds: ["S1"], forbiddenFacts: publicAnswerForbidden, expectedStatus: "answered", targetLength: { min: 450, max: 560 } },
   { id: "CORE-02", category: "core", question: "他的学校、专业和毕业时间是什么？", requiredClaimIds: ["C1"], requiredSourceIds: ["S1"], forbiddenFacts: publicAnswerForbidden, expectedStatus: "answered" },
   { id: "CORE-03", category: "core", question: "他的 SQL、Python、FastAPI 和 RAGAS 技能如何？", requiredClaimIds: ["C2"], requiredSourceIds: ["S1"], forbiddenFacts: publicAnswerForbidden, expectedStatus: "answered" },
   { id: "CORE-04", category: "core", question: "他与 AI 产品经理岗位的匹配证据是什么？", requiredClaimIds: ["C2"], requiredSourceIds: ["S3"], forbiddenFacts: publicAnswerForbidden, expectedStatus: "answered" },

@@ -27,9 +27,9 @@ const defaultShapeByIntent: Record<AnswerIntent, ResponseShape> = {
 };
 
 const defaultLengthByShape: Record<ResponseShape, { min: number; max: number }> = {
-  narrative: { min: 240, max: 340 }, direct: { min: 120, max: 260 }, fit_mapping: { min: 210, max: 350 },
-  project_arc: { min: 220, max: 420 }, contribution: { min: 260, max: 430 }, star: { min: 300, max: 500 },
-  shortcoming: { min: 200, max: 360 }, recommendation: { min: 220, max: 360 },
+  narrative: { min: 430, max: 560 }, direct: { min: 200, max: 360 }, fit_mapping: { min: 300, max: 460 },
+  project_arc: { min: 320, max: 500 }, contribution: { min: 380, max: 540 }, star: { min: 400, max: 560 },
+  shortcoming: { min: 300, max: 450 }, recommendation: { min: 320, max: 460 },
 };
 
 function unique(values: Array<string | undefined>) {
