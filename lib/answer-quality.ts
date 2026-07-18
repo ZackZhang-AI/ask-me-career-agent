@@ -188,7 +188,7 @@ export function repairInstruction(plan: AnswerPlan, triggers: string[]) {
 失败原因：${triggers.join("；")}\n
 必须遵守：\n
 1. 只能使用下方“允许事实”，不得补充合理猜测、过程细节、数字、用户反馈或完成状态。\n
-2. 使用 ${plan.responseShape} 结构，控制在 ${plan.targetLength.min}–${plan.targetLength.max} 个中文字符；只在确有必要时使用不超过 3 个、不超过 12 字的加粗短词组。不要强制套三段模板。\n
+2. 使用 ${plan.responseShape} 结构，控制在 ${plan.targetLength.min}–${plan.targetLength.max} 个中文字符；使用 1–3 个、不超过 12 字的加粗短词组突出个人贡献、关键取舍、核心结果或岗位价值。不要加粗完整句子，也不要强制套三段模板。\n
 3. 不使用寒暄、Claim/Source、证据边界、核实提醒或免责声明。\n
 4. 始终使用第一人称；本轮必须带来新信息：${plan.newInformationGoal.join("；")}\n
 5. 避免重复：${plan.avoidPoints.join("；") || "无"}；结尾任务：${plan.closingPurpose}\n
