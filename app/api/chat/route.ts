@@ -117,9 +117,9 @@ export async function POST(request: NextRequest) {
   const plan = buildAnswerPlan(assessment.question, items, stableAnswer, history);
   const retrievalTrace = resolveRetrievalQuery(assessment.question, history);
   console.info("ask-me-retrieval", JSON.stringify({
-    version: "context-v2",
+    version: "context-v3",
     historyCount: history.length,
-    contextApplied: retrievalTrace.text !== assessment.question,
+    contextApplied: retrievalTrace.contextApplied,
     matchedProjects: retrievalTrace.matchedProjects,
     itemIds: items.map((item) => item.id),
     stableAnswerId: stableAnswer?.id,

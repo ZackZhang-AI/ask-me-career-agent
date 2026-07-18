@@ -3,7 +3,7 @@ import test from "node:test";
 import { buildAnswerPlan, demoAnswer, systemPrompt } from "../lib/answer.ts";
 import { validateAnswer } from "../lib/answer-quality.ts";
 import { assessQuestion, redactForLog } from "../lib/guardrails.ts";
-import { claims, getRelatedStarStories, knowledge, matchStableAnswer, retrieveKnowledge, sources } from "../lib/knowledge.ts";
+import { claims, getRelatedStarStories, knowledge, matchStableAnswer, resolveRetrievalQuery, retrieveKnowledge, sources } from "../lib/knowledge.ts";
 
 test("召回岗位匹配知识并保留证据边界", () => {
   const result = retrieveKnowledge("他与 AI 产品经理岗位的匹配证据是什么？");
@@ -172,6 +172,7 @@ test("深层指代变体继承最近项目且不误匹配固定项目介绍", ()
   ];
 
   for (const question of questions) {
+    assert.equal(resolveRetrievalQuery(question, history).contextApplied, true, question);
     const items = retrieveKnowledge(question, { history, limit: 4 });
     assert.ok(items.length >= 1, question);
     assert.ok(items.every((item) => item.relatedProject === "rag-knowledge-base"), question);
