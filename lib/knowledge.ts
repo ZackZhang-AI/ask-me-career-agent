@@ -13,7 +13,7 @@ export const suggestedQuestions = contentCatalog.suggestedQuestions;
 
 const sourceById = new Map(sources.map((source) => [source.id, source]));
 const claimById = new Map(claims.map((claim) => [claim.id, claim]));
-const referencePattern = /(这个|该项目|其中|它|上述|前者|后者|那个项目|这套系统|这些(?:方法|实践|能力|项目|经验))/;
+const referencePattern = /(这个|该项目|其中|它|上述|前者|后者|那个项目|(?:这套|这种|这些)(?:系统|方法|思路|做法|实践|能力|项目|经验))/;
 const implicitFollowupPattern = /你(?:本人)?做了什么|你负责什么|具体做了什么|你的贡献|遇到(?:什么)?(?:挑战|困难)|有什么结果|现在怎么样/;
 
 function isPublicActive(item: { visibility: string; status: string; verification: string; projectStatus?: string }) {

@@ -67,6 +67,22 @@ test("安全拒答、证据不足与核心稳定回答返回标准 NDJSON 状态
   assert.equal(typeof verified.at(-1).latencyMs, "number");
 });
 
+test("深层方法指代沿用上一轮 RAG 语境", async () => {
+  const responseEvents = await events(await POST(request({
+    sessionId: "api-deep-reference",
+    messages: [
+      { role: "user", content: "你会如何用 Bad Case 决定 RAG 下一轮迭代优先级？" },
+      { role: "assistant", content: "我会把 Bad Case 映射到检索、回答、引用和评测环节。" },
+      { role: "user", content: "如果这套方法没有改善效果，你下一步会优先排查什么？" },
+    ],
+  })));
+
+  assert.equal(responseEvents[0].mode, "demo");
+  assert.equal(responseEvents[0].responseStatus, "completed");
+  assert.equal(responseEvents[0].claimIds.includes("C3"), true);
+  assert.equal(responseEvents[0].sourceIds.includes("S3"), true);
+  assert.equal(responseEvents.at(-1).responseStatus, "completed");
+});
 test("60 秒介绍返回足够完整的招聘视角回答", async () => {
   const responseEvents = await events(await POST(request({
     sessionId: "api-introduction",
