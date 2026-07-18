@@ -111,6 +111,14 @@ test("招聘方高频问题都有结构化证据", () => {
   for (const answer of priorityAnswers) assert.equal((answer.details?.length ?? 0) >= 4, true, answer.id);
 });
 
+test("核心回答用克制的短词组突出招聘重点", () => {
+  for (const answer of stableAnswers) {
+    const emphasized = [...answer.standardAnswer.matchAll(/\*\*([^*]+)\*\*/g)].map((match) => match[1]);
+    assert.equal(emphasized.length >= 1 && emphasized.length <= 3, true, answer.id);
+    assert.equal(emphasized.every((text) => text.length <= 12 && !/[。！？；：]/.test(text)), true, answer.id);
+  }
+});
+
 test("项目别名和最近上下文可解析多轮指代", () => {
   const explicit = resolveRetrievalQuery("DeepFlow 有什么限制？");
   assert.equal(explicit.matchedProjects.includes("deepflow"), true);
