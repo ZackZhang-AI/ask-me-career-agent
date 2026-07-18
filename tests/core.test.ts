@@ -183,6 +183,11 @@ test("深层指代变体继承最近项目且不误匹配固定项目介绍", ()
     assert.equal(validateAnswer(plan.fallbackAnswer, plan).passed, true, question);
   }
 
+  const diagnosticItems = retrieveKnowledge(questions[0], { history, limit: 4 });
+  const diagnosticPlan = buildAnswerPlan(questions[0], diagnosticItems, undefined, history);
+  const fabricatedExperience = `${diagnosticPlan.fallbackAnswer}\n\n我之前就遇到过评测标注不一致导致误以为策略生效的情况。`;
+  assert.equal(validateAnswer(fabricatedExperience, diagnosticPlan).triggers.includes("unsupported_event"), true);
+
   assert.equal(matchStableAnswer("如果把 RAG 项目迁移到企业内部知识管理场景，你会优先判断什么？", history), undefined);
 });
 
