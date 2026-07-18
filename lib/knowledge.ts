@@ -15,6 +15,12 @@ const sourceById = new Map(sources.map((source) => [source.id, source]));
 const claimById = new Map(claims.map((claim) => [claim.id, claim]));
 const referencePattern = /(这个|该项目|其中|它|上述|前者|后者|那个项目|(?:这套|这种|这些)(?:系统|方法|思路|做法|实践|能力|项目|经验))/;
 const implicitFollowupPattern = /你(?:本人)?做了什么|你负责什么|具体做了什么|你的贡献|遇到(?:什么)?(?:挑战|困难)|有什么结果|现在怎么样/;
+const followupCuePattern = /^(?:如果|要是|那|那么|继续|进一步)|下一步|没有改善|没改善|优先排查|先看什么|接下来怎么|为什么没有/;
+
+function usesRecentContext(question: string, history: ChatMessage[]) {
+  return history.length > 0
+    && (referencePattern.test(question) || implicitFollowupPattern.test(question) || followupCuePattern.test(question));
+}
 
 function isPublicActive(item: { visibility: string; status: string; verification: string; projectStatus?: string }) {
   return item.visibility === "public"
@@ -53,7 +59,7 @@ export interface RetrievalOptions {
 }
 
 export function resolveRetrievalQuery(question: string, history: ChatMessage[] = []) {
-  const recentContext = (referencePattern.test(question) || implicitFollowupPattern.test(question))
+  const recentContext = usesRecentContext(question, history)
     ? history.slice(-8).map((message) => message.content.slice(0, 300)).join(" ")
     : "";
   const base = `${question} ${recentContext}`;
@@ -96,7 +102,7 @@ export function retrieveKnowledge(question: string, limitOrOptions: number | Ret
 export function matchStableAnswer(question: string, history: ChatMessage[] = []) {
   const normalizedQuestion = normalizeSearchText(question);
   const resolved = resolveRetrievalQuery(question, history);
-  const usesReference = referencePattern.test(question) || implicitFollowupPattern.test(question);
+  const usesReference = usesRecentContext(question, history);
   const asksForOutcomeEvidence = /用户测试|满意度|用户规模|真实用户|增长|留存|生产状态|商业化|结果数据/.test(question);
   if (resolved.matchedProjects.length > 1) return undefined;
   const ranked = stableAnswers
