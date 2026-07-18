@@ -58,8 +58,8 @@ const followUpsByCategory: Record<QuestionCategory, readonly string[]> = {
   ],
   project: [
     "他在代表项目中负责哪些核心工作？",
-    "他如何把业务问题转化为 AI 产品方案？",
     "他如何评估并改进 AI 产品效果？",
+    "他如何把业务问题转化为 AI 产品方案？",
   ],
   experience: [
     "他的实习经历沉淀了哪些可迁移能力？",
@@ -88,8 +88,70 @@ const followUpsByCategory: Record<QuestionCategory, readonly string[]> = {
   ],
 };
 
+const evergreenRecruiterQuestions = [
+  "他最能胜任哪些 AI 产品工作？",
+  "他的统计学背景能怎样支持产品决策？",
+  "他如何把审计经验迁移到企业 AI 场景？",
+  "他有哪些可以直接演示的项目成果？",
+  "RAG 项目体现了他哪些产品方法？",
+  "DeepFlow 体现了他哪些多 Agent 产品思考？",
+  "他如何定义并验收 AI 产品效果？",
+  "他在需求分析和方案设计方面有哪些实践？",
+  "他如何平衡原型速度与交付质量？",
+  "他适合从哪些业务场景开始创造价值？",
+  "他与技术团队协作时可以承担哪些职责？",
+  "他的经历形成了哪些差异化能力组合？",
+] as const;
+
+const explorationQuestionsByCategory: Record<QuestionCategory, readonly string[]> = {
+  profile: [
+    "RAG 项目体现了他哪些产品方法？",
+    "他在数据分析与 AI 评测方面有哪些实践？",
+  ],
+  fit: [
+    "审计经历如何帮助他做 AI 产品？",
+    "DeepFlow 体现了他哪些多 Agent 产品思考？",
+  ],
+  project: [
+    "审计经历如何帮助他做 AI 产品？",
+    "他的统计学背景能怎样支持产品决策？",
+    "他为什么适合 AI 产品经理岗位？",
+  ],
+  experience: [
+    "RAG 项目体现了他哪些产品方法？",
+    "DeepFlow 体现了他哪些多 Agent 产品思考？",
+  ],
+  skills: [
+    "他有哪些可以直接演示的项目成果？",
+    "审计经历如何帮助他做 AI 产品？",
+  ],
+  gaps: [
+    "他最值得面试官关注的三项优势是什么？",
+    "哪个项目最能代表他的 AI 产品能力？",
+  ],
+  security: [
+    "他对企业级 AI 场景有哪些理解？",
+    "哪个项目最能代表他的 AI 产品能力？",
+  ],
+  other: [
+    "哪个项目最能代表他的 AI 产品能力？",
+    "他的实习经历沉淀了哪些可迁移能力？",
+  ],
+};
+
+function toCandidatePerspective(question: string) {
+  return question
+    .replace(/^最难的产品取舍是什么/, "你在这个项目中最关键的产品取舍是什么")
+    .replace(/^如果给他一个/, "如果给你一个")
+    .replace(/^给他一个/, "给你一个")
+    .replace(/他的/g, "你的")
+    .replace(/帮助他/g, "帮助你")
+    .replace(/体现了他/g, "体现了你")
+    .replace(/^他/, "你");
+}
+
 function normalizeQuestion(question: string) {
-  return question.toLowerCase().replace(/[\s，。！？、：；,.!?:;（）()\-_]/g, "");
+  return toCandidatePerspective(question).toLowerCase().replace(/[\s，。！？、：；,.!?:;（）()\-_]/g, "");
 }
 
 export function inferQuestionCategory(question: string): QuestionCategory {
@@ -103,11 +165,35 @@ export function inferQuestionCategory(question: string): QuestionCategory {
   return "other";
 }
 
-export function getFollowUpQuestions(question: string, askedQuestions: readonly string[] = [], limit = 3) {
-  const asked = new Set(askedQuestions.map(normalizeQuestion));
+export function getFollowUpQuestions(
+  question: string,
+  askedQuestions: readonly string[] = [],
+  limit = 3,
+  preferredQuestions: readonly string[] = [],
+) {
+  const seen = new Set(askedQuestions.map(normalizeQuestion));
   const category = inferQuestionCategory(question);
   const fallback = questionGroups.flatMap((group) => group.questions);
-  return [...followUpsByCategory[category], ...fallback]
-    .filter((item, index, items) => items.indexOf(item) === index && !asked.has(normalizeQuestion(item)))
-    .slice(0, limit);
+  const broaderRecruiterQuestions = Object.values(followUpsByCategory).flat();
+  const fallbackQuestions = [...fallback, ...broaderRecruiterQuestions, ...evergreenRecruiterQuestions];
+  const crossTopicQuestions = fallbackQuestions.filter((item) => inferQuestionCategory(toCandidatePerspective(item)) !== category);
+  const selected: string[] = [];
+
+  function addQuestions(candidates: readonly string[], target: number) {
+    if (selected.length >= target) return;
+    for (const candidate of candidates) {
+      const item = toCandidatePerspective(candidate);
+      const normalized = normalizeQuestion(item);
+      if (!normalized || seen.has(normalized)) continue;
+      seen.add(normalized);
+      selected.push(item);
+      if (selected.length >= target) break;
+    }
+  }
+
+  addQuestions([...preferredQuestions, ...followUpsByCategory[category]], Math.min(2, limit));
+  addQuestions([...explorationQuestionsByCategory[category], ...crossTopicQuestions], Math.min(3, limit));
+  addQuestions(fallbackQuestions, limit);
+
+  return selected;
 }
