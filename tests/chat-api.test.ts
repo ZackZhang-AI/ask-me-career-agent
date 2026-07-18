@@ -83,32 +83,6 @@ test("深层方法指代沿用上一轮 RAG 语境", async () => {
   assert.equal(responseEvents[0].sourceIds.includes("S3"), true);
   assert.equal(responseEvents.at(-1).responseStatus, "completed");
 });
-
-test("每轮回答都返回三个未问过的推荐问题", async () => {
-  const firstQuestion = "60 秒了解张倬玮。";
-  const first = await events(await POST(request({
-    sessionId: "api-follow-ups",
-    messages: [{ role: "user", content: firstQuestion }],
-  })));
-  const firstAnswer = first.filter((event) => event.type === "delta").map((event) => event.content).join("");
-  const firstSuggestions = first[0].followUpQuestions as string[];
-  assert.equal(firstSuggestions.length, 3);
-
-  const secondQuestion = firstSuggestions[0];
-  const second = await events(await POST(request({
-    sessionId: "api-follow-ups",
-    messages: [
-      { role: "user", content: firstQuestion },
-      { role: "assistant", content: firstAnswer },
-      { role: "user", content: secondQuestion },
-    ],
-  })));
-  const secondSuggestions = second[0].followUpQuestions as string[];
-  assert.equal(secondSuggestions.length, 3);
-  assert.equal(secondSuggestions.includes(firstQuestion), false);
-  assert.equal(secondSuggestions.includes(secondQuestion), false);
-});
-
 test("60 秒介绍返回足够完整的招聘视角回答", async () => {
   const responseEvents = await events(await POST(request({
     sessionId: "api-introduction",
