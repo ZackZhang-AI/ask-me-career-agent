@@ -39,6 +39,7 @@ function textStream(input: {
   tokenReservation: number;
   actualTokens?: number;
   claims?: ReturnType<typeof getClaims>;
+  followUpQuestions?: string[];
 }) {
   return new Response(new ReadableStream({ async start(controller) {
     controller.enqueue(line({
@@ -49,6 +50,7 @@ function textStream(input: {
       sourceIds: input.sourceIds,
       sources: input.sources,
       items: serializeKnowledgeItems(input.items),
+      followUpQuestions: input.followUpQuestions ?? [],
       ...(input.claims ? { claims: input.claims } : {}),
     }));
     for (let index = 0; index < input.answer.length; index += 12) {
@@ -106,16 +108,18 @@ export async function POST(request: NextRequest) {
   const claimIds = stableAnswer ? [...stableAnswer.requiredClaimIds] : [...new Set(items.flatMap((item) => item.claimIds))];
   const sourceIds = stableAnswer ? [...stableAnswer.requiredSourceIds] : [...new Set(items.flatMap((item) => item.sourceIds))];
   const matchedSources = getSources(sourceIds);
+  const plan = buildAnswerPlan(assessment.question, items, stableAnswer, history);
 
   if (!stableAnswer && (!items.length || !claimIds.length || !sourceIds.length)) {
     return textStream({
-      answer: demoAnswer(assessment.question, []),
+      answer: demoAnswer(assessment.question, [], undefined, history),
       mode: "demo",
       responseStatus: "insufficient_evidence",
       claimIds: [],
       sourceIds: [],
       sources: [],
       items: [],
+      followUpQuestions: plan.followUpQuestions,
       startedAt,
       tokenReservation: rate.tokenReservation,
     });
@@ -124,13 +128,14 @@ export async function POST(request: NextRequest) {
   const apiKey = process.env.DEEPSEEK_API_KEY;
   if (!apiKey) {
     return textStream({
-      answer: demoAnswer(assessment.question, items, stableAnswer),
+      answer: demoAnswer(assessment.question, items, stableAnswer, history),
       mode: stableAnswer ? "stable" : "demo",
       responseStatus: "completed",
       claimIds,
       sourceIds,
       sources: matchedSources,
       items,
+      followUpQuestions: plan.followUpQuestions,
       startedAt,
       tokenReservation: rate.tokenReservation,
     });
@@ -139,7 +144,6 @@ export async function POST(request: NextRequest) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 45_000);
   request.signal.addEventListener("abort", () => controller.abort(), { once: true });
-  const plan = buildAnswerPlan(assessment.question, items, stableAnswer, history);
   const contextMessage = `以下是本轮回答计划和公开事实，只能据此回答：\n${buildContext(items, plan)}`;
   let totalTokens = 0;
   let totalReservation = rate.tokenReservation;
@@ -206,6 +210,7 @@ export async function POST(request: NextRequest) {
       sources: matchedSources,
       items,
       claims: getClaims(claimIds),
+      followUpQuestions: plan.followUpQuestions,
       startedAt,
       tokenReservation: totalReservation,
       actualTokens: totalTokens,
@@ -221,6 +226,7 @@ export async function POST(request: NextRequest) {
         sourceIds,
         sources: matchedSources,
         items,
+        followUpQuestions: plan.followUpQuestions,
         startedAt,
         tokenReservation: totalReservation,
         actualTokens: totalTokens,

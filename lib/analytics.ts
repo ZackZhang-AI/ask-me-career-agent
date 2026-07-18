@@ -12,6 +12,7 @@ export const ANALYTICS_EVENTS = [
   "resume_opened",
   "contact_opened",
   "chat_error",
+  "answer_feedback",
 ] as const;
 
 export type AnalyticsEventName = (typeof ANALYTICS_EVENTS)[number];
@@ -19,7 +20,7 @@ export type AnalyticsEventName = (typeof ANALYTICS_EVENTS)[number];
 const EVENT_NAMES = new Set<string>(ANALYTICS_EVENTS);
 const RESPONSE_STATUSES = new Set(["completed", "insufficient_evidence", "refused", "rate_limited", "budget_exhausted", "upstream_error"]);
 const QUESTION_CATEGORIES = new Set(["profile", "fit", "project", "experience", "skills", "gaps", "security", "other"]);
-const TARGET_TYPES = new Set(["source", "project", "resume", "email", "phone", "github", "suggestion"]);
+const TARGET_TYPES = new Set(["source", "project", "resume", "email", "phone", "github", "suggestion", "feedback"]);
 
 export interface AnalyticsEventInput {
   event: AnalyticsEventName;
@@ -80,6 +81,7 @@ function inferredTargetType(event: AnalyticsEventName): string | null {
   if (event === "project_opened") return "project";
   if (event === "resume_opened") return "resume";
   if (event === "suggestion_clicked") return "suggestion";
+  if (event === "answer_feedback") return "feedback";
   return null;
 }
 

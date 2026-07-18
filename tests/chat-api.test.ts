@@ -78,11 +78,12 @@ test("60 秒介绍返回足够完整的招聘视角回答", async () => {
     .join("");
 
   assert.equal(responseEvents[0].mode, "stable");
-  assert.match(answer, /我是张倬玮/);
-  assert.match(answer, /产品与工程/);
-  assert.match(answer, /岗位价值/);
+  assert.match(answer, /我叫张倬玮/);
+  assert.match(answer, /数据评测/);
+  assert.match(answer, /企业业务|企业流程/);
+  assert.match(answer, /产品落地/);
   assert.doesNotMatch(answer, /证据边界|需要面试核实|\[S\d+\]/);
-  assert.equal(answer.length >= 300, true);
+  assert.equal(answer.length >= 240 && answer.length <= 340, true);
 });
 
 test("模型上游过载和超时返回稳定错误码", async () => {

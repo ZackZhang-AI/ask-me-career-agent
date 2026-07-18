@@ -9,7 +9,7 @@ test("RAG 回答区分当前 Dense Retrieval 与待复核的高级能力", () =>
   const source = sources.find((item) => item.id === "S3");
   assert.ok(answer && rag && source);
   assert.match(answer.standardAnswer, /Dense Retrieval/);
-  assert.match(answer.standardAnswer, /持续优化/);
+  assert.match(answer.standardAnswer, /逐步验证/);
   assert.equal(rag.projectStatus, "in_progress");
   assert.equal(source.projectStatus, "in_progress");
   assert.equal(answer.standardAnswer.includes("公开实现多格式解析、混合检索"), false);

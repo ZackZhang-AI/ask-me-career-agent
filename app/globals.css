@@ -879,6 +879,11 @@ textarea:focus-visible {
   line-height: 1.78;
 }
 
+.message-content strong {
+  color: var(--ink);
+  font-weight: 700;
+}
+
 .mode-note {
   margin: 18px 0 0;
   padding-top: 13px;
@@ -947,6 +952,31 @@ textarea:focus-visible {
   gap: 4px;
   text-decoration: underline;
   text-underline-offset: 3px;
+}
+
+.answer-feedback {
+  margin-top: 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.answer-feedback button {
+  border: 1px solid var(--line-soft);
+  border-radius: 999px;
+  padding: 5px 10px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.answer-feedback button:hover,
+.answer-feedback button[aria-pressed="true"] {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
 }
 
 .skeleton {

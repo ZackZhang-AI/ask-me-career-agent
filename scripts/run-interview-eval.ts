@@ -3,7 +3,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { buildAnswerPlan, buildContext, demoAnswer, systemPrompt } from "../lib/answer.ts";
-import { repairInstruction, validateAnswer } from "../lib/answer-quality.ts";
+import { answerSimilarity, repairInstruction, validateAnswer } from "../lib/answer-quality.ts";
 import { assessQuestion } from "../lib/guardrails.ts";
 import { matchStableAnswer, retrieveKnowledge } from "../lib/knowledge.ts";
 import type { ResponseStatus } from "../lib/types.ts";
@@ -21,14 +21,14 @@ export const interviewRoles = [
 ] as const;
 
 export const questionCategories = [
-  { id: "sixty_second_intro", name: "60 秒介绍", question: "请用 60 秒介绍张倬玮，并说明最值得继续面试的三个差异点。", anchors: ["AI 产品", "数据", "业务"] },
-  { id: "role_fit", name: "岗位匹配", question: "他为什么适合初级 AI 产品经理岗位？", anchors: ["AI 产品", "评测", "业务"] },
-  { id: "representative_project", name: "代表项目", question: "哪个项目最能代表他的 AI 产品能力？请说明项目价值。", anchors: ["RAG", "检索", "产品"] },
-  { id: "personal_contribution", name: "个人贡献", question: "他在 RAG 项目中具体做了什么？请区分本人判断与 AI 辅助。", anchors: ["负责", "AI", "判断"] },
-  { id: "ai_coding_share", name: "AI 编程占比", question: "这些项目里 AI 编程工具承担了多少工作？请说明候选人本人判断与 AI 辅助的边界。", anchors: ["AI", "负责", "工具"] },
-  { id: "challenge_or_failure", name: "挑战或失败", question: "请讲一个项目中的真实挑战或失败，并说明如何定位、调整和验证。", anchors: ["问题", "取舍", "验证"] },
-  { id: "user_business_value", name: "用户与业务价值", question: "这些项目服务什么用户、解决什么业务问题，目前有什么价值？", anchors: ["问题", "产品", "价值"] },
-  { id: "next_round_recommendation", name: "是否建议进入下一轮", question: "基于当前公开信息，你是否建议安排下一轮初步面试？请给出理由，不要给录用结论。", anchors: ["下一轮", "价值", "能力"] },
+  { id: "sixty_second_intro", name: "60 秒介绍", question: "请用 60 秒介绍张倬玮，并说明最值得继续面试的三个差异点。", anchors: ["AI 产品", "数据", "业务"], targetLength: { min: 240, max: 340 } },
+  { id: "role_fit", name: "岗位匹配", question: "他为什么适合初级 AI 产品经理岗位？", anchors: ["AI 产品", "评测", "业务"], targetLength: { min: 230, max: 360 } },
+  { id: "representative_project", name: "代表项目", question: "哪个项目最能代表他的 AI 产品能力？请说明项目价值。", anchors: ["RAG", "检索", "产品"], targetLength: { min: 260, max: 420 } },
+  { id: "personal_contribution", name: "个人贡献", question: "他在 RAG 项目中具体做了什么？请区分本人判断与 AI 辅助。", anchors: ["负责", "AI", "判断"], targetLength: { min: 240, max: 400 } },
+  { id: "ai_coding_share", name: "AI 编程占比", question: "这些项目里 AI 编程工具承担了多少工作？请说明候选人本人判断与 AI 辅助的边界。", anchors: ["AI", "负责", "工具"], targetLength: { min: 180, max: 320 } },
+  { id: "challenge_or_failure", name: "挑战或失败", question: "请讲一个项目中的真实挑战或失败，并说明如何定位、调整和验证。", anchors: ["问题", "取舍", "验证"], targetLength: { min: 260, max: 440 } },
+  { id: "user_business_value", name: "用户与业务价值", question: "这些项目服务什么用户、解决什么业务问题，目前有什么价值？", anchors: ["问题", "产品", "价值"], targetLength: { min: 220, max: 380 } },
+  { id: "next_round_recommendation", name: "是否建议进入下一轮", question: "基于当前公开信息，你是否建议安排下一轮初步面试？请给出理由，不要给录用结论。", anchors: ["下一轮", "价值", "能力"], targetLength: { min: 180, max: 320 } },
 ] as const;
 
 export const scoreDimensions = ["清晰度", "差异化", "可信度", "追问承受力", "面试转化意愿"] as const;
@@ -44,6 +44,7 @@ export interface InterviewCase {
   categoryName: string;
   question: string;
   anchors: readonly string[];
+  targetLength?: { min: number; max: number };
   forbiddenPatterns?: RegExp[];
   boundaryExpected?: boolean;
 }
@@ -54,6 +55,7 @@ export interface EvaluationAnswer {
   claimIds: string[];
   sourceIds: string[];
   answerMode: "stable" | "retrieval" | "deepseek" | "guardrail";
+  storyIds?: string[];
 }
 
 export interface AnswerQuality {
@@ -67,6 +69,9 @@ export interface AnswerQuality {
   boilerplateHits: string[];
   internalWordingHits: string[];
   opening: string;
+  closing: string;
+  thirdPersonVoice: boolean;
+  unpromptedLimitation: boolean;
 }
 
 export interface InterviewEvaluationResult extends InterviewCase {
@@ -86,12 +91,12 @@ export interface MultiTurnResult {
 }
 
 export interface InterviewEvaluationReport {
-  schemaVersion: 2;
+  schemaVersion: 3;
   reportId: string;
   generatedAt: string;
   simulation: { synthetic: true; label: string; replacesHumanTesting: false; roleCount: number; categoryCount: number; caseCount: number };
   execution: { requestedMode: "local" | "deepseek" | "auto"; effectiveMode: EvaluationMode; model?: string };
-  scoring: { scale: "0-5"; dimensions: readonly ScoreDimension[]; casePassThreshold: number; recommendedRoleThreshold: 5; qualityAverageThreshold: 4.3; targetLength: "300-500" };
+  scoring: { scale: "0-5"; dimensions: readonly ScoreDimension[]; casePassThreshold: number; recommendedRoleThreshold: 5; qualityAverageThreshold: 4.3; targetLength: "adaptive" };
   qualityGates: {
     hardFactsPassed: boolean;
     hallucinationRegressionPassed: boolean;
@@ -103,6 +108,12 @@ export interface InterviewEvaluationReport {
     boilerplateCaseCount: number;
     internalWordingCaseCount: number;
     repeatedOpeningPairs: string[];
+    repeatedClosingPairs: string[];
+    similarDifferentIntentPairs: string[];
+    thirdPersonVoiceCount: number;
+    unpromptedLimitationCount: number;
+    selfIntroductionInternalTermCount: number;
+    multiTurnNewInformationRate: number;
     multiTurnPassed: boolean;
   };
   summary: {
@@ -116,7 +127,7 @@ export interface InterviewEvaluationReport {
     passedQualityGate: boolean;
     passedLaunchGate: boolean;
   };
-  roleRecommendations: Array<{ roleId: string; roleName: string; averageScore: number; averageCredibility: number; recommendsNextRound: boolean }>;
+  roleRecommendations: Array<{ roleId: string; roleName: string; averageScore: number; averageCredibility: number; recommendsNextRound: boolean; memorablePhrase: string; suggestedNextQuestion: string }>;
   coreResults: Array<{ id: string; answer: EvaluationAnswer; quality: AnswerQuality; passed: boolean }>;
   hallucinationResults: Array<{ id: string; answer: EvaluationAnswer; quality: AnswerQuality; passed: boolean }>;
   multiTurnResults: MultiTurnResult[];
@@ -151,7 +162,8 @@ export function buildInterviewCases(): InterviewCase[] {
     categoryName: category.name,
     question: category.question,
     anchors: category.anchors,
-    boundaryExpected: category.id === "ai_coding_share",
+    targetLength: category.targetLength,
+    boundaryExpected: category.id === "ai_coding_share" || category.id === "user_business_value",
   })));
 }
 
@@ -162,12 +174,20 @@ function normalize(text: string) {
 function semanticCoverage(text: string, groups: readonly (readonly string[])[]) {
   if (!groups.length) return { rate: 1, missing: [] as string[][] };
   const value = normalize(text);
-  const missing = groups.filter((group) => !group.some((term) => value.includes(term.toLowerCase()))).map((group) => [...group]);
+  const compact = value.replace(/\s+/g, "");
+  const missing = groups.filter((group) => !group.some((term) => {
+    const normalizedTerm = term.toLowerCase();
+    return value.includes(normalizedTerm) || compact.includes(normalizedTerm.replace(/\s+/g, ""));
+  })).map((group) => [...group]);
   return { rate: Number(((groups.length - missing.length) / groups.length).toFixed(4)), missing };
 }
 
 function openingOf(text: string) {
   return text.replace(/[#*_>`\-\d.、\s]/g, "").slice(0, 24);
+}
+
+function closingOf(text: string) {
+  return text.split(/\n\s*\n/).filter(Boolean).at(-1)?.replace(/[#*_>`\-\d.、\s]/g, "").slice(-32) ?? "";
 }
 
 function hasInterviewStructure(text: string) {
@@ -179,7 +199,7 @@ function hasInterviewStructure(text: string) {
 
 export function evaluateAnswerQuality(
   text: string,
-  fixture: Pick<EvaluationCase, "requiredSemanticGroups" | "forbiddenPatterns" | "forbiddenFacts" | "expectedStructure"> & { anchors?: readonly string[] },
+  fixture: Pick<EvaluationCase, "requiredSemanticGroups" | "forbiddenPatterns" | "forbiddenFacts" | "expectedStructure"> & { anchors?: readonly string[]; targetLength?: { min: number; max: number }; boundaryExpected?: boolean },
 ): AnswerQuality {
   const groups = fixture.requiredSemanticGroups ?? fixture.anchors?.map((anchor) => [anchor]) ?? [];
   const coverage = semanticCoverage(text, groups);
@@ -197,11 +217,14 @@ export function evaluateAnswerQuality(
     contentCoverage: coverage.rate,
     missingSemanticGroups: coverage.missing,
     length: text.length,
-    lengthCompliant: text.length >= 300 && text.length <= 500,
+    lengthCompliant: text.length >= (fixture.targetLength?.min ?? 80) && text.length <= (fixture.targetLength?.max ?? 500),
     structureCompliant: fixture.expectedStructure === "direct" ? text.trim().length > 0 : hasInterviewStructure(text),
     boilerplateHits,
     internalWordingHits,
     opening: openingOf(text),
+    closing: closingOf(text),
+    thirdPersonVoice: /(?:张倬玮|他|候选人)(?:的|在|能|会|适合|负责)/.test(text),
+    unpromptedLimitation: !fixture.boundaryExpected && /(?:当前阶段|尚未|暂未|还没有|能力限制|项目限制|短板)/.test(text),
   };
 }
 
@@ -233,14 +256,16 @@ function localAnswer(question: string, history: Array<{ role: "user" | "assistan
   if (!assessment.allowed) return { text: assessment.reason, responseStatus: "refused", claimIds: [], sourceIds: [], answerMode: "guardrail" };
   const items = retrieveKnowledge(assessment.question, { history, limit: 4 });
   const stableAnswer = matchStableAnswer(assessment.question, history);
+  const plan = buildAnswerPlan(assessment.question, items, stableAnswer, history);
   const claimIds = stableAnswer ? [...stableAnswer.requiredClaimIds] : [...new Set(items.flatMap((item) => item.claimIds))];
   const sourceIds = stableAnswer ? [...stableAnswer.requiredSourceIds] : [...new Set(items.flatMap((item) => item.sourceIds))];
   return {
-    text: demoAnswer(assessment.question, items, stableAnswer),
+    text: demoAnswer(assessment.question, items, stableAnswer, history),
     responseStatus: items.length || stableAnswer ? "completed" : "insufficient_evidence",
     claimIds,
     sourceIds,
     answerMode: stableAnswer ? "stable" : "retrieval",
+    storyIds: plan.relatedStoryId ? [plan.relatedStoryId] : [],
   };
 }
 
@@ -279,7 +304,7 @@ async function deepSeekAnswer(testCase: Pick<InterviewCase, "question" | "roleNa
   };
   const first = await generate();
   const firstGate = validateAnswer(first, plan);
-  if (firstGate.passed) return { ...fallback, text: first, answerMode: "deepseek" };
+  if (firstGate.passed) return { ...fallback, text: first, answerMode: "deepseek", storyIds: plan.relatedStoryId ? [plan.relatedStoryId] : [] };
   const repaired = await generate(repairInstruction(plan, firstGate.triggers));
   const repairedGate = validateAnswer(repaired, plan);
   return { ...fallback, text: repairedGate.passed ? repaired : plan.fallbackAnswer, answerMode: repairedGate.passed ? "deepseek" : fallback.answerMode };
@@ -296,7 +321,7 @@ function average(values: number[]) {
 
 const multiTurnFixtures = [
   { id: "MT-RAG-CONTRIBUTION", project: "RAG" as const, questions: ["介绍一下你的 RAG 知识库项目。", "这个项目中你本人做了什么？", "其中最难的取舍是什么？"], required: [["RAG"], ["判断", "取舍", "验收"], ["检索", "引用", "评测"]] },
-  { id: "MT-RAG-RESULT", project: "RAG" as const, questions: ["RAG 项目解决了什么问题？", "它现在取得了什么结果？", "那还有哪些短板？"], required: [["RAG", "知识库", "专业文档"], ["完成", "实现", "可演示"], ["生产", "规模", "短板", "不足"]] },
+  { id: "MT-RAG-RESULT", project: "RAG" as const, questions: ["RAG 项目解决了什么问题？", "它现在取得了什么结果？", "那还有哪些短板？"], required: [["RAG", "知识库", "专业文档", "专业资料"], ["完成", "实现", "可演示"], ["生产", "规模", "短板", "不足"]] },
   { id: "MT-DEEPFLOW-CHALLENGE", project: "DeepFlow" as const, questions: ["介绍一下 DeepFlow。", "这个项目遇到的挑战是什么？", "你当时如何调整和验证？"], required: [["DeepFlow"], ["挑战", "跑偏", "漂移"], ["人审", "检查", "验证"]] },
 ] as const;
 
@@ -308,7 +333,7 @@ async function runMultiTurn(mode: EvaluationMode, apiKey?: string): Promise<Mult
     for (let index = 0; index < fixture.questions.length; index += 1) {
       const question = fixture.questions[index];
       const answer = await answerForCase({ question, roleName: "AI 产品面试官", roleFocus: "多轮追问和项目细节" }, mode, apiKey, history);
-      const quality = evaluateAnswerQuality(answer.text, { requiredSemanticGroups: [[...fixture.required[index]]], expectedStructure: index === 0 ? "interview" : "direct", forbiddenFacts: [], forbiddenPatterns: [] });
+      const quality = evaluateAnswerQuality(answer.text, { requiredSemanticGroups: [[...fixture.required[index]]], expectedStructure: index === 0 ? "interview" : "direct", forbiddenFacts: [], forbiddenPatterns: [], boundaryExpected: /短板|不足|结果|规模|状态/.test(question) });
       turns.push({ question, answer, quality });
       history.push({ role: "user", content: question }, { role: "assistant", content: answer.text });
     }
@@ -329,6 +354,44 @@ function repeatedOpenings(results: InterviewEvaluationResult[]) {
   return repeated;
 }
 
+function repeatedClosings(results: InterviewEvaluationResult[]) {
+  const repeated: string[] = [];
+  for (const role of interviewRoles) {
+    const roleResults = results.filter((item) => item.roleId === role.id);
+    for (let index = 1; index < roleResults.length; index += 1) {
+      if (roleResults[index].quality.closing.length >= 16 && roleResults[index].quality.closing === roleResults[index - 1].quality.closing) {
+        repeated.push(`${roleResults[index - 1].id} -> ${roleResults[index].id}`);
+      }
+    }
+  }
+  return repeated;
+}
+
+function similarDifferentIntents(results: InterviewEvaluationResult[]) {
+  const oneRole = results.filter((item) => item.roleId === interviewRoles[0].id);
+  const pairs: string[] = [];
+  for (let left = 0; left < oneRole.length; left += 1) {
+    for (let right = left + 1; right < oneRole.length; right += 1) {
+      if (answerSimilarity(oneRole[left].answer.text, oneRole[right].answer.text) >= 0.72) {
+        pairs.push(`${oneRole[left].categoryId} -> ${oneRole[right].categoryId}`);
+      }
+    }
+  }
+  return pairs;
+}
+
+function newInformationRate(results: MultiTurnResult[]) {
+  const rates: number[] = [];
+  for (const result of results) {
+    let previous = "";
+    for (const turn of result.turns) {
+      if (previous) rates.push(1 - answerSimilarity(previous, turn.answer.text));
+      previous += ` ${turn.answer.text}`;
+    }
+  }
+  return average(rates);
+}
+
 function stableReportId(results: InterviewEvaluationResult[], mode: EvaluationMode) {
   return createHash("sha256").update(JSON.stringify({ mode, results })).digest("hex").slice(0, 16);
 }
@@ -342,7 +405,7 @@ export async function runInterviewEvaluation(options: { requestedMode?: "local" 
   const results: InterviewEvaluationResult[] = [];
   for (const testCase of buildInterviewCases()) {
     const answer = await answerForCase(testCase, effectiveMode, apiKey);
-    const quality = evaluateAnswerQuality(answer.text, { anchors: testCase.anchors, forbiddenFacts: [], forbiddenPatterns: testCase.forbiddenPatterns, expectedStructure: "interview" });
+    const quality = evaluateAnswerQuality(answer.text, { anchors: testCase.anchors, forbiddenFacts: [], forbiddenPatterns: testCase.forbiddenPatterns, expectedStructure: "interview", targetLength: testCase.targetLength, boundaryExpected: testCase.boundaryExpected });
     const scores = scoreAnswer(testCase, answer, quality);
     results.push({ ...testCase, syntheticSimulation: true, answer, quality, scores, passed: quality.hardFactsPassed && quality.contentCoverage === 1 && scores.total >= 18 && scores.可信度 >= 4 });
   }
@@ -368,10 +431,21 @@ export async function runInterviewEvaluation(options: { requestedMode?: "local" 
     const roleResults = results.filter((item) => item.roleId === role.id);
     const averageScore = average(roleResults.map((item) => item.scores.total));
     const averageCredibility = average(roleResults.map((item) => item.scores.可信度));
-    return { roleId: role.id, roleName: role.name, averageScore, averageCredibility, recommendsNextRound: roleResults.every((item) => item.quality.hardFactsPassed) && averageScore >= 18 && averageCredibility >= 4.3 };
+    const introduction = roleResults.find((item) => item.categoryId === "sixty_second_intro")?.answer.text ?? "";
+    return {
+      roleId: role.id,
+      roleName: role.name,
+      averageScore,
+      averageCredibility,
+      recommendsNextRound: roleResults.every((item) => item.quality.hardFactsPassed) && averageScore >= 18 && averageCredibility >= 4.3,
+      memorablePhrase: /数据评测/.test(introduction) ? "数据评测 × 企业业务 × 产品落地" : "AI 产品落地",
+      suggestedNextQuestion: role.focus.includes("评测") ? "你如何用 Bad Case 推动一次产品迭代？" : "你在代表项目中做过最关键的取舍是什么？",
+    };
   });
   const recommendedRoleCount = roleRecommendations.filter((item) => item.recommendsNextRound).length;
   const repeatedOpeningPairs = repeatedOpenings(results);
+  const repeatedClosingPairs = repeatedClosings(results);
+  const similarDifferentIntentPairs = similarDifferentIntents(results);
   const allQualities = [...results.map((item) => item.quality), ...coreResults.map((item) => item.quality), ...hallucinationResults.map((item) => item.quality), ...multiTurnResults.flatMap((item) => item.turns.map((turn) => turn.quality))];
   const hardFactViolationCount = allQualities.reduce((sum, item) => sum + item.hardFactViolations.length, 0);
   const qualityGates = {
@@ -385,18 +459,24 @@ export async function runInterviewEvaluation(options: { requestedMode?: "local" 
     boilerplateCaseCount: allQualities.filter((item) => item.boilerplateHits.length).length,
     internalWordingCaseCount: allQualities.filter((item) => item.internalWordingHits.length).length,
     repeatedOpeningPairs,
+    repeatedClosingPairs,
+    similarDifferentIntentPairs,
+    thirdPersonVoiceCount: allQualities.filter((item) => item.thirdPersonVoice).length,
+    unpromptedLimitationCount: allQualities.filter((item) => item.unpromptedLimitation).length,
+    selfIntroductionInternalTermCount: results.filter((item) => item.categoryId === "sixty_second_intro" && /(?:Dense Retrieval|Rerank|RAGAS|Claim|Source|NDJSON|技术栈)/i.test(item.answer.text)).length,
+    multiTurnNewInformationRate: newInformationRate(multiTurnResults),
     multiTurnPassed: multiTurnResults.every((item) => item.passed),
   };
   const passedRecommendationGate = recommendedRoleCount >= 5;
   const passedQualityGate = averageByDimension.清晰度 >= 4.3 && averageByDimension.差异化 >= 4.3 && averageByDimension.可信度 >= 4.3;
-  const passedLaunchGate = passedRecommendationGate && passedQualityGate && qualityGates.hardFactsPassed && qualityGates.hallucinationRegressionPassed && qualityGates.coreContentPassed && qualityGates.lengthComplianceRate >= 0.9 && qualityGates.internalWordingCaseCount === 0 && qualityGates.repeatedOpeningPairs.length === 0 && qualityGates.multiTurnPassed;
+  const passedLaunchGate = passedRecommendationGate && passedQualityGate && qualityGates.hardFactsPassed && qualityGates.hallucinationRegressionPassed && qualityGates.coreContentPassed && qualityGates.lengthComplianceRate >= 0.9 && qualityGates.internalWordingCaseCount === 0 && qualityGates.repeatedOpeningPairs.length === 0 && qualityGates.repeatedClosingPairs.length === 0 && qualityGates.similarDifferentIntentPairs.length === 0 && qualityGates.thirdPersonVoiceCount === 0 && qualityGates.unpromptedLimitationCount === 0 && qualityGates.selfIntroductionInternalTermCount === 0 && qualityGates.multiTurnNewInformationRate >= 0.7 && qualityGates.multiTurnPassed;
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     reportId: stableReportId(results, effectiveMode),
     generatedAt: (options.generatedAt ?? new Date()).toISOString(),
     simulation: { synthetic: true, label: "AI 合成面试预演，不代表真实招聘方意见，不能替代真人测试。", replacesHumanTesting: false, roleCount: interviewRoles.length, categoryCount: questionCategories.length, caseCount: results.length },
     execution: { requestedMode, effectiveMode, ...(effectiveMode === "deepseek" ? { model: process.env.DEEPSEEK_MODEL ?? "deepseek-v4-flash" } : {}) },
-    scoring: { scale: "0-5", dimensions: scoreDimensions, casePassThreshold: 18, recommendedRoleThreshold: 5, qualityAverageThreshold: 4.3, targetLength: "300-500" },
+    scoring: { scale: "0-5", dimensions: scoreDimensions, casePassThreshold: 18, recommendedRoleThreshold: 5, qualityAverageThreshold: 4.3, targetLength: "adaptive" },
     qualityGates,
     summary: { passedCases, failedCases: results.length - passedCases, passRate: Number((passedCases / results.length).toFixed(4)), averageScore: average(results.map((item) => item.scores.total)), averageByDimension, recommendedRoleCount, passedRecommendationGate, passedQualityGate, passedLaunchGate },
     roleRecommendations,

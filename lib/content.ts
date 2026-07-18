@@ -3,6 +3,7 @@ import { knowledgeContent, projectAliases, strengthContent, suggestedQuestionCon
 import { faqContent, stableAnswerContent } from "../content/qa.ts";
 import { sourceContent, claimContent } from "../content/sources-claims.ts";
 import { starStoryContent } from "../content/stories.ts";
+import { candidateNarrative } from "../content/narrative.ts";
 import obsidianApprovedKnowledgeContent from "../content/obsidian-approved.json";
 
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "必须使用 YYYY-MM-DD 日期");
@@ -94,6 +95,8 @@ export const starStorySchema = z.object({
   action: z.string().min(1),
   result: z.string().min(1),
   limitations: z.string().min(1),
+  competency: z.string().min(1),
+  interviewUse: z.array(z.string().min(1)).min(1),
   claimIds: z.array(z.string().regex(/^C\d+$/)).min(1),
   sourceIds: z.array(z.string().regex(/^S\d+$/)).min(1),
 });
@@ -110,6 +113,14 @@ export const stableAnswerSchema = z.object({
   requiredClaimIds: z.array(z.string().regex(/^C\d+$/)).min(1),
   requiredSourceIds: z.array(z.string().regex(/^S\d+$/)).min(1),
   matchKeywords: z.array(z.string().min(1)).min(1),
+  evaluationGoal: z.string().min(1),
+  exclusivePoints: z.array(z.string().min(1)).min(1),
+  avoidRepeating: z.array(z.string().min(1)).min(1),
+  responseShape: z.enum(["narrative", "direct", "fit_mapping", "project_arc", "contribution", "star", "shortcoming", "recommendation"]),
+  targetLength: z.object({ min: z.number().int().min(80), max: z.number().int().max(600) }).refine((value) => value.min < value.max, "最小长度必须小于最大长度"),
+  preferredStoryIds: z.array(z.string().regex(/^ST\d+$/)),
+  followUpQuestions: z.array(z.string().min(1)).min(1).max(4),
+  closingPurpose: z.string().min(1),
   factSkeleton: z.object({
     intent: z.enum(["introduction", "role_fit", "representative_project", "project_overview", "project_problem", "contribution", "ai_collaboration", "challenge", "result", "limitation", "skills", "experience", "experience_value", "privacy", "education", "credentials", "hiring_recommendation", "general"]),
     thesis: z.string().min(1),
@@ -132,6 +143,17 @@ export const faqSchema = z.object({
 });
 
 export const contentCatalogSchema = z.object({
+  narrative: z.object({
+    lastUpdated: isoDate,
+    positioning: z.string().min(1),
+    journey: z.array(z.string().min(1)).length(4),
+    differentiators: z.array(z.object({ id: z.string().min(1), label: z.string().min(1), statement: z.string().min(1) })).length(3),
+    projectAnchors: z.array(z.string().min(1)).length(2),
+    roleDirections: z.array(z.string().min(1)).length(3),
+    voice: z.object({ person: z.literal("first_person"), tone: z.array(z.string().min(1)).min(3), emphasis: z.string().min(1) }),
+    excludedTopics: z.array(z.string().min(1)).min(1),
+    introductions: z.object({ seconds30: z.string().min(100), seconds60: z.string().min(200), seconds90: z.string().min(300) }),
+  }),
   strengths: z.array(z.object({ title: z.string().min(1), description: z.string().min(1) })).length(3),
   sources: z.array(sourceSchema).min(1),
   claims: z.array(claimSchema).min(1),
@@ -211,6 +233,7 @@ export const contentCatalogSchema = z.object({
 });
 
 export const contentCatalog = contentCatalogSchema.parse({
+  narrative: candidateNarrative,
   strengths: strengthContent,
   sources: sourceContent,
   claims: claimContent,

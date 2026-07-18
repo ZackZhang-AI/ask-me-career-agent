@@ -4,6 +4,8 @@ export type Visibility = "public" | "private";
 export type ContentStatus = "active" | "draft" | "archived";
 export type ResponseStatus = "completed" | "insufficient_evidence" | "refused" | "rate_limited" | "budget_exhausted" | "upstream_error";
 export type EvidenceBasis = "confirmed_fact" | "source_view" | "user_statement" | "inference";
+export type ResponseShape = "narrative" | "direct" | "fit_mapping" | "project_arc" | "contribution" | "star" | "shortcoming" | "recommendation";
+export type ConversationDepth = "overview" | "follow_up" | "deep_dive";
 export type AnswerIntent =
   | "introduction"
   | "role_fit"
@@ -48,6 +50,18 @@ export interface AnswerPlan {
   shouldMentionLimitations: boolean;
   limitations?: string;
   relatedStoryId?: string;
+  evaluationGoal: string;
+  exclusivePoints: string[];
+  newInformationGoal: string[];
+  usedFactIds: string[];
+  usedStoryIds: string[];
+  avoidPoints: string[];
+  conversationDepth: ConversationDepth;
+  responseShape: ResponseShape;
+  closingPurpose: string;
+  targetLength: { min: number; max: number };
+  followUpQuestions: string[];
+  recentAnswers: string[];
   fallbackAnswer: string;
 }
 
@@ -113,6 +127,8 @@ export interface StarStory extends ContentMetadata {
   action: string;
   result: string;
   limitations: string;
+  competency: string;
+  interviewUse: string[];
   claimIds: string[];
   sourceIds: string[];
 }
@@ -135,6 +151,14 @@ export interface StableAnswer extends ContentMetadata {
   requiredClaimIds: string[];
   requiredSourceIds: string[];
   matchKeywords: string[];
+  evaluationGoal: string;
+  exclusivePoints: string[];
+  avoidRepeating: string[];
+  responseShape: ResponseShape;
+  targetLength: { min: number; max: number };
+  preferredStoryIds: string[];
+  followUpQuestions: string[];
+  closingPurpose: string;
   factSkeleton: AnswerFactSkeleton;
 }
 
