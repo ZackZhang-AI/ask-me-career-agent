@@ -323,6 +323,26 @@ const multiTurnFixtures = [
   { id: "MT-RAG-CONTRIBUTION", project: "RAG" as const, questions: ["介绍一下你的 RAG 知识库项目。", "这个项目中你本人做了什么？", "其中最难的取舍是什么？"], required: [["RAG"], ["判断", "取舍", "验收"], ["检索", "引用", "评测"]] },
   { id: "MT-RAG-RESULT", project: "RAG" as const, questions: ["RAG 项目解决了什么问题？", "它现在取得了什么结果？", "那还有哪些短板？"], required: [["RAG", "知识库", "专业文档", "专业资料"], ["完成", "实现", "可演示"], ["生产", "规模", "短板", "不足"]] },
   { id: "MT-DEEPFLOW-CHALLENGE", project: "DeepFlow" as const, questions: ["介绍一下 DeepFlow。", "这个项目遇到的挑战是什么？", "你当时如何调整和验证？"], required: [["DeepFlow"], ["挑战", "跑偏", "漂移"], ["人审", "检查", "验证"]] },
+  {
+    id: "MT-RAG-DEEP-DIVE",
+    project: "RAG" as const,
+    questions: [
+      "介绍一下你的 RAG 知识库项目。",
+      "这个项目中你本人做了什么？",
+      "其中最难的取舍是什么？",
+      "如果把这些方法迁移到新的内部知识管理场景，你会优先判断什么？",
+      "他对企业级 AI 场景有哪些理解？",
+      "他在数据分析与 AI 评测方面有哪些实践？",
+    ],
+    required: [
+      ["RAG"],
+      ["判断", "取舍", "验收"],
+      ["检索", "引用", "评测"],
+      ["判断", "检索", "验证"],
+      ["流程价值", "责任边界", "验证闭环"],
+      ["数据分析", "AI 评测", "RAGAS"],
+    ],
+  },
 ] as const;
 
 async function runMultiTurn(mode: EvaluationMode, apiKey?: string): Promise<MultiTurnResult[]> {

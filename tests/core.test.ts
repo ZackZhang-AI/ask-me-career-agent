@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { buildAnswerPlan, demoAnswer, systemPrompt } from "../lib/answer.ts";
+import { validateAnswer } from "../lib/answer-quality.ts";
 import { assessQuestion, redactForLog } from "../lib/guardrails.ts";
 import { claims, getRelatedStarStories, knowledge, matchStableAnswer, retrieveKnowledge, sources } from "../lib/knowledge.ts";
 
@@ -99,6 +100,63 @@ test("多轮回答计划识别已讲内容并要求补充新信息", () => {
   assert.equal(plan.recentAnswers.length, 1);
   assert.equal(plan.newInformationGoal.length > 0, true);
   assert.match(plan.closingPurpose, /验收|负责|价值|判断/);
+  assert.equal(plan.followUpQuestions.length, 3);
+  assert.equal(plan.followUpQuestions.includes(question), false);
+});
+
+test("深层追问保持专属意图、信息密度和自然表达", () => {
+  const history = [
+    { role: "user" as const, content: "请介绍一下你的背景。" },
+    { role: "assistant" as const, content: "我具备应用统计学、审计业务与 AI 产品项目经验。" },
+    { role: "user" as const, content: "哪个项目最有代表性？" },
+    { role: "assistant" as const, content: "RAG 与 DeepFlow 分别体现知识库评测和 Agent 工作流能力。" },
+    { role: "user" as const, content: "你具体负责了什么？" },
+    { role: "assistant" as const, content: "我负责问题定义、方案取舍和最终验收。" },
+  ];
+  const cases = [
+    { question: "他对企业级 AI 场景有哪些理解？", answerId: "A21", intent: "experience_value", terms: /流程价值|责任边界|验证闭环/ },
+    { question: "他如何把业务问题转化为 AI 产品方案？", answerId: "A22", intent: "experience_value", terms: /定义问题|方案边界|最小链路/ },
+    { question: "他在数据分析与 AI 评测方面有哪些实践？", answerId: "A23", intent: "skills", terms: /数据分析基础|AI 评测实践|RAGAS/ },
+  ] as const;
+
+  for (const item of cases) {
+    const retrieved = retrieveKnowledge(item.question, { history });
+    const stable = matchStableAnswer(item.question, history);
+    assert.equal(stable?.id, item.answerId);
+    const plan = buildAnswerPlan(item.question, retrieved, stable, history);
+    assert.equal(plan.intent, item.intent);
+    assert.equal(plan.conversationDepth, "deep_dive");
+    assert.equal(plan.fallbackAnswer.length >= plan.targetLength.min && plan.fallbackAnswer.length <= plan.targetLength.max, true, item.answerId);
+    assert.match(plan.fallbackAnswer, item.terms);
+    assert.doesNotMatch(plan.fallbackAnswer, /候选人负责|我需要重新|我需要在 Agent/);
+    assert.equal(validateAnswer(plan.fallbackAnswer, plan).passed, true, item.answerId);
+  }
+});
+
+test("第 4 轮开放追问延续项目语境且不拼接原始字段", () => {
+  const history = [
+    { role: "user" as const, content: "介绍一下你的 RAG 知识库项目。" },
+    { role: "assistant" as const, content: "我把它定位成专业文档问答系统，重点是检索、引用和评测闭环。" },
+    { role: "user" as const, content: "这个项目中你本人做了什么？" },
+    { role: "assistant" as const, content: "我负责产品定位、检索策略、评测设计和整体验收。" },
+    { role: "user" as const, content: "其中最难的取舍是什么？" },
+    { role: "assistant" as const, content: "最难的是在召回覆盖、答案可信度和实现复杂度之间做取舍。" },
+  ];
+  const question = "如果把这些方法迁移到新的内部知识管理场景，你会优先判断什么？";
+  const items = retrieveKnowledge(question, { history, limit: 6 });
+  const stable = matchStableAnswer(question, history);
+  const plan = buildAnswerPlan(question, items, stable, history);
+
+  assert.equal(stable, undefined);
+  assert.equal(plan.intent, "general");
+  assert.equal(plan.conversationDepth, "deep_dive");
+  assert.ok(items.length >= 4);
+  assert.ok(items.every((item) => item.relatedProject === "rag-knowledge-base"));
+  assert.match(plan.fallbackAnswer, /检索|引用|评测|验证/);
+  assert.doesNotMatch(plan.fallbackAnswer, /候选人负责|我需要重新|我需要在 Agent/);
+  assert.ok(plan.fallbackAnswer.length >= plan.targetLength.min);
+  assert.ok(plan.fallbackAnswer.length <= plan.targetLength.max);
+  assert.equal(validateAnswer(plan.fallbackAnswer, plan).passed, true);
 });
 
 test("自然语言改写仍能召回正确经历", () => {

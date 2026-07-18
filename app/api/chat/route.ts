@@ -4,6 +4,7 @@ import { repairInstruction, validateAnswer } from "@/lib/answer-quality";
 import { DeepSeekUpstreamError, generateDeepSeekAnswer } from "@/lib/deepseek";
 import { assessQuestion } from "@/lib/guardrails";
 import { getClaims, getSources, matchStableAnswer, retrieveKnowledge, serializeKnowledgeItems } from "@/lib/knowledge";
+import { getFollowUpQuestions } from "@/lib/question-suggestions";
 import { checkRequestLimits, extractClientIp, recordTokenUsage, reserveAdditionalModelCall } from "@/lib/rate-limit";
 import type { ChatMessage, ResponseStatus } from "@/lib/types";
 
@@ -83,7 +84,8 @@ export async function POST(request: NextRequest) {
   const latest = [...body.messages].reverse().find((message) => message.role === "user");
   if (!latest) return errorResponse("upstream_error", "没有找到有效问题。", 400);
 
-  const estimatedTokens = Math.min(6_000, Math.ceil(JSON.stringify(body.messages.slice(-8)).length / 3) + 3_000);
+  const recentModelMessages = body.messages.slice(-10);
+  const estimatedTokens = Math.min(7_000, Math.ceil(JSON.stringify(recentModelMessages).length / 3) + 3_000);
   const rate = await checkRequestLimits({ ip: extractClientIp(request), sessionId: body.sessionId, estimatedTokens });
   if (!rate.ok) return errorResponse(rate.code, rate.message, rate.code === "rate_limited" ? 429 : 503, rate.retryAfterSeconds);
 
@@ -97,12 +99,16 @@ export async function POST(request: NextRequest) {
       sourceIds: [],
       sources: [],
       items: [],
+      followUpQuestions: getFollowUpQuestions(
+        latest.content,
+        body.messages.filter((message) => message.role === "user").map((message) => message.content),
+      ),
       startedAt,
       tokenReservation: rate.tokenReservation,
     });
   }
 
-  const history = body.messages.slice(0, -1).slice(-8);
+  const history = body.messages.slice(0, -1).slice(-12);
   const items = retrieveKnowledge(assessment.question, { history, limit: 4 });
   const stableAnswer = matchStableAnswer(assessment.question, history);
   const claimIds = stableAnswer ? [...stableAnswer.requiredClaimIds] : [...new Set(items.flatMap((item) => item.claimIds))];
@@ -154,7 +160,7 @@ export async function POST(request: NextRequest) {
       messages: [
         { role: "system", content: systemPrompt },
         { role: "system", content: contextMessage },
-        ...body.messages.slice(-8),
+        ...recentModelMessages,
       ],
       signal: controller.signal,
     });
@@ -182,7 +188,7 @@ export async function POST(request: NextRequest) {
             { role: "system", content: systemPrompt },
             { role: "system", content: contextMessage },
             { role: "system", content: repairInstruction(plan, firstGate.triggers) },
-            ...body.messages.slice(-8),
+            ...recentModelMessages,
           ],
           signal: controller.signal,
         });
@@ -200,7 +206,7 @@ export async function POST(request: NextRequest) {
     }
 
     clearTimeout(timeout);
-    console.info("ask-me-quality", JSON.stringify({ intent: plan.intent, path, rewriteCount, initialTriggers: firstTriggers, finalTriggers }));
+    console.info("ask-me-quality", JSON.stringify({ intent: plan.intent, depth: plan.conversationDepth, path, rewriteCount, initialTriggers: firstTriggers, finalTriggers }));
     return textStream({
       answer,
       mode: path === "fallback" ? (stableAnswer ? "stable" : "demo") : "live",

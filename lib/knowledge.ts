@@ -13,7 +13,7 @@ export const suggestedQuestions = contentCatalog.suggestedQuestions;
 
 const sourceById = new Map(sources.map((source) => [source.id, source]));
 const claimById = new Map(claims.map((claim) => [claim.id, claim]));
-const referencePattern = /(这个|该项目|其中|它|上述|前者|后者|那个项目|这套系统)/;
+const referencePattern = /(这个|该项目|其中|它|上述|前者|后者|那个项目|这套系统|这些(?:方法|实践|能力|项目|经验))/;
 const implicitFollowupPattern = /你(?:本人)?做了什么|你负责什么|具体做了什么|你的贡献|遇到(?:什么)?(?:挑战|困难)|有什么结果|现在怎么样/;
 
 function isPublicActive(item: { visibility: string; status: string; verification: string; projectStatus?: string }) {
@@ -54,7 +54,7 @@ export interface RetrievalOptions {
 
 export function resolveRetrievalQuery(question: string, history: ChatMessage[] = []) {
   const recentContext = (referencePattern.test(question) || implicitFollowupPattern.test(question))
-    ? history.slice(-4).map((message) => message.content.slice(0, 300)).join(" ")
+    ? history.slice(-8).map((message) => message.content.slice(0, 300)).join(" ")
     : "";
   const base = `${question} ${recentContext}`;
   const normalized = normalizeSearchText(base);
@@ -81,7 +81,12 @@ export function retrieveKnowledge(question: string, limitOrOptions: number | Ret
     matchedProjects: resolved.matchedProjects,
     limit: resolved.matchedProjects.length > 1 ? 8 : limit,
   }).map(({ item }) => item);
-  if (resolved.matchedProjects.length < 2) return ranked.slice(0, limit);
+  if (resolved.matchedProjects.length === 1) {
+    const project = resolved.matchedProjects[0];
+    const sameProject = knowledge.filter((item) => isRetrievable(item) && item.relatedProject === project);
+    return [...new Map([...ranked, ...sameProject].map((item) => [item.id, item])).values()].slice(0, limit);
+  }
+  if (resolved.matchedProjects.length === 0) return ranked.slice(0, limit);
   const projectRepresentatives = resolved.matchedProjects
     .map((project) => ranked.find((item) => item.relatedProject === project))
     .filter((item): item is KnowledgeItem => Boolean(item));
