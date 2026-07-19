@@ -1,10 +1,11 @@
 import { NextRequest } from "next/server";
-import { buildAnswerPlan, buildContext, demoAnswer, systemPrompt } from "@/lib/answer";
+import { buildAnswerPlan, buildContext, systemPrompt } from "@/lib/answer";
 import { repairInstruction, validateAnswer } from "@/lib/answer-quality";
-import { DeepSeekUpstreamError, generateDeepSeekAnswer } from "@/lib/deepseek";
+import { DeepSeekPlannerError, DeepSeekUpstreamError, generateDeepSeekAnswer, planDeepSeekQuestion } from "@/lib/deepseek";
 import { assessQuestion } from "@/lib/guardrails";
 import { getClaims, getSources, matchStableAnswer, resolveRetrievalQuery, retrieveKnowledge, serializeKnowledgeItems } from "@/lib/knowledge";
 import { getFollowUpQuestions } from "@/lib/question-suggestions";
+import { buildLocalQuestionFrame, findQuestionContract, mergePlannedFrame } from "@/lib/question-contracts";
 import { checkRequestLimits, extractClientIp, recordTokenUsage, reserveAdditionalModelCall } from "@/lib/rate-limit";
 import type { ChatMessage, ResponseStatus } from "@/lib/types";
 
@@ -109,15 +110,60 @@ export async function POST(request: NextRequest) {
   }
 
   const history = body.messages.slice(0, -1).slice(-12);
-  const items = retrieveKnowledge(assessment.question, { history, limit: 4 });
-  const stableAnswer = matchStableAnswer(assessment.question, history);
+  const apiKey = process.env.DEEPSEEK_API_KEY;
+  const contract = findQuestionContract(assessment.question);
+  const localFrame = buildLocalQuestionFrame(assessment.question, history);
+  let frame = localFrame;
+  let plannerUsed = false;
+  let plannerFallbackReason: string | undefined;
+  let plannerTokens = 0;
+  let plannerReservation = 0;
+
+  if (!contract && localFrame.confidence < 0.8 && apiKey) {
+    const plannerBudget = await reserveAdditionalModelCall(1_200);
+    if (!plannerBudget.ok) {
+      plannerFallbackReason = "planner_budget_exhausted";
+    } else {
+      plannerReservation = plannerBudget.tokenReservation;
+      const plannerController = new AbortController();
+      const plannerTimeout = setTimeout(() => plannerController.abort(), 8_000);
+      request.signal.addEventListener("abort", () => plannerController.abort(), { once: true });
+      try {
+        const planned = await planDeepSeekQuestion({
+          apiKey,
+          question: assessment.question,
+          history,
+          signal: plannerController.signal,
+        });
+        frame = mergePlannedFrame(localFrame, planned.frame);
+        plannerTokens = planned.totalTokens;
+        plannerUsed = true;
+      } catch (error) {
+        plannerFallbackReason = error instanceof DeepSeekPlannerError
+          ? error.reason
+          : error instanceof DeepSeekUpstreamError
+            ? `upstream_${error.status}`
+            : error instanceof Error && error.name === "AbortError" ? "aborted" : "planner_failed";
+      } finally {
+        clearTimeout(plannerTimeout);
+      }
+    }
+  }
+
+  const items = retrieveKnowledge(assessment.question, { history, limit: 4, frame });
+  const stableAnswer = matchStableAnswer(assessment.question, history, frame);
   const claimIds = stableAnswer ? [...stableAnswer.requiredClaimIds] : [...new Set(items.flatMap((item) => item.claimIds))];
   const sourceIds = stableAnswer ? [...stableAnswer.requiredSourceIds] : [...new Set(items.flatMap((item) => item.sourceIds))];
   const matchedSources = getSources(sourceIds);
-  const plan = buildAnswerPlan(assessment.question, items, stableAnswer, history);
+  const plan = buildAnswerPlan(assessment.question, items, stableAnswer, history, frame, contract);
   const retrievalTrace = resolveRetrievalQuery(assessment.question, history);
   console.info("ask-me-retrieval", JSON.stringify({
-    version: "context-v3",
+    version: "question-frame-v1",
+    contractId: contract?.id,
+    topic: frame.topic,
+    facet: frame.facet,
+    plannerUsed,
+    plannerFallbackReason,
     historyCount: history.length,
     contextApplied: retrievalTrace.contextApplied,
     matchedProjects: retrievalTrace.matchedProjects,
@@ -125,9 +171,9 @@ export async function POST(request: NextRequest) {
     stableAnswerId: stableAnswer?.id,
   }));
 
-  if (!stableAnswer && (!items.length || !claimIds.length || !sourceIds.length)) {
+  if (!stableAnswer && !plan.answerableWithoutRetrievedEvidence && (!items.length || !claimIds.length || !sourceIds.length)) {
     return textStream({
-      answer: demoAnswer(assessment.question, [], undefined, history),
+      answer: plan.fallbackAnswer,
       mode: "demo",
       responseStatus: "insufficient_evidence",
       claimIds: [],
@@ -136,14 +182,14 @@ export async function POST(request: NextRequest) {
       items: [],
       followUpQuestions: plan.followUpQuestions,
       startedAt,
-      tokenReservation: rate.tokenReservation,
+      tokenReservation: rate.tokenReservation + plannerReservation,
+      actualTokens: plannerTokens,
     });
   }
 
-  const apiKey = process.env.DEEPSEEK_API_KEY;
   if (!apiKey) {
     return textStream({
-      answer: demoAnswer(assessment.question, items, stableAnswer, history),
+      answer: plan.fallbackAnswer,
       mode: stableAnswer ? "stable" : "demo",
       responseStatus: "completed",
       claimIds,
@@ -152,7 +198,8 @@ export async function POST(request: NextRequest) {
       items,
       followUpQuestions: plan.followUpQuestions,
       startedAt,
-      tokenReservation: rate.tokenReservation,
+      tokenReservation: rate.tokenReservation + plannerReservation,
+      actualTokens: plannerTokens,
     });
   }
 
@@ -160,8 +207,8 @@ export async function POST(request: NextRequest) {
   const timeout = setTimeout(() => controller.abort(), 45_000);
   request.signal.addEventListener("abort", () => controller.abort(), { once: true });
   const contextMessage = `以下是本轮回答计划和公开事实，只能据此回答：\n${buildContext(items, plan)}`;
-  let totalTokens = 0;
-  let totalReservation = rate.tokenReservation;
+  let totalTokens = plannerTokens;
+  let totalReservation = rate.tokenReservation + plannerReservation;
   let firstTriggers: string[] = [];
   try {
     const first = await generateDeepSeekAnswer({
@@ -215,7 +262,17 @@ export async function POST(request: NextRequest) {
     }
 
     clearTimeout(timeout);
-    console.info("ask-me-quality", JSON.stringify({ intent: plan.intent, depth: plan.conversationDepth, path, rewriteCount, initialTriggers: firstTriggers, finalTriggers }));
+    console.info("ask-me-quality", JSON.stringify({
+      contractId: plan.contractId,
+      topic: plan.topic,
+      facet: plan.facet,
+      plannerUsed,
+      retrievalItemIds: items.map((item) => item.id),
+      answerPath: path,
+      rewriteCount,
+      relevanceTriggers: [...new Set([...firstTriggers, ...finalTriggers])],
+      plannerFallbackReason,
+    }));
     return textStream({
       answer,
       mode: path === "fallback" ? (stableAnswer ? "stable" : "demo") : "live",
@@ -232,10 +289,10 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     clearTimeout(timeout);
-    if (stableAnswer) {
+    if (stableAnswer || plan.answerableWithoutRetrievedEvidence) {
       return textStream({
         answer: plan.fallbackAnswer,
-        mode: "stable",
+        mode: stableAnswer ? "stable" : "demo",
         responseStatus: "completed",
         claimIds,
         sourceIds,

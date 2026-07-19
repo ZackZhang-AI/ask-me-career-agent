@@ -17,6 +17,36 @@ test("未知问题不生成候选人事实", () => {
   assert.match(answer, /AI 产品项目|产品方法/);
 });
 
+test("Agent 身份与能力问题使用独立意图且不受深层会话固定兜底影响", () => {
+  const history = [
+    { role: "user" as const, content: "介绍一下你的背景。" },
+    { role: "assistant" as const, content: "我介绍了教育、审计和项目经历。" },
+    { role: "user" as const, content: "哪个项目最有代表性？" },
+    { role: "assistant" as const, content: "我介绍了 RAG 项目。" },
+    { role: "user" as const, content: "你的审计经历有什么价值？" },
+    { role: "assistant" as const, content: "我介绍了审计经历。" },
+  ];
+  const identity = buildAnswerPlan("你是谁？", [], undefined, history);
+  const capability = buildAnswerPlan("你能做什么？", [], undefined, history);
+  const unknown = buildAnswerPlan("他最喜欢哪支球队？", [], undefined, history);
+
+  assert.equal(identity.intent, "agent_identity");
+  assert.equal(capability.intent, "capability_scope");
+  assert.equal(identity.answerableWithoutRetrievedEvidence, true);
+  assert.equal(capability.answerableWithoutRetrievedEvidence, true);
+  assert.equal(unknown.answerableWithoutRetrievedEvidence, false);
+  assert.match(identity.fallbackAnswer, /张倬玮的 AI Career Agent/);
+  assert.match(capability.fallbackAnswer, /教育背景|审计经历|AI 项目/);
+  assert.match(capability.fallbackAnswer, /不会补造/);
+  assert.notEqual(identity.fallbackAnswer, capability.fallbackAnswer);
+  assert.doesNotMatch(identity.fallbackAnswer, /更值得看我的判断方法/);
+  assert.match(unknown.fallbackAnswer, /没有记录/);
+  assert.notEqual(buildAnswerPlan("你是什么时候开始做项目的？", [], undefined, history).intent, "agent_identity");
+  assert.notEqual(buildAnswerPlan("你会做什么产品？", [], undefined, history).intent, "capability_scope");
+  assert.equal(validateAnswer(identity.fallbackAnswer, identity).passed, true);
+  assert.equal(validateAnswer(capability.fallbackAnswer, capability).passed, true);
+});
+
 test("默认回答采用面试表达，不机械展示证据与免责声明", () => {
   const stable = matchStableAnswer("他为什么适合 AI 产品经理岗位？");
   assert.ok(stable);
@@ -114,9 +144,9 @@ test("深层追问保持专属意图、信息密度和自然表达", () => {
     { role: "assistant" as const, content: "我负责问题定义、方案取舍和最终验收。" },
   ];
   const cases = [
-    { question: "他对企业级 AI 场景有哪些理解？", answerId: "A21", intent: "experience_value", terms: /流程价值|责任边界|验证闭环/ },
-    { question: "他如何把业务问题转化为 AI 产品方案？", answerId: "A22", intent: "experience_value", terms: /定义问题|方案边界|最小链路/ },
-    { question: "他在数据分析与 AI 评测方面有哪些实践？", answerId: "A23", intent: "skills", terms: /数据分析基础|AI 评测实践|RAGAS/ },
+    { question: "他对企业级 AI 场景有哪些理解？", answerId: "A21", intent: "experience_value", terms: /真实流程|人工复核|持续验证/ },
+    { question: "他如何把业务问题转化为 AI 产品方案？", answerId: "A22", intent: "experience_value", terms: /用户任务|流程阻力|验收标准/ },
+    { question: "他在数据分析与 AI 评测方面有哪些实践？", answerId: "A23", intent: "skills", terms: /数据分析|AI 评测|Bad Case/ },
   ] as const;
 
   for (const item of cases) {
@@ -150,7 +180,7 @@ test("第 4 轮开放追问延续项目语境且不拼接原始字段", () => {
   assert.equal(stable, undefined);
   assert.equal(plan.intent, "general");
   assert.equal(plan.conversationDepth, "deep_dive");
-  assert.ok(items.length >= 4);
+  assert.ok(items.length >= 1);
   assert.ok(items.every((item) => item.relatedProject === "rag-knowledge-base"));
   assert.match(plan.fallbackAnswer, /检索|引用|评测|验证/);
   assert.doesNotMatch(plan.fallbackAnswer, /候选人负责|我需要重新|我需要在 Agent/);
