@@ -26,10 +26,10 @@ export const featuredProjects = [
     status: "已完成公开仓库",
   },
   {
-    name: "Thirty-Minute Brain",
-    summary: "本地优先的桌面上下文检索工具，帮助快速恢复最近工作现场。",
-    stack: "Tauri / React / Rust / SQLite FTS5",
-    url: "https://github.com/ZackZhang-AI/thirty-minute-brain",
-    status: "已完成公开仓库",
+    name: "Ask Me Career Agent",
+    summary: "面向 AI 产品招聘场景的公开资料问答 Agent，支持多轮问答、来源核验与动态追问。",
+    stack: "Next.js / TypeScript / RAG / DeepSeek",
+    url: "https://github.com/ZackZhang-AI/ask-me-career-agent",
+    status: "已上线公开项目",
   },
 ] as const;
