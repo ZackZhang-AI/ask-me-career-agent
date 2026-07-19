@@ -125,7 +125,7 @@ export async function POST(request: NextRequest) {
     stableAnswerId: stableAnswer?.id,
   }));
 
-  if (!stableAnswer && (!items.length || !claimIds.length || !sourceIds.length)) {
+  if (!stableAnswer && !plan.answerableWithoutRetrievedEvidence && (!items.length || !claimIds.length || !sourceIds.length)) {
     return textStream({
       answer: demoAnswer(assessment.question, [], undefined, history),
       mode: "demo",
@@ -232,10 +232,10 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     clearTimeout(timeout);
-    if (stableAnswer) {
+    if (stableAnswer || plan.answerableWithoutRetrievedEvidence) {
       return textStream({
         answer: plan.fallbackAnswer,
-        mode: "stable",
+        mode: stableAnswer ? "stable" : "demo",
         responseStatus: "completed",
         claimIds,
         sourceIds,

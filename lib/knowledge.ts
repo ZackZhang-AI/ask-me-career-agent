@@ -1,6 +1,7 @@
 import { contentCatalog } from "./content.ts";
+import { buildLocalQuestionFrame, findQuestionContract, frameFromContract } from "./question-contracts.ts";
 import { normalizeSearchText, rankKnowledge } from "./retrieval.ts";
-import type { ChatMessage, Claim, FAQ, KnowledgeItem, Source, StableAnswer, StarStory } from "./types.ts";
+import type { ChatMessage, Claim, FAQ, KnowledgeItem, QuestionFrame, Source, StableAnswer, StarStory } from "./types.ts";
 
 export const strengths = contentCatalog.strengths;
 export const sources: Source[] = contentCatalog.sources;
@@ -60,6 +61,7 @@ function isStableAnswerRetrievable(item: StableAnswer) {
 export interface RetrievalOptions {
   history?: ChatMessage[];
   limit?: number;
+  frame?: QuestionFrame;
 }
 
 export function resolveRetrievalQuery(question: string, history: ChatMessage[] = []) {
@@ -86,26 +88,44 @@ export function retrieveKnowledge(question: string, limitOrOptions: number | Ret
   const options = typeof limitOrOptions === "number" ? { limit: limitOrOptions } : limitOrOptions;
   const resolved = resolveRetrievalQuery(question, options.history);
   const limit = Math.max(1, Math.min(options.limit ?? 4, 8));
+  const frame = options.frame ?? (() => {
+    const contract = findQuestionContract(question);
+    if (contract) return frameFromContract(contract);
+    const local = buildLocalQuestionFrame(question, options.history);
+    return local.topic === "unknown" ? undefined : local;
+  })();
+  const retrievable = knowledge.filter(isRetrievable);
+
+  if (frame?.routeSource === "contract" && frame.requiredKnowledgeIds.length) {
+    const byId = new Map(retrievable.map((item) => [item.id, item]));
+    return frame.requiredKnowledgeIds
+      .map((id) => byId.get(id))
+      .filter((item): item is KnowledgeItem => Boolean(item))
+      .slice(0, limit);
+  }
+
+  const frameProjects = frame?.activeProject ? [frame.activeProject] : [];
+  const matchedProjects = frameProjects.length ? frameProjects : resolved.matchedProjects;
+  const candidates = frame?.requiredKnowledgeIds.length
+    ? retrievable.filter((item) => frame.requiredKnowledgeIds.includes(item.id))
+    : matchedProjects.length
+      ? retrievable.filter((item) => item.relatedProject && matchedProjects.includes(item.relatedProject))
+      : retrievable;
 
   const ranked = rankKnowledge({
     query: resolved.text,
-    candidates: knowledge.filter(isRetrievable),
-    matchedProjects: resolved.matchedProjects,
-    limit: resolved.matchedProjects.length > 1 ? 8 : limit,
+    candidates,
+    matchedProjects,
+    limit: matchedProjects.length > 1 ? 8 : limit,
   }).map(({ item }) => item);
-  if (resolved.matchedProjects.length === 1) {
-    const project = resolved.matchedProjects[0];
-    const sameProject = knowledge.filter((item) => isRetrievable(item) && item.relatedProject === project);
-    return [...new Map([...ranked, ...sameProject].map((item) => [item.id, item])).values()].slice(0, limit);
-  }
-  if (resolved.matchedProjects.length === 0) return ranked.slice(0, limit);
-  const projectRepresentatives = resolved.matchedProjects
+  if (matchedProjects.length <= 1) return ranked.slice(0, limit);
+  const projectRepresentatives = matchedProjects
     .map((project) => ranked.find((item) => item.relatedProject === project))
     .filter((item): item is KnowledgeItem => Boolean(item));
   return [...new Map([...projectRepresentatives, ...ranked].map((item) => [item.id, item])).values()].slice(0, limit);
 }
 
-export function matchStableAnswer(question: string, history: ChatMessage[] = []) {
+export function matchStableAnswer(question: string, history: ChatMessage[] = [], frame?: QuestionFrame) {
   const normalizedQuestion = normalizeSearchText(question);
   const resolved = resolveRetrievalQuery(question, history);
   const usesReference = usesRecentContext(question, history);
@@ -114,6 +134,7 @@ export function matchStableAnswer(question: string, history: ChatMessage[] = [])
   const ranked = stableAnswers
     .filter(isStableAnswerRetrievable)
     .map((item) => {
+      if (frame?.activeProject && item.relatedProject !== frame.activeProject) return { item, score: 0, hasAnswerMatch: false };
       if (usesReference && item.relatedProject && !resolved.matchedProjects.includes(item.relatedProject)) return { item, score: 0 };
       const exact = normalizeSearchText(item.question) === normalizedQuestion ? 100 : 0;
       const keywordScore = item.matchKeywords.reduce((score, keyword) => {

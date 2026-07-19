@@ -139,6 +139,13 @@ const explorationQuestionsByCategory: Record<QuestionCategory, readonly string[]
   ],
 };
 
+export const recommendationQuestionCandidates = [...new Set([
+  ...questionGroups.flatMap((group) => group.questions),
+  ...Object.values(followUpsByCategory).flat(),
+  ...evergreenRecruiterQuestions,
+  ...Object.values(explorationQuestionsByCategory).flat(),
+])];
+
 function toCandidatePerspective(question: string) {
   return question
     .replace(/^最难的产品取舍是什么/, "你在这个项目中最关键的产品取舍是什么")
@@ -173,10 +180,6 @@ export function getFollowUpQuestions(
 ) {
   const seen = new Set(askedQuestions.map(normalizeQuestion));
   const category = inferQuestionCategory(question);
-  const fallback = questionGroups.flatMap((group) => group.questions);
-  const broaderRecruiterQuestions = Object.values(followUpsByCategory).flat();
-  const fallbackQuestions = [...fallback, ...broaderRecruiterQuestions, ...evergreenRecruiterQuestions];
-  const crossTopicQuestions = fallbackQuestions.filter((item) => inferQuestionCategory(toCandidatePerspective(item)) !== category);
   const selected: string[] = [];
 
   function addQuestions(candidates: readonly string[], target: number) {
@@ -191,9 +194,20 @@ export function getFollowUpQuestions(
     }
   }
 
-  addQuestions([...preferredQuestions, ...followUpsByCategory[category]], Math.min(2, limit));
-  addQuestions([...explorationQuestionsByCategory[category], ...crossTopicQuestions], Math.min(3, limit));
-  addQuestions(fallbackQuestions, limit);
+  const contractedPreferred = preferredQuestions.filter((item) => findQuestionContract(item));
+  addQuestions(contractedPreferred, Math.min(2, limit));
+
+  const currentContract = findQuestionContract(question);
+  addQuestions(recommendedContractQuestions(currentContract?.id, askedQuestions, limit * 3), limit);
+
+  // 旧题池仅作为兼容输入，只有已经建立稳定回答契约的题目才能进入推荐区。
+  const legacyCandidates = [
+    ...followUpsByCategory[category],
+    ...explorationQuestionsByCategory[category],
+    ...recommendationQuestionCandidates,
+  ].filter((item) => findQuestionContract(item));
+  addQuestions(legacyCandidates, limit);
 
   return selected;
 }
+import { findQuestionContract, recommendedContractQuestions } from "./question-contracts";

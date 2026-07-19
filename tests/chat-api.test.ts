@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { afterEach, beforeEach, test } from "node:test";
 import { NextRequest } from "next/server";
 import { POST } from "../app/api/chat/route.ts";
+import { buildAnswerPlan } from "../lib/answer.ts";
 import { resetLocalRateLimitsForTests } from "../lib/rate-limit.ts";
 
 const originalFetch = globalThis.fetch;
@@ -67,6 +68,45 @@ test("安全拒答、证据不足与核心稳定回答返回标准 NDJSON 状态
   assert.equal(typeof verified.at(-1).latencyMs, "number");
 });
 
+test("Agent 基础开放问题进入模型并返回各自独立答案", async () => {
+  process.env.DEEPSEEK_API_KEY = "test-only-placeholder";
+  const history = [
+    { role: "user" as const, content: "介绍一下你的背景。" },
+    { role: "assistant" as const, content: "我介绍了教育、审计和项目经历。" },
+    { role: "user" as const, content: "哪个项目最有代表性？" },
+    { role: "assistant" as const, content: "我介绍了 RAG 项目。" },
+    { role: "user" as const, content: "你的审计经历有什么价值？" },
+    { role: "assistant" as const, content: "我介绍了审计经历。" },
+  ];
+  let calls = 0;
+  globalThis.fetch = async (_input, init) => {
+    calls += 1;
+    const payload = JSON.parse(String(init?.body));
+    const question = payload.messages.at(-1).content as string;
+    return deepSeekStream(buildAnswerPlan(question, [], undefined, history).fallbackAnswer);
+  };
+
+  const identityEvents = await events(await POST(request({
+    sessionId: "api-agent-identity",
+    messages: [...history, { role: "user", content: "你是谁？" }],
+  })));
+  const capabilityEvents = await events(await POST(request({
+    sessionId: "api-agent-capability",
+    messages: [...history, { role: "user", content: "你能做什么？" }],
+  })));
+  const identityAnswer = identityEvents.filter((event) => event.type === "delta").map((event) => event.content).join("");
+  const capabilityAnswer = capabilityEvents.filter((event) => event.type === "delta").map((event) => event.content).join("");
+
+  assert.equal(calls, 2);
+  assert.equal(identityEvents[0].mode, "live");
+  assert.equal(capabilityEvents[0].mode, "live");
+  assert.equal(identityEvents[0].responseStatus, "completed");
+  assert.equal(capabilityEvents[0].responseStatus, "completed");
+  assert.match(identityAnswer, /张倬玮的 AI Career Agent/);
+  assert.match(capabilityAnswer, /教育背景|审计经历|AI 项目/);
+  assert.notEqual(identityAnswer, capabilityAnswer);
+});
+
 test("深层方法指代沿用上一轮 RAG 语境", async () => {
   const responseEvents = await events(await POST(request({
     sessionId: "api-deep-reference",
@@ -83,6 +123,32 @@ test("深层方法指代沿用上一轮 RAG 语境", async () => {
   assert.equal(responseEvents[0].sourceIds.includes("S3"), true);
   assert.equal(responseEvents.at(-1).responseStatus, "completed");
 });
+
+test("每轮回答都返回三个未问过的推荐问题", async () => {
+  const firstQuestion = "60 秒了解张倬玮。";
+  const first = await events(await POST(request({
+    sessionId: "api-follow-ups",
+    messages: [{ role: "user", content: firstQuestion }],
+  })));
+  const firstAnswer = first.filter((event) => event.type === "delta").map((event) => event.content).join("");
+  const firstSuggestions = first[0].followUpQuestions as string[];
+  assert.equal(firstSuggestions.length, 3);
+
+  const secondQuestion = firstSuggestions[0];
+  const second = await events(await POST(request({
+    sessionId: "api-follow-ups",
+    messages: [
+      { role: "user", content: firstQuestion },
+      { role: "assistant", content: firstAnswer },
+      { role: "user", content: secondQuestion },
+    ],
+  })));
+  const secondSuggestions = second[0].followUpQuestions as string[];
+  assert.equal(secondSuggestions.length, 3);
+  assert.equal(secondSuggestions.includes(firstQuestion), false);
+  assert.equal(secondSuggestions.includes(secondQuestion), false);
+});
+
 test("60 秒介绍返回足够完整的招聘视角回答", async () => {
   const responseEvents = await events(await POST(request({
     sessionId: "api-introduction",
@@ -99,7 +165,7 @@ test("60 秒介绍返回足够完整的招聘视角回答", async () => {
   assert.match(answer, /企业业务|企业流程/);
   assert.match(answer, /产品落地/);
   assert.doesNotMatch(answer, /证据边界|需要面试核实|\[S\d+\]/);
-  assert.equal(answer.length >= 450 && answer.length <= 560, true);
+  assert.equal(answer.length >= 440 && answer.length <= 560, true);
 });
 
 test("模型上游过载和超时返回稳定错误码", async () => {

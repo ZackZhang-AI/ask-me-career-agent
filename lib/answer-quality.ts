@@ -10,7 +10,26 @@ const BOILERPLATE = [
   "证据边界",
   "Claim ID",
   "Source ID",
+  "这个问题更值得看我的判断方法",
+  "进一步判断",
+  "实践依据",
+  "落地方式",
 ];
+
+const RAW_FIELD_PHRASES = [
+  "我提供并确认任职时间与职责描述",
+  "我提供并授权公开",
+  "候选人维护",
+  "公开职责描述涉及",
+];
+
+const TOPIC_TERMS: Partial<Record<AnswerPlan["topic"], string[]>> = {
+  rag: ["RAG", "Dense Retrieval", "Rerank", "Milvus", "向量检索"],
+  deepflow: ["DeepFlow", "Coordinator", "Planner", "Researcher", "Reporter"],
+  audit: ["审计", "德勤", "容诚", "底稿", "函证", "盘点"],
+  local_tools: ["Thirty-Minute Brain", "Read-Later Regret", "Downloads Butler"],
+  statistics: ["应用统计学", "统计学背景"],
+};
 
 const RISKY_CLAIMS = [
   "校园数据门户",
@@ -130,15 +149,23 @@ export function validateAnswer(candidate: string, plan: AnswerPlan): QualityGate
   if (clean.length > plan.targetLength.max) triggers.push("answer_too_long");
   const emphasized = [...clean.matchAll(/\*\*([^*]+)\*\*/g)].map((match) => match[1].trim());
   if (emphasized.length > 3) triggers.push("excessive_emphasis");
-  if (emphasized.some((text) => text.length > 12 || /[。！？；：]/.test(text))) triggers.push("long_emphasis");
+  if (emphasized.some((text) => text.length > 32 || /[。！？；：]/.test(text))) triggers.push("long_emphasis");
   const paragraphs = clean.split(/\n\s*\n/).filter((item) => item.trim()).length;
   if (["project_arc", "contribution", "star"].includes(plan.responseShape) && paragraphs < 3) triggers.push("weak_structure");
   if (/(?:^|[，。！？；\s])他(?:的|是|能|在|具备|适合|做|有)/.test(clean)) triggers.push("third_person_voice");
 
   const currentClosing = closingSentence(clean);
   for (const previous of plan.recentAnswers) {
-    if (clean.length >= 120 && previous.length >= 120 && answerSimilarity(clean, previous) >= 0.72) triggers.push("repetitive_answer");
+    if (clean.length >= 120 && previous.length >= 120 && answerSimilarity(clean, previous) >= 0.62) triggers.push("repetitive_answer");
     if (currentClosing.length >= 12 && currentClosing === closingSentence(previous)) triggers.push("repeated_closing");
+    const currentLabels = [...clean.matchAll(/\*\*([^*]+)\*\*\s*[：:]/g)].map((match) => match[1]).join("|");
+    const previousLabels = [...previous.matchAll(/\*\*([^*]+)\*\*\s*[：:]/g)].map((match) => match[1]).join("|");
+    if (currentLabels && currentLabels === previousLabels) triggers.push("repeated_label_sequence");
+  }
+
+  const firstParagraph = clean.split(/\n\s*\n/)[0] ?? clean;
+  if (plan.directAnswerTerms.length && !plan.directAnswerTerms.some((term) => firstParagraph.toLowerCase().includes(term.toLowerCase()))) {
+    triggers.push("indirect_opening");
   }
 
   plan.mustInclude.forEach((required, index) => {
@@ -147,6 +174,15 @@ export function validateAnswer(candidate: string, plan: AnswerPlan): QualityGate
 
   for (const phrase of BOILERPLATE) {
     if (clean.includes(phrase)) triggers.push(`boilerplate:${phrase}`);
+  }
+
+  for (const phrase of RAW_FIELD_PHRASES) {
+    if (clean.includes(phrase)) triggers.push(`raw_field:${phrase}`);
+  }
+
+  for (const topic of plan.forbiddenTopics) {
+    const leaked = (TOPIC_TERMS[topic] ?? []).find((term) => clean.toLowerCase().includes(term.toLowerCase()));
+    if (leaked) triggers.push(`forbidden_topic:${topic}`);
   }
 
   for (const detail of plan.forbiddenDetails) {
@@ -191,9 +227,9 @@ export function repairInstruction(plan: AnswerPlan, triggers: string[]) {
 1. 只能使用下方“允许事实”，不得补充合理猜测、过程细节、数字、用户反馈或完成状态。\n
 2. 使用 ${plan.responseShape} 结构，控制在 ${plan.targetLength.min}–${plan.targetLength.max} 个中文字符；使用 1–3 个、不超过 12 字的加粗短词组突出个人贡献、关键取舍、核心结果或岗位价值。不要加粗完整句子，也不要强制套三段模板。\n
 3. 不使用寒暄、Claim/Source、证据边界、核实提醒或免责声明。\n
-4. 始终使用第一人称；本轮必须带来新信息：${plan.newInformationGoal.join("；")}\n
+4. 第一段直接回答 ${plan.facet} 维度，并自然包含以下关键词之一：${plan.directAnswerTerms.join("、") || "当前问题关键词"}。始终使用第一人称；本轮必须带来新信息：${plan.newInformationGoal.join("；")}\n
 5. 避免重复：${plan.avoidPoints.join("；") || "无"}；结尾任务：${plan.closingPurpose}\n
 6. 必答点：${plan.mustInclude.join("；")}\n
 7. 允许事实：${plan.allowedFacts.join("；")}\n
-8. 禁止内容：${plan.forbiddenDetails.join("；") || "任何未提供的事实"}`;
+8. 禁止内容：${plan.forbiddenDetails.join("；") || "任何未提供的事实"}；禁止混入主题：${plan.forbiddenTopics.join("、") || "无"}`;
 }

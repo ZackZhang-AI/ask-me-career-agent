@@ -6,7 +6,64 @@ export type ResponseStatus = "completed" | "insufficient_evidence" | "refused" |
 export type EvidenceBasis = "confirmed_fact" | "source_view" | "user_statement" | "inference";
 export type ResponseShape = "narrative" | "direct" | "fit_mapping" | "project_arc" | "contribution" | "star" | "shortcoming" | "recommendation";
 export type ConversationDepth = "overview" | "follow_up" | "deep_dive";
+export type QuestionTopic =
+  | "profile"
+  | "role_fit"
+  | "rag"
+  | "deepflow"
+  | "ask_me"
+  | "local_tools"
+  | "audit"
+  | "statistics"
+  | "skills"
+  | "enterprise_ai"
+  | "agent"
+  | "unknown";
+export type QuestionFacet =
+  | "overview"
+  | "problem"
+  | "method"
+  | "contribution"
+  | "architecture"
+  | "collaboration"
+  | "evaluation"
+  | "transfer"
+  | "example"
+  | "result"
+  | "boundary"
+  | "fit";
+export type QuestionRouteSource = "contract" | "local" | "model";
+
+export interface QuestionFrame {
+  topic: QuestionTopic;
+  facet: QuestionFacet;
+  requestedDimensions: string[];
+  activeProject?: string;
+  useHistory: boolean;
+  confidence: number;
+  requiredKnowledgeIds: string[];
+  allowedStoryIds: string[];
+  forbiddenTopics: QuestionTopic[];
+  responseShape: ResponseShape;
+  targetLength: { min: number; max: number };
+  answerGoal: string;
+  routeSource: QuestionRouteSource;
+}
+
+export interface QuestionContract {
+  id: string;
+  question: string;
+  aliases: string[];
+  frame: Omit<QuestionFrame, "routeSource">;
+  thesis: string;
+  requiredPoints: string[];
+  directAnswerTerms: string[];
+  fallbackAnswer: string;
+  nextContractIds: string[];
+}
 export type AnswerIntent =
+  | "agent_identity"
+  | "capability_scope"
   | "introduction"
   | "role_fit"
   | "representative_project"
@@ -14,9 +71,9 @@ export type AnswerIntent =
   | "project_problem"
   | "contribution"
   | "ai_collaboration"
-    | "challenge"
-    | "diagnosis"
-    | "result"
+  | "challenge"
+  | "diagnosis"
+  | "result"
   | "limitation"
   | "skills"
   | "experience"
@@ -40,6 +97,11 @@ export interface AnswerFactSkeleton {
 }
 
 export interface AnswerPlan {
+  contractId?: string;
+  topic: QuestionTopic;
+  facet: QuestionFacet;
+  directAnswerTerms: string[];
+  forbiddenTopics: QuestionTopic[];
   intent: AnswerIntent;
   thesis: string;
   mustInclude: string[];
@@ -63,6 +125,7 @@ export interface AnswerPlan {
   targetLength: { min: number; max: number };
   followUpQuestions: string[];
   recentAnswers: string[];
+  answerableWithoutRetrievedEvidence: boolean;
   fallbackAnswer: string;
 }
 

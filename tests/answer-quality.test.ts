@@ -30,7 +30,8 @@ test("质量门禁拒绝内部审计措辞和模板化开头", () => {
 });
 
 test("结构化事实骨架回退不包含百度和内部标签", () => {
-  assert.match(plan.fallbackAnswer, /\*\*问题判断\*\*/);
+  assert.match(plan.fallbackAnswer, /\*\*RAG Knowledge Base System\*\*/);
+  assert.doesNotMatch(plan.fallbackAnswer, /进一步判断|实践依据|落地方式/);
   assert.doesNotMatch(plan.fallbackAnswer, /百度|Claim ID|Source ID|证据边界/);
   assert.equal(plan.fallbackAnswer.length >= 300 && plan.fallbackAnswer.length <= 500, true);
   assert.equal(validateAnswer(plan.fallbackAnswer, plan).passed, true);
@@ -60,13 +61,13 @@ test("回答重点会被安全解析为粗体片段", () => {
 });
 
 test("质量门禁拒绝过度加粗和整句加粗", () => {
-  const overformatted = `${plan.fallbackAnswer}\n\n**额外重点**：补充说明。`;
-  const longEmphasis = plan.fallbackAnswer.replace("**问题判断**", "**这是一个不应该整句加粗的超长标题**");
+  const overformatted = `${plan.fallbackAnswer}\n\n**额外重点一**、**额外重点二**、**额外重点三**。`;
+  const longEmphasis = plan.fallbackAnswer.replace("**RAG Knowledge Base System**", "**这是一个明显超过长度限制而且不应该被整段加粗的标题文本因为它仍在继续扩展**");
   assert.equal(validateAnswer(overformatted, plan).triggers.includes("excessive_emphasis"), true);
   assert.equal(validateAnswer(longEmphasis, plan).triggers.includes("long_emphasis"), true);
 });
 
 test("有序列表编号不会被误判为候选人的业务数字", () => {
-  const numbered = plan.fallbackAnswer.replace("**问题判断**", "1. **问题判断**");
+  const numbered = `1. ${plan.fallbackAnswer}`;
   assert.equal(validateAnswer(numbered, plan).triggers.includes("unsupported_number"), false);
 });
