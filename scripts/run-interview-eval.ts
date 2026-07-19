@@ -6,6 +6,8 @@ import { buildAnswerPlan, buildContext, demoAnswer, systemPrompt } from "../lib/
 import { answerSimilarity, repairInstruction, validateAnswer } from "../lib/answer-quality.ts";
 import { assessQuestion } from "../lib/guardrails.ts";
 import { matchStableAnswer, retrieveKnowledge } from "../lib/knowledge.ts";
+import { buildLocalQuestionFrame, findQuestionContract, frameFromContract, questionContracts } from "../lib/question-contracts.ts";
+import { getFollowUpQuestions, recommendationQuestionCandidates } from "../lib/question-suggestions.ts";
 import type { ResponseStatus } from "../lib/types.ts";
 import { coreCases, hallucinationCases, type EvaluationCase } from "../tests/evals/cases.ts";
 
@@ -115,6 +117,13 @@ export interface InterviewEvaluationReport {
     selfIntroductionInternalTermCount: number;
     multiTurnNewInformationRate: number;
     multiTurnPassed: boolean;
+    recommendationContractCoverageRate: number;
+    routingAccuracyRate: number;
+    directAnswerCoverageRate: number;
+    unrelatedTopicLeakCount: number;
+    dedicatedFallbackPassRate: number;
+    templateReuseRate: number;
+    deepRecommendationPassed: boolean;
   };
   summary: {
     passedCases: number;
@@ -223,7 +232,7 @@ export function evaluateAnswerQuality(
     internalWordingHits,
     opening: openingOf(text),
     closing: closingOf(text),
-    thirdPersonVoice: /(?:张倬玮|他|候选人)(?:的|在|能|会|适合|负责)/.test(text),
+    thirdPersonVoice: /(?:张倬玮|(?<!其)他|候选人)(?:的|在|能|会|适合|负责)/.test(text),
     unpromptedLimitation: !fixture.boundaryExpected && /(?:当前阶段|尚未|暂未|还没有|能力限制|项目限制|短板)/.test(text),
   };
 }
@@ -254,9 +263,11 @@ export function scoreAnswer(testCase: InterviewCase, answer: EvaluationAnswer, q
 function localAnswer(question: string, history: Array<{ role: "user" | "assistant"; content: string }> = []): EvaluationAnswer {
   const assessment = assessQuestion(question);
   if (!assessment.allowed) return { text: assessment.reason, responseStatus: "refused", claimIds: [], sourceIds: [], answerMode: "guardrail" };
-  const items = retrieveKnowledge(assessment.question, { history, limit: 4 });
-  const stableAnswer = matchStableAnswer(assessment.question, history);
-  const plan = buildAnswerPlan(assessment.question, items, stableAnswer, history);
+  const contract = findQuestionContract(assessment.question);
+  const frame = contract ? frameFromContract(contract) : buildLocalQuestionFrame(assessment.question, history);
+  const items = retrieveKnowledge(assessment.question, { history, limit: 4, frame });
+  const stableAnswer = matchStableAnswer(assessment.question, history, frame);
+  const plan = buildAnswerPlan(assessment.question, items, stableAnswer, history, frame, contract);
   const claimIds = stableAnswer ? [...stableAnswer.requiredClaimIds] : [...new Set(items.flatMap((item) => item.claimIds))];
   const sourceIds = stableAnswer ? [...stableAnswer.requiredSourceIds] : [...new Set(items.flatMap((item) => item.sourceIds))];
   return {
@@ -272,9 +283,11 @@ function localAnswer(question: string, history: Array<{ role: "user" | "assistan
 async function deepSeekAnswer(testCase: Pick<InterviewCase, "question" | "roleName" | "roleFocus">, apiKey: string, history: Array<{ role: "user" | "assistant"; content: string }> = []): Promise<EvaluationAnswer> {
   const fallback = localAnswer(testCase.question, history);
   if (fallback.responseStatus !== "completed") return fallback;
-  const items = retrieveKnowledge(testCase.question, { history, limit: 4 });
-  const stableAnswer = matchStableAnswer(testCase.question, history);
-  const plan = buildAnswerPlan(testCase.question, items, stableAnswer, history);
+  const contract = findQuestionContract(testCase.question);
+  const frame = contract ? frameFromContract(contract) : buildLocalQuestionFrame(testCase.question, history);
+  const items = retrieveKnowledge(testCase.question, { history, limit: 4, frame });
+  const stableAnswer = matchStableAnswer(testCase.question, history, frame);
+  const plan = buildAnswerPlan(testCase.question, items, stableAnswer, history, frame, contract);
   const model = process.env.DEEPSEEK_MODEL ?? "deepseek-v4-flash";
   const context = `这是合成面试预演。模拟角色：${testCase.roleName}；关注点：${testCase.roleFocus}。只能依据以下回答计划和公开事实作答：\n${buildContext(items, plan)}`;
   const generate = async (extraInstruction?: string) => {
@@ -339,7 +352,7 @@ const multiTurnFixtures = [
       ["判断", "取舍", "验收"],
       ["检索", "引用", "评测"],
       ["判断", "检索", "验证"],
-      ["流程价值", "责任边界", "验证闭环"],
+      ["企业级 AI", "人工复核", "持续验证"],
       ["数据分析", "AI 评测", "RAGAS"],
     ],
   },
@@ -392,7 +405,7 @@ function similarDifferentIntents(results: InterviewEvaluationResult[]) {
   const pairs: string[] = [];
   for (let left = 0; left < oneRole.length; left += 1) {
     for (let right = left + 1; right < oneRole.length; right += 1) {
-      if (answerSimilarity(oneRole[left].answer.text, oneRole[right].answer.text) >= 0.72) {
+      if (answerSimilarity(oneRole[left].answer.text, oneRole[right].answer.text) >= 0.62) {
         pairs.push(`${oneRole[left].categoryId} -> ${oneRole[right].categoryId}`);
       }
     }
@@ -414,6 +427,56 @@ function newInformationRate(results: MultiTurnResult[]) {
 
 function stableReportId(results: InterviewEvaluationResult[], mode: EvaluationMode) {
   return createHash("sha256").update(JSON.stringify({ mode, results })).digest("hex").slice(0, 16);
+}
+
+function contractQualityMetrics() {
+  const routeFixtures = [
+    ["RAG 项目体现了你哪些产品方法？", "rag", "method"],
+    ["应用统计学背景如何帮助你做 AI 产品？", "statistics", "transfer"],
+    ["你的实习经历沉淀了哪些可迁移能力？", "audit", "transfer"],
+    ["举一个审计问题转成产品的例子。", "audit", "example"],
+    ["你的统计学背景能怎样支持产品决策？", "statistics", "transfer"],
+    ["Agent 之间如何协作？", "deepflow", "collaboration"],
+  ] as const;
+  const plans = questionContracts.map((contract) => {
+    const frame = frameFromContract(contract);
+    const items = retrieveKnowledge(contract.question, { frame, limit: 4 });
+    const plan = buildAnswerPlan(contract.question, items, undefined, [], frame, contract);
+    return { contract, plan, gate: validateAnswer(plan.fallbackAnswer, plan) };
+  });
+  const similarPairs: string[] = [];
+  for (let left = 0; left < plans.length; left += 1) {
+    for (let right = left + 1; right < plans.length; right += 1) {
+      if (answerSimilarity(plans[left].plan.fallbackAnswer, plans[right].plan.fallbackAnswer) >= 0.62) {
+        similarPairs.push(`${plans[left].contract.id}->${plans[right].contract.id}`);
+      }
+    }
+  }
+  let current = "60 秒了解张倬玮。";
+  const asked: string[] = [];
+  let deepRecommendationPassed = true;
+  for (let turn = 0; turn < 8; turn += 1) {
+    asked.push(current);
+    const recommendations = getFollowUpQuestions(current, asked, 3);
+    if (recommendations.length !== 3 || recommendations.some((question) => !findQuestionContract(question))) deepRecommendationPassed = false;
+    current = recommendations[0] ?? current;
+  }
+  const directCovered = plans.filter(({ contract, plan }) => {
+    const first = plan.fallbackAnswer.split(/\n\s*\n/)[0] ?? "";
+    return contract.directAnswerTerms.some((term) => first.toLowerCase().includes(term.toLowerCase()));
+  }).length;
+  return {
+    recommendationContractCoverageRate: Number((recommendationQuestionCandidates.filter((question) => findQuestionContract(question)).length / recommendationQuestionCandidates.length).toFixed(4)),
+    routingAccuracyRate: Number((routeFixtures.filter(([question, topic, facet]) => {
+      const contract = findQuestionContract(question);
+      return contract?.frame.topic === topic && contract.frame.facet === facet;
+    }).length / routeFixtures.length).toFixed(4)),
+    directAnswerCoverageRate: Number((directCovered / plans.length).toFixed(4)),
+    unrelatedTopicLeakCount: plans.filter(({ gate }) => gate.triggers.some((trigger) => trigger.startsWith("forbidden_topic:"))).length,
+    dedicatedFallbackPassRate: Number((plans.filter(({ gate }) => gate.passed).length / plans.length).toFixed(4)),
+    templateReuseRate: Number((similarPairs.length / Math.max(1, plans.length * (plans.length - 1) / 2)).toFixed(4)),
+    deepRecommendationPassed,
+  };
 }
 
 export async function runInterviewEvaluation(options: { requestedMode?: "local" | "deepseek" | "auto"; apiKey?: string; generatedAt?: Date } = {}): Promise<InterviewEvaluationReport> {
@@ -466,6 +529,7 @@ export async function runInterviewEvaluation(options: { requestedMode?: "local" 
   const repeatedOpeningPairs = repeatedOpenings(results);
   const repeatedClosingPairs = repeatedClosings(results);
   const similarDifferentIntentPairs = similarDifferentIntents(results);
+  const contractMetrics = contractQualityMetrics();
   const allQualities = [...results.map((item) => item.quality), ...coreResults.map((item) => item.quality), ...hallucinationResults.map((item) => item.quality), ...multiTurnResults.flatMap((item) => item.turns.map((turn) => turn.quality))];
   const hardFactViolationCount = allQualities.reduce((sum, item) => sum + item.hardFactViolations.length, 0);
   const qualityGates = {
@@ -486,10 +550,11 @@ export async function runInterviewEvaluation(options: { requestedMode?: "local" 
     selfIntroductionInternalTermCount: results.filter((item) => item.categoryId === "sixty_second_intro" && /(?:Dense Retrieval|Rerank|RAGAS|Claim|Source|NDJSON|技术栈)/i.test(item.answer.text)).length,
     multiTurnNewInformationRate: newInformationRate(multiTurnResults),
     multiTurnPassed: multiTurnResults.every((item) => item.passed),
+    ...contractMetrics,
   };
   const passedRecommendationGate = recommendedRoleCount >= 5;
   const passedQualityGate = averageByDimension.清晰度 >= 4.3 && averageByDimension.差异化 >= 4.3 && averageByDimension.可信度 >= 4.3;
-  const passedLaunchGate = passedRecommendationGate && passedQualityGate && qualityGates.hardFactsPassed && qualityGates.hallucinationRegressionPassed && qualityGates.coreContentPassed && qualityGates.lengthComplianceRate >= 0.9 && qualityGates.internalWordingCaseCount === 0 && qualityGates.repeatedOpeningPairs.length === 0 && qualityGates.repeatedClosingPairs.length === 0 && qualityGates.similarDifferentIntentPairs.length === 0 && qualityGates.thirdPersonVoiceCount === 0 && qualityGates.unpromptedLimitationCount === 0 && qualityGates.selfIntroductionInternalTermCount === 0 && qualityGates.multiTurnNewInformationRate >= 0.7 && qualityGates.multiTurnPassed;
+  const passedLaunchGate = passedRecommendationGate && passedQualityGate && qualityGates.hardFactsPassed && qualityGates.hallucinationRegressionPassed && qualityGates.coreContentPassed && qualityGates.lengthComplianceRate >= 0.9 && qualityGates.internalWordingCaseCount === 0 && qualityGates.repeatedOpeningPairs.length === 0 && qualityGates.repeatedClosingPairs.length === 0 && qualityGates.similarDifferentIntentPairs.length === 0 && qualityGates.thirdPersonVoiceCount === 0 && qualityGates.unpromptedLimitationCount === 0 && qualityGates.selfIntroductionInternalTermCount === 0 && qualityGates.multiTurnNewInformationRate >= 0.75 && qualityGates.multiTurnPassed && qualityGates.recommendationContractCoverageRate === 1 && qualityGates.routingAccuracyRate >= 0.95 && qualityGates.directAnswerCoverageRate === 1 && qualityGates.unrelatedTopicLeakCount === 0 && qualityGates.dedicatedFallbackPassRate === 1 && qualityGates.templateReuseRate === 0 && qualityGates.deepRecommendationPassed;
   return {
     schemaVersion: 3,
     reportId: stableReportId(results, effectiveMode),
