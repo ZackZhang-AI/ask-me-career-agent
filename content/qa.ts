@@ -1,7 +1,7 @@
 import { candidateNarrative } from "./narrative.ts";
 import type { AnswerIntent, ResponseShape } from "../lib/types.ts";
 
-const updated = "2026-07-18";
+const updated = "2026-07-19";
 const publicActive = { visibility: "public", status: "active", lastUpdated: updated } as const;
 
 type AnswerInput = {
@@ -90,20 +90,20 @@ export const stableAnswerContent = [
     details: [
       "身份与方向：东北大学应用统计学 2027 届学生，求职方向是 AI 产品经理。",
       "成长主线：应用统计学训练、财务与 IT 审计业务，再到 AI 产品实践。",
-      "差异化：数据评测、企业业务和产品落地三种视角。",
+      "个人特质：持续学习、持之以恒，面对现场任务和反复迭代能够保持节奏。",
       "项目锚点：RAG Knowledge Base System 与 DeepFlow。",
     ],
     limitations: "不加入未确认的占位经历，也不在自我介绍中主动展开项目规模和未验证结果。",
     claimIds: ["C1", "C2", "C3", "C4", "C6"],
     sourceIds: ["S1", "S3", "S4"],
-    evaluationGoal: "让面试官在一分钟内记住候选人的身份、成长路径、三项差异点和求职方向。",
-    exclusivePoints: ["应用统计学到审计再到 AI 产品的成长主线", "数据评测、企业业务、产品落地", "AI 应用、知识库或企业工作流方向"],
+    evaluationGoal: "让面试官在一分钟内记住候选人的身份、成长路径、实践能力，以及持续学习、持之以恒和抗压的个人特质。",
+    exclusivePoints: ["应用统计学到审计再到 AI 产品的成长主线", "数据评测、企业业务、产品落地", "持续学习、持之以恒和抗压能力"],
     avoidRepeating: ["项目技术栈", "项目完成边界", "完整贡献分工"],
     responseShape: "narrative",
-    targetLength: { min: 450, max: 560 },
+    targetLength: { min: 430, max: 600 },
     preferredStoryIds: [],
     followUpQuestions: ["哪个项目最能代表你的 AI 产品能力？", "审计经历如何帮助你做 AI 产品？", "为什么选择你而不是其他应届候选人？"],
-    closingPurpose: "明确目标岗位和希望创造的产品价值。",
+    closingPurpose: "总结过往经历体现出的持续学习、持之以恒、抗压能力和对结果负责的态度，不表达希望加入某类团队。",
   }),
   answer({
     id: "A02",

@@ -165,7 +165,10 @@ test("60 秒介绍返回足够完整的招聘视角回答", async () => {
   assert.match(answer, /企业业务|企业流程/);
   assert.match(answer, /产品落地/);
   assert.doesNotMatch(answer, /证据边界|需要面试核实|\[S\d+\]/);
-  assert.equal(answer.length >= 440 && answer.length <= 560, true);
+  assert.match(answer, /持之以恒/);
+  assert.match(answer, /学习能力/);
+  assert.match(answer, /抗压能力/);
+  assert.equal(answer.length >= 430 && answer.length <= 600, true);
 });
 
 test("模型上游过载和超时返回稳定错误码", async () => {

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { candidateNarrative } from "../content/narrative.ts";
 import { buildAnswerPlan } from "../lib/answer.ts";
 import { validateAnswer } from "../lib/answer-quality.ts";
 import { parseAnswerEmphasis } from "../lib/answer-format.ts";
@@ -9,6 +10,25 @@ const question = "哪个项目最能代表他的 AI 产品能力？";
 const stable = matchStableAnswer(question);
 assert.ok(stable);
 const plan = buildAnswerPlan(question, retrieveKnowledge(question), stable);
+
+test("60 秒自我介绍以个人特质总结收尾", () => {
+  const introductionQuestion = "请用 60 秒介绍张倬玮。";
+  const introduction = matchStableAnswer(introductionQuestion);
+  assert.ok(introduction);
+  const introductionPlan = buildAnswerPlan(
+    introductionQuestion,
+    retrieveKnowledge(introductionQuestion),
+    introduction,
+  );
+
+  assert.match(introductionPlan.fallbackAnswer, /持之以恒/);
+  assert.match(introductionPlan.fallbackAnswer, /学习能力/);
+  assert.match(introductionPlan.fallbackAnswer, /抗压能力/);
+  assert.doesNotMatch(introductionPlan.fallbackAnswer, /希望(?:加入|进入).*团队/);
+  for (const answer of Object.values(candidateNarrative.introductions)) {
+    assert.doesNotMatch(answer, /希望(?:加入|进入).*团队/);
+  }
+});
 
 test("质量门禁拒绝资料外的项目、数字与业务结果", () => {
   const result = validateAnswer(
