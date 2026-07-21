@@ -24,7 +24,7 @@ import {
   questionGroups,
   type QuestionGroupId,
 } from "@/lib/question-suggestions";
-import type { ChatMessage, KnowledgeItem, ResponseStatus, Source } from "@/lib/types";
+import type { AnswerCitation, ChatMessage, KnowledgeItem, ResponseStatus, Source } from "@/lib/types";
 
 interface DisplayMessage extends ChatMessage {
   sources?: Source[];
@@ -33,6 +33,7 @@ interface DisplayMessage extends ChatMessage {
   responseStatus?: ResponseStatus;
   claimIds?: string[];
   sourceIds?: string[];
+  citations?: AnswerCitation[];
   latencyMs?: number;
   followUpQuestions?: string[];
 }
@@ -49,6 +50,13 @@ const statusLabels = {
   planned: "规划中",
   archived: "已归档",
 } as const;
+
+const feedbackReasons = [
+  { id: "not_relevant", label: "答非所问" },
+  { id: "not_specific", label: "不够具体" },
+  { id: "repetitive", label: "内容重复" },
+  { id: "missing_evidence", label: "证据不足" },
+] as const;
 
 function track(event: string, sessionId: string, detail = "", metadata: Partial<DisplayMessage> & { questionCategory?: string } = {}) {
   void fetch("/api/events", {
@@ -76,6 +84,7 @@ export function Chat() {
   const [retryQuestion, setRetryQuestion] = useState("");
   const [activeQuestionGroup, setActiveQuestionGroup] = useState<QuestionGroupId>("screening");
   const [answerFeedback, setAnswerFeedback] = useState<Record<number, "helpful" | "not_helpful">>({});
+  const [answerFeedbackReason, setAnswerFeedbackReason] = useState<Record<number, string>>({});
   const abortRef = useRef<AbortController | null>(null);
   const conversationEpochRef = useRef(0);
   const chatScrollRef = useRef<HTMLDivElement | null>(null);
@@ -150,6 +159,7 @@ export function Chat() {
             responseStatus: event.responseStatus,
             claimIds: event.claimIds,
             sourceIds: event.sourceIds,
+            citations: event.citations,
             followUpQuestions: event.followUpQuestions,
           };
           if (event.type === "delta") answer += event.content;
@@ -189,6 +199,7 @@ export function Chat() {
     setLoading(false);
     setActiveQuestionGroup("screening");
     setAnswerFeedback({});
+    setAnswerFeedbackReason({});
     shouldFollowRef.current = true;
     window.history.replaceState(null, "", `${window.location.pathname}#top`);
     requestAnimationFrame(() => {
@@ -333,7 +344,19 @@ export function Chat() {
                     </div>
                   ) : (
                     message.role === "assistant"
-                      ? <FormattedAnswer content={message.content} />
+                      ? (
+                          <FormattedAnswer
+                            content={message.content}
+                            citations={message.citations}
+                            sources={message.sources}
+                            onCitationClick={(sourceId) => {
+                              const sourceElement = document.getElementById(`source-${index}-${sourceId}`) as HTMLDetailsElement | null;
+                              if (!sourceElement) return;
+                              sourceElement.open = true;
+                              sourceElement.scrollIntoView({ behavior: "smooth", block: "center" });
+                            }}
+                          />
+                        )
                       : <div className="message-content">{message.content}</div>
                   )}
                   {message.sources && message.sources.length > 0 && (
@@ -341,6 +364,7 @@ export function Chat() {
                       <p>进一步了解</p>
                       {message.sources.map((source) => (
                         <details
+                          id={`source-${index}-${source.id}`}
                           key={source.id}
                           onToggle={(event) => event.currentTarget.open && track("source_opened", getBrowserSessionId(), source.id)}
                         >
@@ -378,9 +402,24 @@ export function Chat() {
                         aria-pressed={answerFeedback[index] === "not_helpful"}
                         onClick={() => {
                           setAnswerFeedback((current) => ({ ...current, [index]: "not_helpful" }));
-                          track("answer_feedback", getBrowserSessionId(), "not_helpful");
                         }}
                       >需改进</button>
+                      {answerFeedback[index] === "not_helpful" && (
+                        <div className="feedback-reasons" aria-label="选择需要改进的原因">
+                          {feedbackReasons.map((reason) => (
+                            <button
+                              key={reason.id}
+                              type="button"
+                              aria-pressed={answerFeedbackReason[index] === reason.id}
+                              disabled={Boolean(answerFeedbackReason[index])}
+                              onClick={() => {
+                                setAnswerFeedbackReason((current) => ({ ...current, [index]: reason.id }));
+                                track("answer_feedback", getBrowserSessionId(), reason.id);
+                              }}
+                            >{reason.label}</button>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>

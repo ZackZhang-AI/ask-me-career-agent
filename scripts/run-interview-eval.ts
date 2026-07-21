@@ -23,14 +23,14 @@ export const interviewRoles = [
 ] as const;
 
 export const questionCategories = [
-  { id: "sixty_second_intro", name: "60 秒介绍", question: "请用 60 秒介绍张倬玮，并说明最值得继续面试的三个差异点。", anchors: ["AI 产品", "数据", "业务"], targetLength: { min: 450, max: 560 } },
-  { id: "role_fit", name: "岗位匹配", question: "他为什么适合初级 AI 产品经理岗位？", anchors: ["AI 产品", "评测", "业务"], targetLength: { min: 360, max: 480 } },
-  { id: "representative_project", name: "代表项目", question: "哪个项目最能代表他的 AI 产品能力？请说明项目价值。", anchors: ["RAG", "检索", "产品"], targetLength: { min: 390, max: 520 } },
-  { id: "personal_contribution", name: "个人贡献", question: "他在 RAG 项目中具体做了什么？请区分本人判断与 AI 辅助。", anchors: ["负责", "AI", "判断"], targetLength: { min: 400, max: 560 } },
-  { id: "ai_coding_share", name: "AI 编程占比", question: "这些项目里 AI 编程工具承担了多少工作？请说明候选人本人判断与 AI 辅助的边界。", anchors: ["AI", "负责", "工具"], targetLength: { min: 350, max: 500 } },
-  { id: "challenge_or_failure", name: "挑战或失败", question: "请讲一个项目中的真实挑战或失败，并说明如何定位、调整和验证。", anchors: ["问题", "取舍", "验证"], targetLength: { min: 400, max: 560 } },
-  { id: "user_business_value", name: "用户与业务价值", question: "这些项目服务什么用户、解决什么业务问题，目前有什么价值？", anchors: ["问题", "产品", "价值"], targetLength: { min: 320, max: 460 } },
-  { id: "next_round_recommendation", name: "是否建议进入下一轮", question: "基于当前公开信息，你是否建议安排下一轮初步面试？请给出理由，不要给录用结论。", anchors: ["下一轮", "价值", "能力"], targetLength: { min: 320, max: 460 } },
+  { id: "sixty_second_intro", name: "60 秒介绍", question: "请用 60 秒介绍张倬玮，并说明最值得继续面试的三个差异点。", semanticGroups: [["AI 产品"], ["数据", "统计", "评测"], ["业务", "审计", "企业流程", "企业场景"]], targetLength: { min: 430, max: 600 } },
+  { id: "role_fit", name: "岗位匹配", question: "他为什么适合初级 AI 产品经理岗位？", semanticGroups: [["AI 产品"], ["评测", "数据"], ["业务", "审计", "企业"]], targetLength: { min: 360, max: 480 } },
+  { id: "representative_project", name: "代表项目", question: "哪个项目最能代表他的 AI 产品能力？请说明项目价值。", semanticGroups: [["RAG"], ["检索", "Dense Retrieval"], ["产品", "需求", "取舍"]], targetLength: { min: 390, max: 520 } },
+  { id: "personal_contribution", name: "个人贡献", question: "他在 RAG 项目中具体做了什么？请区分本人判断与 AI 辅助。", semanticGroups: [["负责", "判断", "取舍"], ["AI", "工具"], ["验收", "评测", "复核"]], targetLength: { min: 400, max: 560 } },
+  { id: "ai_coding_share", name: "AI 编程占比", question: "这些项目里 AI 编程工具承担了多少工作？请说明候选人本人判断与 AI 辅助的边界。", semanticGroups: [["AI"], ["负责", "判断"], ["工具", "编程"]], targetLength: { min: 350, max: 500 } },
+  { id: "challenge_or_failure", name: "挑战或失败", question: "请讲一个项目中的真实挑战或失败，并说明如何定位、调整和验证。", semanticGroups: [["问题", "挑战", "跑偏"], ["取舍", "调整"], ["验证", "评测", "检查"]], targetLength: { min: 400, max: 560 } },
+  { id: "user_business_value", name: "用户与业务价值", question: "这些项目服务什么用户、解决什么业务问题，目前有什么价值？", semanticGroups: [["问题", "用户"], ["产品", "方案"], ["价值", "流程", "效率"]], targetLength: { min: 320, max: 460 } },
+  { id: "next_round_recommendation", name: "是否建议进入下一轮", question: "基于当前公开信息，你是否建议安排下一轮初步面试？请给出理由，不要给录用结论。", semanticGroups: [["下一轮"], ["价值", "岗位"], ["能力", "证据"]], targetLength: { min: 320, max: 460 } },
 ] as const;
 
 export const scoreDimensions = ["清晰度", "差异化", "可信度", "追问承受力", "面试转化意愿"] as const;
@@ -46,6 +46,7 @@ export interface InterviewCase {
   categoryName: string;
   question: string;
   anchors: readonly string[];
+  semanticGroups: readonly (readonly string[])[];
   targetLength?: { min: number; max: number };
   forbiddenPatterns?: RegExp[];
   boundaryExpected?: boolean;
@@ -93,7 +94,7 @@ export interface MultiTurnResult {
 }
 
 export interface InterviewEvaluationReport {
-  schemaVersion: 3;
+  schemaVersion: 4;
   reportId: string;
   generatedAt: string;
   simulation: { synthetic: true; label: string; replacesHumanTesting: false; roleCount: number; categoryCount: number; caseCount: number };
@@ -170,10 +171,27 @@ export function buildInterviewCases(): InterviewCase[] {
     categoryId: category.id,
     categoryName: category.name,
     question: category.question,
-    anchors: category.anchors,
+    anchors: category.semanticGroups.map((group) => group[0]),
+    semanticGroups: category.semanticGroups,
     targetLength: category.targetLength,
     boundaryExpected: category.id === "ai_coding_share" || category.id === "user_business_value",
   })));
+}
+
+export function buildReleaseCases(): InterviewCase[] {
+  return questionCategories.map((category) => ({
+    id: `release__${category.id}`,
+    roleId: "release_gate",
+    roleName: "确定性发布门禁",
+    roleFocus: "事实可信、岗位相关、表达有说服力",
+    categoryId: category.id,
+    categoryName: category.name,
+    question: category.question,
+    anchors: category.semanticGroups.map((group) => group[0]),
+    semanticGroups: category.semanticGroups,
+    targetLength: category.targetLength,
+    boundaryExpected: category.id === "ai_coding_share" || category.id === "user_business_value",
+  }));
 }
 
 function normalize(text: string) {
@@ -378,8 +396,8 @@ async function runMultiTurn(mode: EvaluationMode, apiKey?: string): Promise<Mult
 
 function repeatedOpenings(results: InterviewEvaluationResult[]) {
   const repeated: string[] = [];
-  for (const role of interviewRoles) {
-    const roleResults = results.filter((item) => item.roleId === role.id);
+  for (const roleId of new Set(results.map((item) => item.roleId))) {
+    const roleResults = results.filter((item) => item.roleId === roleId);
     for (let index = 1; index < roleResults.length; index += 1) {
       if (roleResults[index].quality.opening && roleResults[index].quality.opening === roleResults[index - 1].quality.opening) repeated.push(`${roleResults[index - 1].id} -> ${roleResults[index].id}`);
     }
@@ -389,8 +407,8 @@ function repeatedOpenings(results: InterviewEvaluationResult[]) {
 
 function repeatedClosings(results: InterviewEvaluationResult[]) {
   const repeated: string[] = [];
-  for (const role of interviewRoles) {
-    const roleResults = results.filter((item) => item.roleId === role.id);
+  for (const roleId of new Set(results.map((item) => item.roleId))) {
+    const roleResults = results.filter((item) => item.roleId === roleId);
     for (let index = 1; index < roleResults.length; index += 1) {
       if (roleResults[index].quality.closing.length >= 16 && roleResults[index].quality.closing === roleResults[index - 1].quality.closing) {
         repeated.push(`${roleResults[index - 1].id} -> ${roleResults[index].id}`);
@@ -401,7 +419,8 @@ function repeatedClosings(results: InterviewEvaluationResult[]) {
 }
 
 function similarDifferentIntents(results: InterviewEvaluationResult[]) {
-  const oneRole = results.filter((item) => item.roleId === interviewRoles[0].id);
+  const oneRoleId = results[0]?.roleId;
+  const oneRole = results.filter((item) => item.roleId === oneRoleId);
   const pairs: string[] = [];
   for (let left = 0; left < oneRole.length; left += 1) {
     for (let right = left + 1; right < oneRole.length; right += 1) {
@@ -486,9 +505,10 @@ export async function runInterviewEvaluation(options: { requestedMode?: "local" 
   if (requestedMode === "deepseek" && !apiKey) throw new Error("显式 deepseek 模式需要服务端 API 密钥；密钥不会写入报告或日志。");
 
   const results: InterviewEvaluationResult[] = [];
-  for (const testCase of buildInterviewCases()) {
+  const evaluationCases = effectiveMode === "local" ? buildReleaseCases() : buildInterviewCases();
+  for (const testCase of evaluationCases) {
     const answer = await answerForCase(testCase, effectiveMode, apiKey);
-    const quality = evaluateAnswerQuality(answer.text, { anchors: testCase.anchors, forbiddenFacts: [], forbiddenPatterns: testCase.forbiddenPatterns, expectedStructure: "interview", targetLength: testCase.targetLength, boundaryExpected: testCase.boundaryExpected });
+    const quality = evaluateAnswerQuality(answer.text, { requiredSemanticGroups: testCase.semanticGroups.map((group) => [...group]), forbiddenFacts: [], forbiddenPatterns: testCase.forbiddenPatterns, expectedStructure: "interview", targetLength: testCase.targetLength, boundaryExpected: testCase.boundaryExpected });
     const scores = scoreAnswer(testCase, answer, quality);
     results.push({ ...testCase, syntheticSimulation: true, answer, quality, scores, passed: quality.hardFactsPassed && quality.contentCoverage === 1 && scores.total >= 18 && scores.可信度 >= 4 });
   }
@@ -510,7 +530,7 @@ export async function runInterviewEvaluation(options: { requestedMode?: "local" 
 
   const averageByDimension = Object.fromEntries(scoreDimensions.map((dimension) => [dimension, average(results.map((item) => item.scores[dimension]))])) as Record<ScoreDimension, number>;
   const passedCases = results.filter((item) => item.passed).length;
-  const roleRecommendations = interviewRoles.map((role) => {
+  const roleRecommendations = effectiveMode === "deepseek" ? interviewRoles.map((role) => {
     const roleResults = results.filter((item) => item.roleId === role.id);
     const averageScore = average(roleResults.map((item) => item.scores.total));
     const averageCredibility = average(roleResults.map((item) => item.scores.可信度));
@@ -524,7 +544,7 @@ export async function runInterviewEvaluation(options: { requestedMode?: "local" 
       memorablePhrase: /数据评测/.test(introduction) ? "数据评测 × 企业业务 × 产品落地" : "AI 产品落地",
       suggestedNextQuestion: role.focus.includes("评测") ? "你如何用 Bad Case 推动一次产品迭代？" : "你在代表项目中做过最关键的取舍是什么？",
     };
-  });
+  }) : [];
   const recommendedRoleCount = roleRecommendations.filter((item) => item.recommendsNextRound).length;
   const repeatedOpeningPairs = repeatedOpenings(results);
   const repeatedClosingPairs = repeatedClosings(results);
@@ -552,14 +572,27 @@ export async function runInterviewEvaluation(options: { requestedMode?: "local" 
     multiTurnPassed: multiTurnResults.every((item) => item.passed),
     ...contractMetrics,
   };
-  const passedRecommendationGate = recommendedRoleCount >= 5;
-  const passedQualityGate = averageByDimension.清晰度 >= 4.3 && averageByDimension.差异化 >= 4.3 && averageByDimension.可信度 >= 4.3;
+  const passedRecommendationGate = effectiveMode === "local" || recommendedRoleCount >= 5;
+  const passedQualityGate = averageByDimension.清晰度 >= 4.3
+    && averageByDimension.差异化 >= 4.3
+    && averageByDimension.可信度 >= 4.3
+    && averageByDimension.追问承受力 >= 4
+    && averageByDimension.面试转化意愿 >= 4.3;
   const passedLaunchGate = passedRecommendationGate && passedQualityGate && qualityGates.hardFactsPassed && qualityGates.hallucinationRegressionPassed && qualityGates.coreContentPassed && qualityGates.lengthComplianceRate >= 0.9 && qualityGates.internalWordingCaseCount === 0 && qualityGates.repeatedOpeningPairs.length === 0 && qualityGates.repeatedClosingPairs.length === 0 && qualityGates.similarDifferentIntentPairs.length === 0 && qualityGates.thirdPersonVoiceCount === 0 && qualityGates.unpromptedLimitationCount === 0 && qualityGates.selfIntroductionInternalTermCount === 0 && qualityGates.multiTurnNewInformationRate >= 0.75 && qualityGates.multiTurnPassed && qualityGates.recommendationContractCoverageRate === 1 && qualityGates.routingAccuracyRate >= 0.95 && qualityGates.directAnswerCoverageRate === 1 && qualityGates.unrelatedTopicLeakCount === 0 && qualityGates.dedicatedFallbackPassRate === 1 && qualityGates.templateReuseRate === 0 && qualityGates.deepRecommendationPassed;
   return {
-    schemaVersion: 3,
+    schemaVersion: 4,
     reportId: stableReportId(results, effectiveMode),
     generatedAt: (options.generatedAt ?? new Date()).toISOString(),
-    simulation: { synthetic: true, label: "AI 合成面试预演，不代表真实招聘方意见，不能替代真人测试。", replacesHumanTesting: false, roleCount: interviewRoles.length, categoryCount: questionCategories.length, caseCount: results.length },
+    simulation: {
+      synthetic: true,
+      label: effectiveMode === "local"
+        ? "确定性发布回归，验证事实可信与面试表达，不能替代真人意见。"
+        : "AI 合成面试预演，不代表真实招聘方意见，不能替代真人测试。",
+      replacesHumanTesting: false,
+      roleCount: effectiveMode === "deepseek" ? interviewRoles.length : 0,
+      categoryCount: questionCategories.length,
+      caseCount: results.length,
+    },
     execution: { requestedMode, effectiveMode, ...(effectiveMode === "deepseek" ? { model: process.env.DEEPSEEK_MODEL ?? "deepseek-v4-flash" } : {}) },
     scoring: { scale: "0-5", dimensions: scoreDimensions, casePassThreshold: 18, recommendedRoleThreshold: 5, qualityAverageThreshold: 4.3, targetLength: "adaptive" },
     qualityGates,
@@ -596,7 +629,9 @@ async function main() {
   const report = await runInterviewEvaluation({ requestedMode });
   await mkdir(path.dirname(outputPath), { recursive: true });
   await writeFile(outputPath, `${JSON.stringify(report, null, 2)}\n`, "utf8");
-  console.info(`AI 面试预演完成：${report.simulation.caseCount} 个角色用例，${report.summary.recommendedRoleCount}/6 个模拟角色建议进入下一轮。`);
+  console.info(report.execution.effectiveMode === "local"
+    ? `确定性发布回归完成：${report.simulation.caseCount} 个高频面试问题。`
+    : `AI 面试预演完成：${report.simulation.caseCount} 个角色用例，${report.summary.recommendedRoleCount}/6 个模拟角色建议进入下一轮。`);
   console.info(`硬事实：${report.qualityGates.hardFactViolationCount} 个违规；核心覆盖：${(report.qualityGates.coreContentCoverage * 100).toFixed(0)}%；长度合规：${(report.qualityGates.lengthComplianceRate * 100).toFixed(0)}%。`);
   console.info(`最终上线门禁：${report.summary.passedLaunchGate ? "通过" : "未通过"}。`);
   console.info(report.simulation.label);

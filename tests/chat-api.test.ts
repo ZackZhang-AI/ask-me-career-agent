@@ -65,6 +65,8 @@ test("安全拒答、证据不足与核心稳定回答返回标准 NDJSON 状态
   assert.equal(verified[0].responseStatus, "completed");
   assert.equal(verified[0].claimIds.includes("C3"), true);
   assert.equal(verified[0].sourceIds.includes("S3"), true);
+  assert.equal(Array.isArray(verified[0].citations), true);
+  assert.equal((verified[0].citations as Array<{ sourceIds: string[] }>).some((citation) => citation.sourceIds.includes("S3")), true);
   assert.equal(typeof verified.at(-1).latencyMs, "number");
 });
 

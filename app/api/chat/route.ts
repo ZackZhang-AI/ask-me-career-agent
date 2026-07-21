@@ -1,6 +1,8 @@
 import { NextRequest } from "next/server";
 import { buildAnswerPlan, buildContext, systemPrompt } from "@/lib/answer";
+import { buildAnswerCitations } from "@/lib/answer-citations";
 import { repairInstruction, validateAnswer } from "@/lib/answer-quality";
+import { persistEvent } from "@/lib/analytics";
 import { DeepSeekPlannerError, DeepSeekUpstreamError, generateDeepSeekAnswer, planDeepSeekQuestion } from "@/lib/deepseek";
 import { assessQuestion } from "@/lib/guardrails";
 import { getClaims, getSources, matchStableAnswer, resolveRetrievalQuery, retrieveKnowledge, serializeKnowledgeItems } from "@/lib/knowledge";
@@ -42,7 +44,18 @@ function textStream(input: {
   actualTokens?: number;
   claims?: ReturnType<typeof getClaims>;
   followUpQuestions?: string[];
+  diagnostic?: {
+    sessionId: string;
+    contractId?: string;
+    topic?: string;
+    facet?: string;
+    answerPath: "generated" | "repaired" | "fallback" | "stable" | "demo" | "guardrail";
+    rewriteCount?: number;
+    retrievalCount?: number;
+    qualityTriggerCount?: number;
+  };
 }) {
+  const citations = buildAnswerCitations(input.answer, input.claims ?? getClaims(input.claimIds));
   return new Response(new ReadableStream({ async start(controller) {
     controller.enqueue(line({
       type: "meta",
@@ -50,6 +63,7 @@ function textStream(input: {
       responseStatus: input.responseStatus,
       claimIds: input.claimIds,
       sourceIds: input.sourceIds,
+      citations,
       sources: input.sources,
       items: serializeKnowledgeItems(input.items),
       followUpQuestions: input.followUpQuestions ?? [],
@@ -60,8 +74,25 @@ function textStream(input: {
       await new Promise((resolve) => setTimeout(resolve, 12));
     }
     await recordTokenUsage({ actualTokens: input.actualTokens ?? 0, tokenReservation: input.tokenReservation });
-    controller.enqueue(line({ type: "done", responseStatus: input.responseStatus, latencyMs: Date.now() - input.startedAt }));
+    const latencyMs = Date.now() - input.startedAt;
+    controller.enqueue(line({ type: "done", responseStatus: input.responseStatus, latencyMs }));
     controller.close();
+    if (input.diagnostic) await persistEvent({
+      event: "answer_generated",
+      sessionId: input.diagnostic.sessionId,
+      responseStatus: input.responseStatus,
+      claimIds: input.claimIds,
+      sourceIds: input.sourceIds,
+      latencyMs,
+      contractId: input.diagnostic.contractId,
+      topic: input.diagnostic.topic,
+      facet: input.diagnostic.facet,
+      answerMode: input.mode,
+      answerPath: input.diagnostic.answerPath,
+      rewriteCount: input.diagnostic.rewriteCount,
+      retrievalCount: input.diagnostic.retrievalCount,
+      qualityTriggerCount: input.diagnostic.qualityTriggerCount,
+    });
   }}), { headers: { "Content-Type": "application/x-ndjson; charset=utf-8", "Cache-Control": "no-store" } });
 }
 
@@ -106,6 +137,7 @@ export async function POST(request: NextRequest) {
       ),
       startedAt,
       tokenReservation: rate.tokenReservation,
+      diagnostic: { sessionId: body.sessionId, answerPath: "guardrail", retrievalCount: 0 },
     });
   }
 
@@ -157,6 +189,13 @@ export async function POST(request: NextRequest) {
   const matchedSources = getSources(sourceIds);
   const plan = buildAnswerPlan(assessment.question, items, stableAnswer, history, frame, contract);
   const retrievalTrace = resolveRetrievalQuery(assessment.question, history);
+  const diagnosticBase = {
+    sessionId: body.sessionId,
+    contractId: plan.contractId,
+    topic: plan.topic,
+    facet: plan.facet,
+    retrievalCount: items.length,
+  };
   console.info("ask-me-retrieval", JSON.stringify({
     version: "question-frame-v1",
     contractId: contract?.id,
@@ -184,6 +223,7 @@ export async function POST(request: NextRequest) {
       startedAt,
       tokenReservation: rate.tokenReservation + plannerReservation,
       actualTokens: plannerTokens,
+      diagnostic: { ...diagnosticBase, answerPath: "demo" },
     });
   }
 
@@ -200,6 +240,7 @@ export async function POST(request: NextRequest) {
       startedAt,
       tokenReservation: rate.tokenReservation + plannerReservation,
       actualTokens: plannerTokens,
+      diagnostic: { ...diagnosticBase, answerPath: stableAnswer ? "stable" : "demo" },
     });
   }
 
@@ -286,6 +327,12 @@ export async function POST(request: NextRequest) {
       startedAt,
       tokenReservation: totalReservation,
       actualTokens: totalTokens,
+      diagnostic: {
+        ...diagnosticBase,
+        answerPath: path,
+        rewriteCount,
+        qualityTriggerCount: [...new Set([...firstTriggers, ...finalTriggers])].length,
+      },
     });
   } catch (error) {
     clearTimeout(timeout);
@@ -302,6 +349,7 @@ export async function POST(request: NextRequest) {
         startedAt,
         tokenReservation: totalReservation,
         actualTokens: totalTokens,
+        diagnostic: { ...diagnosticBase, answerPath: "fallback", qualityTriggerCount: firstTriggers.length },
       });
     }
     await recordTokenUsage({ actualTokens: totalTokens, tokenReservation: totalReservation });

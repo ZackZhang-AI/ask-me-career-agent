@@ -895,10 +895,18 @@ textarea:focus-visible {
 }
 
 .message-content {
-  white-space: pre-wrap;
   overflow-wrap: anywhere;
   font-size: 15px;
   line-height: 1.78;
+}
+
+.message-content p {
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+.message-content p + p {
+  margin-top: 14px;
 }
 
 .message-content strong {
@@ -969,6 +977,27 @@ textarea:focus-visible {
   gap: 8px;
 }
 
+.inline-citations {
+  margin-left: 5px;
+  display: inline-flex;
+  gap: 3px;
+  vertical-align: super;
+}
+
+.inline-citations button {
+  min-width: 17px;
+  height: 17px;
+  padding: 0 4px;
+  border: 0;
+  border-radius: 5px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 17px;
+  cursor: pointer;
+}
+
 .source-facts > div {
   display: grid;
   grid-template-columns: 78px minmax(0, 1fr);
@@ -1005,6 +1034,7 @@ textarea:focus-visible {
   gap: 8px;
   color: var(--muted);
   font-size: 12px;
+  flex-wrap: wrap;
 }
 
 .answer-feedback button {
@@ -1130,6 +1160,19 @@ textarea:focus-visible {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+}
+
+.feedback-reasons {
+  width: 100%;
+  padding-top: 2px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.feedback-reasons button:disabled:not([aria-pressed="true"]) {
+  opacity: 0.48;
+  cursor: default;
 }
 
 .chat-error button {

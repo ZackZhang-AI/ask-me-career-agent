@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   buildInterviewCases,
+  buildReleaseCases,
   evaluateAnswerQuality,
   interviewRoles,
   launchExitCode,
@@ -23,12 +24,15 @@ async function localReport() {
 
 test("AI 面试预演覆盖 6 个模拟角色与 8 类问题", () => {
   const cases = buildInterviewCases();
+  const releaseCases = buildReleaseCases();
   assert.equal(interviewRoles.length, 6);
   assert.equal(questionCategories.length, 8);
   assert.equal(cases.length, 48);
   assert.equal(new Set(cases.map((item) => item.id)).size, 48);
   assert.equal(new Set(cases.map((item) => item.question)).size, 8);
   assert.equal(new Set(cases.map((item) => `${item.roleId}:${item.categoryId}`)).size, 48);
+  assert.equal(releaseCases.length, 8);
+  assert.equal(new Set(releaseCases.map((item) => item.question)).size, 8);
   assert.deepEqual(questionCategories.map((item) => item.name), [
     "60 秒介绍", "岗位匹配", "代表项目", "个人贡献", "AI 编程占比", "挑战或失败", "用户与业务价值", "是否建议进入下一轮",
   ]);
@@ -38,12 +42,14 @@ test("本地合成报告确定且不包含 API Key", async () => {
   const first = await localReport();
   const second = await runInterviewEvaluation({ requestedMode: "local", apiKey: "", generatedAt });
   assert.deepEqual(first, second);
-  assert.equal(first.schemaVersion, 3);
+  assert.equal(first.schemaVersion, 4);
   assert.equal(first.execution.effectiveMode, "local");
   assert.equal(first.simulation.synthetic, true);
   assert.equal(first.simulation.replacesHumanTesting, false);
   assert.match(first.simulation.label, /不能替代真人/);
-  assert.equal(first.results.length, 48);
+  assert.equal(first.results.length, 8);
+  assert.equal(first.simulation.roleCount, 0);
+  assert.equal(first.roleRecommendations.length, 0);
   assert.equal(JSON.stringify(first).includes("DEEPSEEK_API_KEY"), false);
 });
 
@@ -51,6 +57,7 @@ test("可信度不再依赖 Claim、Source 或边界词", () => {
   const testCase: InterviewCase = {
     id: "unit", roleId: "unit", roleName: "unit", roleFocus: "unit", categoryId: "unit", categoryName: "unit",
     question: "介绍项目", anchors: ["RAG", "评测"],
+    semanticGroups: [["RAG"], ["评测"]],
   };
   const base: EvaluationAnswer = { text: "RAG 评测。", responseStatus: "completed", claimIds: [], sourceIds: [], answerMode: "deepseek" };
   const metadataOnly: EvaluationAnswer = { ...base, text: "RAG 评测。证据边界需要面试核实。", claimIds: ["C3"], sourceIds: ["S3"] };
@@ -115,7 +122,9 @@ test("上线门禁同时要求角色、质量与硬指标通过", async () => {
   assert.equal(report.scoring.targetLength, "adaptive");
   const expectedQuality = report.summary.averageByDimension.清晰度 >= 4.3
     && report.summary.averageByDimension.差异化 >= 4.3
-    && report.summary.averageByDimension.可信度 >= 4.3;
+    && report.summary.averageByDimension.可信度 >= 4.3
+    && report.summary.averageByDimension.追问承受力 >= 4
+    && report.summary.averageByDimension.面试转化意愿 >= 4.3;
   assert.equal(report.summary.passedQualityGate, expectedQuality);
   if (!report.qualityGates.hardFactsPassed || !report.qualityGates.coreContentPassed || report.qualityGates.lengthComplianceRate < 0.9) {
     assert.equal(report.summary.passedLaunchGate, false);
