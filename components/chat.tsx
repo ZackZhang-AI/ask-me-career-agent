@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, KeyboardEvent, useEffect, useRef, useState } from "react";
+import { FormEvent, KeyboardEvent, useCallback, useEffect, useRef, useState } from "react";
 import {
   ArrowUpIcon,
   ArrowUpRightIcon,
@@ -14,8 +14,10 @@ import {
   StopIcon,
 } from "@phosphor-icons/react";
 import { FormattedAnswer } from "./formatted-answer";
+import { useConversationControl } from "./conversation-control";
 import { featuredProjects, profile } from "@/lib/profile";
 import { getBrowserSessionId } from "@/lib/client-session";
+import { isNearScrollBottom, prepareQuestionMessages } from "@/lib/chat-session";
 import {
   getFollowUpQuestions,
   inferQuestionCategory,
@@ -71,19 +73,26 @@ export function Chat() {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [retryQuestion, setRetryQuestion] = useState("");
   const [activeQuestionGroup, setActiveQuestionGroup] = useState<QuestionGroupId>("screening");
   const [answerFeedback, setAnswerFeedback] = useState<Record<number, "helpful" | "not_helpful">>({});
   const abortRef = useRef<AbortController | null>(null);
   const conversationEpochRef = useRef(0);
+  const chatScrollRef = useRef<HTMLDivElement | null>(null);
   const messageEndRef = useRef<HTMLDivElement | null>(null);
+  const shouldFollowRef = useRef(true);
+  const handledCommandRef = useRef(0);
+  const { command } = useConversationControl();
 
   useEffect(() => {
-    messageEndRef.current?.scrollIntoView({ block: "end" });
+    if (!shouldFollowRef.current) return;
+    const frame = requestAnimationFrame(() => messageEndRef.current?.scrollIntoView({ block: "end" }));
+    return () => cancelAnimationFrame(frame);
   }, [messages]);
 
   useEffect(() => () => abortRef.current?.abort(), []);
 
-  async function send(question: string, fromSuggestion = false) {
+  const send = useCallback(async (question: string, fromSuggestion = false, retry = false) => {
     const clean = question.trim();
     if (!clean || loading) return;
     const sessionId = getBrowserSessionId();
@@ -91,12 +100,13 @@ export function Chat() {
 
     setInput("");
     setError("");
+    setRetryQuestion("");
     setLoading(true);
-    const userMessage: DisplayMessage = { role: "user", content: clean };
-    const nextMessages = [...messages, userMessage];
+    shouldFollowRef.current = true;
+    const nextMessages = prepareQuestionMessages(messages, clean, retry) as DisplayMessage[];
     setMessages([...nextMessages, { role: "assistant", content: "" }]);
     track(fromSuggestion ? "suggestion_clicked" : "question_sent", sessionId, "", { questionCategory: inferQuestionCategory(clean) });
-    if (messages.some((message) => message.role === "user")) track("followup_sent", sessionId);
+    if (!retry && messages.some((message) => message.role === "user")) track("followup_sent", sessionId);
 
     const abort = new AbortController();
     abortRef.current = abort;
@@ -151,11 +161,12 @@ export function Chat() {
       track("answer_completed", sessionId, "", { ...metadata, questionCategory: inferQuestionCategory(clean) });
     } catch (caught) {
       if (conversationEpoch !== conversationEpochRef.current) return;
+      setRetryQuestion(clean);
       if (caught instanceof Error && caught.name === "AbortError") {
-        setError("已停止生成，你可以修改问题后重试。");
+        setError("回答未完整生成，已按你的操作停止。");
       } else {
         const message = caught instanceof Error ? caught.message : "出现未知错误，请重试。";
-        setError(message);
+        setError(`回答未完整生成。${message}`);
         track("chat_error", sessionId, message);
       }
       setMessages((current) => current.filter((message) => message.content));
@@ -165,23 +176,42 @@ export function Chat() {
         abortRef.current = null;
       }
     }
-  }
+  }, [loading, messages]);
 
-  function returnHome() {
+  const resetConversation = useCallback(() => {
     conversationEpochRef.current += 1;
     abortRef.current?.abort();
     abortRef.current = null;
     setMessages([]);
     setInput("");
     setError("");
+    setRetryQuestion("");
     setLoading(false);
     setActiveQuestionGroup("screening");
     setAnswerFeedback({});
+    shouldFollowRef.current = true;
     window.history.replaceState(null, "", `${window.location.pathname}#top`);
     requestAnimationFrame(() => {
-      document.querySelector<HTMLElement>(".chat-scroll")?.scrollTo({ top: 0, behavior: "smooth" });
+      chatScrollRef.current?.scrollTo({ top: 0, behavior: "smooth" });
       document.getElementById("top")?.scrollIntoView({ behavior: "smooth", block: "start" });
     });
+  }, []);
+
+  useEffect(() => {
+    if (!command || handledCommandRef.current === command.id) return;
+    if (command.type === "ask" && loading) return;
+    const frame = requestAnimationFrame(() => {
+      handledCommandRef.current = command.id;
+      if (command.type === "reset") resetConversation();
+      else void send(command.question, true);
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [command, loading, resetConversation, send]);
+
+  function handleScroll() {
+    const scroll = chatScrollRef.current;
+    if (!scroll) return;
+    shouldFollowRef.current = isNearScrollBottom(scroll.scrollHeight, scroll.scrollTop, scroll.clientHeight);
   }
 
   function submit(event: FormEvent) {
@@ -203,17 +233,17 @@ export function Chat() {
   const latestAssistant = [...messages].reverse().find((message) => message.role === "assistant" && message.content);
   const followUpQuestions = latestAssistant?.followUpQuestions?.filter((question) => !askedQuestions.includes(question)).slice(0, 3)
     ?? (lastQuestion ? getFollowUpQuestions(lastQuestion, askedQuestions) : []);
-  const hasCompletedAnswer = messages.some((message) => message.role === "assistant" && message.content);
+  const hasCompletedAnswer = !error && messages.some((message) => message.role === "assistant" && message.content);
 
   return (
     <div className={`chat-shell ${isEmpty ? "is-empty" : "has-messages"}`}>
       {!isEmpty && (
-        <button className="return-home" type="button" onClick={returnHome}>
+        <button className="return-home" type="button" onClick={resetConversation}>
           <HouseIcon size={15} weight="bold" aria-hidden="true" />
           回到主页
         </button>
       )}
-      <div className="chat-scroll">
+      <div className="chat-scroll" ref={chatScrollRef} onScroll={handleScroll}>
         {isEmpty ? (
           <div className="empty-state">
             <section className="welcome" aria-labelledby="chat-title">
@@ -234,24 +264,6 @@ export function Chat() {
                 <a href={profile.github} target="_blank" rel="noreferrer" data-track-event="project_opened" data-track-detail="github"><GithubLogoIcon size={15} aria-hidden="true" />GitHub</a>
                 <a href="/resume"><FileTextIcon size={15} aria-hidden="true" />简历</a>
               </nav>
-            </section>
-
-            <section className="project-proof" aria-labelledby="project-title">
-              <div className="proof-heading">
-                <h2 id="project-title">可直接核验的项目</h2>
-                <a href={profile.github} target="_blank" rel="noreferrer" data-track-event="project_opened" data-track-detail="all-repositories"><GithubLogoIcon size={16} aria-hidden="true" />全部仓库</a>
-              </div>
-              <div className="project-grid">
-                {featuredProjects.map((project) => (
-                  <a className="project-link" href={project.url} target="_blank" rel="noreferrer" key={project.name} data-track-event="project_opened" data-track-detail={project.name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}>
-                    <span className="project-status">{project.status}</span>
-                    <strong>{project.name}</strong>
-                    <p>{project.summary}</p>
-                    <small>{project.stack}</small>
-                    <ArrowUpRightIcon className="project-arrow" size={18} aria-hidden="true" />
-                  </a>
-                ))}
-              </div>
             </section>
 
             <section className="question-start" aria-labelledby="question-title">
@@ -282,6 +294,24 @@ export function Chat() {
                     <span>{question}</span>
                     <ArrowUpRightIcon size={17} aria-hidden="true" />
                   </button>
+                ))}
+              </div>
+            </section>
+
+            <section className="project-proof" aria-labelledby="project-title">
+              <div className="proof-heading">
+                <h2 id="project-title">可直接核验的项目</h2>
+                <a href={profile.github} target="_blank" rel="noreferrer" data-track-event="project_opened" data-track-detail="all-repositories"><GithubLogoIcon size={16} aria-hidden="true" />全部仓库</a>
+              </div>
+              <div className="project-grid">
+                {featuredProjects.map((project) => (
+                  <a className="project-link" href={project.url} target="_blank" rel="noreferrer" key={project.name} data-track-event="project_opened" data-track-detail={project.name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}>
+                    <span className="project-status">{project.status}</span>
+                    <strong>{project.name}</strong>
+                    <p>{project.summary}</p>
+                    <small>{project.stack}</small>
+                    <ArrowUpRightIcon className="project-arrow" size={18} aria-hidden="true" />
+                  </a>
                 ))}
               </div>
             </section>
@@ -319,12 +349,13 @@ export function Chat() {
                             <CaretDownIcon size={15} aria-hidden="true" />
                           </summary>
                           <div className="source-detail">
-                            <p>类型：{source.sourceType}</p>
-                            <p>验证状态：{verificationLabels[source.verification]}</p>
-                            {source.projectStatus && <p>项目状态：{statusLabels[source.projectStatus]}</p>}
-                            <p>最后检查：{source.lastChecked}</p>
-                            <p>相关内容：{source.supports}</p>
-                            <p>适用说明：{source.limitations}</p>
+                            <dl className="source-facts">
+                              <div><dt>验证方式</dt><dd>{verificationLabels[source.verification]}</dd></div>
+                              {source.projectStatus && <div><dt>项目状态</dt><dd>{statusLabels[source.projectStatus]}</dd></div>}
+                              <div><dt>可核验内容</dt><dd>{source.supports}</dd></div>
+                              <div><dt>当前不能证明</dt><dd>{source.limitations}</dd></div>
+                            </dl>
+                            <p className="source-checked">最后检查：{source.lastChecked}</p>
                             {source.url && <a href={source.url} target="_blank" rel="noreferrer">查看公开来源 <ArrowUpRightIcon size={14} aria-hidden="true" /></a>}
                           </div>
                         </details>
@@ -371,7 +402,14 @@ export function Chat() {
             </div>
           </div>
         )}
-        {error && <div className="chat-error" role="alert">{error}</div>}
+        {error && (
+          <div className="chat-error" role="alert">
+            <span>{error}</span>
+            {retryQuestion && !loading && (
+              <button type="button" onClick={() => void send(retryQuestion, false, true)}>重新生成</button>
+            )}
+          </div>
+        )}
         <form className="composer" onSubmit={submit}>
           <label className="sr-only" htmlFor="question">向 Ask Me 提问</label>
           <textarea

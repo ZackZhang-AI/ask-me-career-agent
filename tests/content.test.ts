@@ -4,6 +4,14 @@ import { candidateNarrative } from "../content/narrative.ts";
 import { answerSimilarity } from "../lib/answer-quality.ts";
 import { contentCatalog, contentCatalogSchema } from "../lib/content.ts";
 import { claims, faqs, knowledge, matchStableAnswer, resolveRetrievalQuery, retrieveKnowledge, sources, stableAnswers, starStories } from "../lib/knowledge.ts";
+import { featuredProjects } from "../lib/profile.ts";
+
+test("首页项目卡片如实区分当前完成度", () => {
+  assert.equal(featuredProjects.every((project) => !project.status.includes("已完成")), true);
+  assert.match(featuredProjects[0].summary, /Dense Retrieval/);
+  assert.match(featuredProjects[1].status, /MVP/);
+  assert.match(featuredProjects[2].status, /持续迭代/);
+});
 
 test("内容目录通过 Zod 与引用完整性校验", () => {
   assert.doesNotThrow(() => contentCatalogSchema.parse(contentCatalog));

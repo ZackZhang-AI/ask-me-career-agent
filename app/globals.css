@@ -182,6 +182,7 @@ textarea:focus-visible {
 }
 
 .new-chat {
+  width: 100%;
   min-height: 42px;
   padding: 0 12px;
   display: flex;
@@ -190,8 +191,12 @@ textarea:focus-visible {
   border: 1px solid transparent;
   border-radius: 12px;
   background: var(--surface-hover);
+  color: var(--ink);
+  font-family: inherit;
   font-size: 14px;
   font-weight: 570;
+  text-align: left;
+  cursor: pointer;
   transition: background 160ms ease, border-color 160ms ease, transform 160ms ease;
 }
 
@@ -309,16 +314,22 @@ textarea:focus-visible {
 }
 
 .strength-trigger {
+  width: 100%;
   min-height: 42px;
   padding: 0 9px 0 10px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
+  border: 0;
   border-radius: 10px;
+  background: transparent;
   color: #4f5054;
   font-size: 12.5px;
+  font-family: inherit;
   font-weight: 570;
+  text-align: left;
+  cursor: pointer;
   transition: background 160ms ease, color 160ms ease;
 }
 
@@ -605,7 +616,7 @@ textarea:focus-visible {
 }
 
 .project-proof {
-  margin-top: 38px;
+  margin-top: 30px;
 }
 
 .proof-heading {
@@ -642,7 +653,7 @@ textarea:focus-visible {
 .project-grid {
   margin-top: 13px;
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: 1.08fr 1fr 0.92fr;
   gap: 12px;
 }
 
@@ -708,7 +719,7 @@ textarea:focus-visible {
 }
 
 .question-start {
-  margin-top: 24px;
+  margin-top: 28px;
   padding: 18px;
   border: 1px solid var(--line-soft);
   border-radius: 20px;
@@ -952,8 +963,30 @@ textarea:focus-visible {
   line-height: 1.6;
 }
 
-.source-detail p {
-  margin: 4px 0;
+.source-facts {
+  margin: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.source-facts > div {
+  display: grid;
+  grid-template-columns: 78px minmax(0, 1fr);
+  gap: 10px;
+}
+
+.source-facts dt {
+  color: var(--faint);
+}
+
+.source-facts dd {
+  margin: 0;
+  color: var(--muted);
+}
+
+.source-detail .source-checked {
+  margin: 10px 0 4px;
+  color: var(--faint);
 }
 
 .source-detail a {
@@ -1093,6 +1126,22 @@ textarea:focus-visible {
   background: color-mix(in srgb, var(--danger) 6%, var(--surface));
   color: var(--danger);
   font-size: 13px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.chat-error button {
+  flex: 0 0 auto;
+  padding: 6px 10px;
+  border: 1px solid color-mix(in srgb, var(--danger) 38%, var(--line));
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 620;
+  cursor: pointer;
 }
 
 .composer {
@@ -1197,7 +1246,7 @@ textarea:focus-visible {
     color: #202123;
   }
 
-  .strength-nav a {
+  .strength-trigger {
     color: var(--muted);
   }
 
@@ -1266,11 +1315,11 @@ textarea:focus-visible {
   }
 
   .empty-state {
-    padding: 34px 16px 28px;
+    padding: 28px 16px 24px;
   }
 
   .welcome h1 {
-    font-size: 30px;
+    font-size: 28px;
   }
 
   .welcome-description {
@@ -1315,7 +1364,7 @@ textarea:focus-visible {
   }
 
   .project-proof {
-    margin-top: 34px;
+    margin-top: 28px;
   }
 
   .project-grid {

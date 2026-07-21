@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import {
   ArrowSquareOutIcon,
   CaretRightIcon,
@@ -15,6 +15,7 @@ import {
 } from "@phosphor-icons/react";
 import { capabilityNavigation } from "@/lib/capability-navigation";
 import { profile } from "@/lib/profile";
+import { ConversationControlContext, type ConversationCommand } from "./conversation-control";
 
 const publicLinks = [
   { label: "GitHub 项目", href: profile.github, icon: GithubLogoIcon, external: true, event: "project_opened", target: "github" },
@@ -25,11 +26,30 @@ const publicLinks = [
 
 export function AppFrame({ children }: { children: ReactNode }) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [conversationCommand, setConversationCommand] = useState<ConversationCommand | null>(null);
+  const commandIdRef = useRef(0);
+
+  const startNewConversation = useCallback(() => {
+    commandIdRef.current += 1;
+    setConversationCommand({ id: commandIdRef.current, type: "reset" });
+  }, []);
+
+  const enqueueQuestion = useCallback((question: string) => {
+    commandIdRef.current += 1;
+    setConversationCommand({ id: commandIdRef.current, type: "ask", question });
+  }, []);
+
+  const conversationControl = useMemo(() => ({
+    command: conversationCommand,
+    startNewConversation,
+    enqueueQuestion,
+  }), [conversationCommand, enqueueQuestion, startNewConversation]);
 
   return (
-    <main className={`app-shell${sidebarCollapsed ? " is-sidebar-collapsed" : ""}`} id="top">
-      <aside id="candidate-sidebar" className={`sidebar${sidebarCollapsed ? " is-collapsed" : ""}`} aria-label="候选人信息">
-        <div className="sidebar-header">
+    <ConversationControlContext.Provider value={conversationControl}>
+      <main className={`app-shell${sidebarCollapsed ? " is-sidebar-collapsed" : ""}`} id="top">
+        <aside id="candidate-sidebar" className={`sidebar${sidebarCollapsed ? " is-collapsed" : ""}`} aria-label="候选人信息">
+          <div className="sidebar-header">
           <div className="sidebar-title-row">
             <a className="brand" href="#top" aria-label="Ask Me 首页">
               <span className="brand-mark" aria-hidden="true">A</span>
@@ -51,13 +71,13 @@ export function AppFrame({ children }: { children: ReactNode }) {
             </button>
           </div>
 
-          <a className="new-chat" href="#ask" aria-label="新对话" title={sidebarCollapsed ? "新对话" : undefined}>
+          <button className="new-chat" type="button" onClick={startNewConversation} aria-label="新对话" title={sidebarCollapsed ? "新对话" : undefined}>
             <PlusIcon size={17} weight="bold" aria-hidden="true" />
             <span className="new-chat-label">新对话</span>
-          </a>
-        </div>
+          </button>
+          </div>
 
-        <section className="sidebar-section" aria-labelledby="profile-label">
+          <section className="sidebar-section" aria-labelledby="profile-label">
           <p className="sidebar-label" id="profile-label">快速了解</p>
           <div className="profile-summary">
             <span className="profile-avatar" aria-hidden="true">张</span>
@@ -69,10 +89,15 @@ export function AppFrame({ children }: { children: ReactNode }) {
           <ul className="strength-nav">
             {capabilityNavigation.map((capability, index) => (
               <li className="strength-item" key={capability.title}>
-                <a className="strength-trigger" href="#ask" aria-describedby={`capability-${index}`}>
+                <button
+                  className="strength-trigger"
+                  type="button"
+                  aria-describedby={`capability-${index}`}
+                  onClick={() => enqueueQuestion(capability.question)}
+                >
                   <span>{capability.title}</span>
                   <CaretRightIcon size={13} aria-hidden="true" />
-                </a>
+                </button>
                 <div className="strength-flyout" id={`capability-${index}`} role="group" aria-label={`${capability.title}二级能力`}>
                   <strong>{capability.title}</strong>
                   <p>{capability.summary}</p>
@@ -83,9 +108,9 @@ export function AppFrame({ children }: { children: ReactNode }) {
               </li>
             ))}
           </ul>
-        </section>
+          </section>
 
-        <div className="sidebar-footer">
+          <div className="sidebar-footer">
           {publicLinks.map(({ label, href, icon: Icon, external, event, target }) => (
             <a
               key={label}
@@ -106,10 +131,11 @@ export function AppFrame({ children }: { children: ReactNode }) {
             <ShieldCheckIcon size={17} aria-hidden="true" />
             <p>仅基于候选人维护的公开资料回答</p>
           </div>
-        </div>
-      </aside>
+          </div>
+        </aside>
 
-      {children}
-    </main>
+        {children}
+      </main>
+    </ConversationControlContext.Provider>
   );
 }
