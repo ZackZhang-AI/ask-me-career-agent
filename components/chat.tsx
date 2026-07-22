@@ -66,8 +66,8 @@ const feedbackReasons = [
   { id: "missing_evidence", label: "证据不足" },
 ] as const;
 
-const PRESET_THINKING_MS = 90;
-const PRESET_REVEAL_INTERVAL_MS = 35;
+const PRESET_THINKING_MS = 24;
+const PRESET_REVEAL_INTERVAL_MS = 26;
 
 function waitFor(ms: number, signal: AbortSignal) {
   return new Promise<void>((resolve, reject) => {
@@ -157,31 +157,35 @@ export function Chat({ presetAnswers }: ChatProps) {
         ? presetAnswers.find((answer) => answer.question === clean)
         : undefined;
       if (preset) {
-        await waitFor(PRESET_THINKING_MS, abort.signal);
-        const chunks = presetRevealChunks(preset.content);
+        const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+        if (!reduceMotion) await waitFor(PRESET_THINKING_MS, abort.signal);
+        const chunks = reduceMotion ? [preset.content] : presetRevealChunks(preset.content);
         let answer = chunks[0] ?? preset.content;
-        const metadata: Partial<DisplayMessage> = {
-          sources: preset.sources,
+        const streamingMetadata: Partial<DisplayMessage> = {
           mode: preset.mode,
-          responseStatus: preset.responseStatus,
           claimIds: preset.claimIds,
           sourceIds: preset.sourceIds,
-          citations: preset.citations,
-          followUpQuestions: preset.followUpQuestions,
           contractId: preset.contractId,
           deliveryPath: "preset",
           firstTokenLatencyMs: Math.round(performance.now() - startedAt),
         };
-        setMessages([...nextMessages, { role: "assistant", content: answer, ...metadata }]);
+        setMessages([...nextMessages, { role: "assistant", content: answer, ...streamingMetadata }]);
         for (const chunk of chunks.slice(1)) {
           await waitFor(PRESET_REVEAL_INTERVAL_MS, abort.signal);
           if (conversationEpoch !== conversationEpochRef.current) return;
           answer += chunk;
-          setMessages([...nextMessages, { role: "assistant", content: answer, ...metadata }]);
+          setMessages([...nextMessages, { role: "assistant", content: answer, ...streamingMetadata }]);
         }
-        metadata.latencyMs = Math.round(performance.now() - startedAt);
-        setMessages([...nextMessages, { role: "assistant", content: answer, ...metadata }]);
-        track("answer_completed", sessionId, "", { ...metadata, questionCategory: inferQuestionCategory(clean) });
+        const completedMetadata: Partial<DisplayMessage> = {
+          ...streamingMetadata,
+          sources: preset.sources,
+          responseStatus: preset.responseStatus,
+          citations: preset.citations,
+          followUpQuestions: preset.followUpQuestions,
+          latencyMs: Math.round(performance.now() - startedAt),
+        };
+        setMessages([...nextMessages, { role: "assistant", content: answer, ...completedMetadata }]);
+        track("answer_completed", sessionId, "", { ...completedMetadata, questionCategory: inferQuestionCategory(clean) });
         return;
       }
 
@@ -350,24 +354,6 @@ export function Chat({ presetAnswers }: ChatProps) {
               </nav>
             </section>
 
-            <section className="project-proof" aria-labelledby="project-title">
-              <div className="proof-heading">
-                <h2 id="project-title">可直接核验的项目</h2>
-                <a href={profile.github} target="_blank" rel="noreferrer" data-track-event="project_opened" data-track-detail="all-repositories"><GithubLogoIcon size={16} aria-hidden="true" />全部仓库</a>
-              </div>
-              <div className="project-grid">
-                {featuredProjects.map((project) => (
-                  <a className="project-link" href={project.url} target="_blank" rel="noreferrer" key={project.name} data-track-event="project_opened" data-track-detail={project.name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}>
-                    <span className="project-status">{project.status}</span>
-                    <strong>{project.name}</strong>
-                    <p>{project.summary}</p>
-                    <small>{project.stack}</small>
-                    <ArrowUpRightIcon className="project-arrow" size={18} aria-hidden="true" />
-                  </a>
-                ))}
-              </div>
-            </section>
-
             <section className="question-start" aria-labelledby="question-title">
               <h2 id="question-title">从您可能最关心的问题开始吧。</h2>
               <div className="question-groups" role="tablist" aria-label="问题分类">
@@ -399,11 +385,32 @@ export function Chat({ presetAnswers }: ChatProps) {
                 ))}
               </div>
             </section>
+
+            <section className="project-proof" aria-labelledby="project-title">
+              <div className="proof-heading">
+                <h2 id="project-title">可直接核验的项目</h2>
+                <a href={profile.github} target="_blank" rel="noreferrer" data-track-event="project_opened" data-track-detail="all-repositories"><GithubLogoIcon size={16} aria-hidden="true" />全部仓库</a>
+              </div>
+              <div className="project-grid">
+                {featuredProjects.map((project) => (
+                  <a className="project-link" href={project.url} target="_blank" rel="noreferrer" key={project.name} data-track-event="project_opened" data-track-detail={project.name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}>
+                    <span className="project-status">{project.status}</span>
+                    <strong>{project.name}</strong>
+                    <p>{project.summary}</p>
+                    <small>{project.stack}</small>
+                    <ArrowUpRightIcon className="project-arrow" size={18} aria-hidden="true" />
+                  </a>
+                ))}
+              </div>
+            </section>
           </div>
         ) : (
           <div className="messages" aria-live="polite">
             {messages.map((message, index) => (
-              <article className={`message ${message.role}`} key={`${message.role}-${index}`}>
+              <article
+                className={`message ${message.role}${message.role === "assistant" && message.content && !message.responseStatus ? " streaming" : ""}`}
+                key={`${message.role}-${index}`}
+              >
                 {message.role === "assistant" && <span className="assistant-mark" aria-hidden="true">A</span>}
                 <div className="message-body">
                   <p className={message.role === "user" ? "sr-only" : "message-role"}>
@@ -416,7 +423,7 @@ export function Chat({ presetAnswers }: ChatProps) {
                         <span />
                         <span />
                       </span>
-                      <span>正在核对资料并整理回答</span>
+                      <span>正在准备回答</span>
                     </div>
                   ) : (
                     message.role === "assistant"

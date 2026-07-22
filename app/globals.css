@@ -616,7 +616,7 @@ textarea:focus-visible {
 }
 
 .project-proof {
-  margin-top: 38px;
+  margin-top: 30px;
 }
 
 .proof-heading {
@@ -719,7 +719,7 @@ textarea:focus-visible {
 }
 
 .question-start {
-  margin-top: 24px;
+  margin-top: 28px;
   padding: 18px;
   border: 1px solid var(--line-soft);
   border-radius: 20px;
@@ -1054,43 +1054,61 @@ textarea:focus-visible {
 }
 
 .thinking-state {
-  min-height: 28px;
-  padding-top: 2px;
+  min-height: 24px;
+  padding-top: 1px;
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   color: var(--muted);
-  font-size: 13px;
-  font-weight: 560;
+  font-size: 12px;
+  font-weight: 540;
 }
 
 .thinking-indicator {
-  width: 25px;
-  height: 25px;
+  width: 22px;
+  height: 22px;
   flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 3px;
-  border-radius: 8px;
+  border-radius: 7px;
   background: var(--accent-soft);
 }
 
 .thinking-indicator > span {
   width: 2px;
-  height: 10px;
+  height: 8px;
   border-radius: 2px;
   background: var(--accent);
-  animation: thinking-wave 900ms ease-in-out infinite;
+  animation: thinking-wave 720ms ease-in-out infinite;
   transform-origin: center;
 }
 
 .thinking-indicator > span:nth-child(2) {
-  animation-delay: 120ms;
+  animation-delay: 90ms;
 }
 
 .thinking-indicator > span:nth-child(3) {
-  animation-delay: 240ms;
+  animation-delay: 180ms;
+}
+
+.message.assistant.streaming .message-content p:last-child::after {
+  content: "";
+  width: 2px;
+  height: 0.95em;
+  margin-left: 3px;
+  display: inline-block;
+  vertical-align: -0.08em;
+  border-radius: 1px;
+  background: var(--accent);
+  animation: answer-caret 760ms ease-in-out infinite;
+}
+
+@keyframes answer-caret {
+  50% {
+    opacity: 0.2;
+  }
 }
 
 @keyframes thinking-wave {
@@ -1486,7 +1504,7 @@ textarea:focus-visible {
   }
 
   .project-proof {
-    margin-top: 34px;
+    margin-top: 28px;
   }
 
   .project-grid {

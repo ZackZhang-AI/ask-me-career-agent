@@ -20,15 +20,16 @@ export function isNearScrollBottom(
   return scrollHeight - scrollTop - clientHeight <= threshold;
 }
 
-export function presetRevealChunks(content: string, remainingSteps = 10) {
-  const sentenceEnd = content.search(/[。！？]/);
-  const firstEnd = sentenceEnd >= 0 ? sentenceEnd + 1 : Math.min(content.length, 80);
-  const first = content.slice(0, firstEnd);
-  const remaining = content.slice(firstEnd);
-  if (!remaining) return [first];
-  const chunkSize = Math.max(1, Math.ceil(remaining.length / remainingSteps));
-  return [first, ...Array.from(
-    { length: Math.ceil(remaining.length / chunkSize) },
-    (_, index) => remaining.slice(index * chunkSize, (index + 1) * chunkSize),
-  )];
+export function presetRevealChunks(content: string) {
+  const characters = Array.from(content);
+  const chunks: string[] = [];
+  let offset = 0;
+
+  while (offset < characters.length) {
+    const chunkSize = offset === 0 ? 1 : offset < 20 ? 2 : offset < 96 ? 3 : 5;
+    chunks.push(characters.slice(offset, offset + chunkSize).join(""));
+    offset += chunkSize;
+  }
+
+  return chunks;
 }

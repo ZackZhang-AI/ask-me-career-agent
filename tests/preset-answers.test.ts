@@ -25,7 +25,11 @@ test("首屏四题都生成通过质量门禁的公开预设回答包", () => {
 
 test("快速通道仅用于首轮且保留现有加载状态", () => {
   assert.match(chatSource, /!retry && messages\.length === 0/);
-  assert.match(chatSource, /PRESET_THINKING_MS = 90/);
+  assert.match(chatSource, /PRESET_THINKING_MS = 24/);
   assert.match(chatSource, /className="thinking-state"/);
   assert.match(chatSource, /fetch\("\/api\/chat"/);
+});
+
+test("首页先展示推荐问题，再展示可核验项目", () => {
+  assert.equal(chatSource.indexOf('className="question-start"') < chatSource.indexOf('className="project-proof"'), true);
 });

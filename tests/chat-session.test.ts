@@ -34,10 +34,11 @@ test("仅在接近滚动区底部时继续自动跟随回答", () => {
   assert.equal(isNearScrollBottom(1000, 300, 480), false);
 });
 
-test("预设回答先展示完整首句再快速补齐余文", () => {
+test("预设回答先展示首字符，再以小颗粒逐步补齐全文", () => {
   const content = "第一句立即展示。第二段继续解释产品取舍与评测方式。最后总结。";
-  const chunks = presetRevealChunks(content, 3);
-  assert.equal(chunks[0], "第一句立即展示。");
+  const chunks = presetRevealChunks(content);
+  assert.equal(chunks[0], "第");
   assert.equal(chunks.join(""), content);
-  assert.equal(chunks.length <= 4, true);
+  assert.equal(Math.max(...chunks.map((chunk) => Array.from(chunk).length)) <= 5, true);
+  assert.equal(chunks.length > 10, true);
 });
