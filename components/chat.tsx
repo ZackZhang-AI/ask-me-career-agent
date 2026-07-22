@@ -11,6 +11,7 @@ import {
   GithubLogoIcon,
   HouseIcon,
   PhoneIcon,
+  SparkleIcon,
   StopIcon,
 } from "@phosphor-icons/react";
 import { FormattedAnswer } from "./formatted-answer";
@@ -242,8 +243,9 @@ export function Chat() {
   const askedQuestions = messages.filter((message) => message.role === "user").map((message) => message.content);
   const lastQuestion = askedQuestions[askedQuestions.length - 1] ?? "";
   const latestAssistant = [...messages].reverse().find((message) => message.role === "assistant" && message.content);
-  const followUpQuestions = latestAssistant?.followUpQuestions?.filter((question) => !askedQuestions.includes(question)).slice(0, 3)
-    ?? (lastQuestion ? getFollowUpQuestions(lastQuestion, askedQuestions) : []);
+  const followUpQuestions = lastQuestion
+    ? getFollowUpQuestions(lastQuestion, askedQuestions, 3, latestAssistant?.followUpQuestions)
+    : [];
   const hasCompletedAnswer = !error && messages.some((message) => message.role === "assistant" && message.content);
 
   return (
@@ -277,6 +279,24 @@ export function Chat() {
               </nav>
             </section>
 
+            <section className="project-proof" aria-labelledby="project-title">
+              <div className="proof-heading">
+                <h2 id="project-title">可直接核验的项目</h2>
+                <a href={profile.github} target="_blank" rel="noreferrer" data-track-event="project_opened" data-track-detail="all-repositories"><GithubLogoIcon size={16} aria-hidden="true" />全部仓库</a>
+              </div>
+              <div className="project-grid">
+                {featuredProjects.map((project) => (
+                  <a className="project-link" href={project.url} target="_blank" rel="noreferrer" key={project.name} data-track-event="project_opened" data-track-detail={project.name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}>
+                    <span className="project-status">{project.status}</span>
+                    <strong>{project.name}</strong>
+                    <p>{project.summary}</p>
+                    <small>{project.stack}</small>
+                    <ArrowUpRightIcon className="project-arrow" size={18} aria-hidden="true" />
+                  </a>
+                ))}
+              </div>
+            </section>
+
             <section className="question-start" aria-labelledby="question-title">
               <h2 id="question-title">从您可能最关心的问题开始吧。</h2>
               <div className="question-groups" role="tablist" aria-label="问题分类">
@@ -308,24 +328,6 @@ export function Chat() {
                 ))}
               </div>
             </section>
-
-            <section className="project-proof" aria-labelledby="project-title">
-              <div className="proof-heading">
-                <h2 id="project-title">可直接核验的项目</h2>
-                <a href={profile.github} target="_blank" rel="noreferrer" data-track-event="project_opened" data-track-detail="all-repositories"><GithubLogoIcon size={16} aria-hidden="true" />全部仓库</a>
-              </div>
-              <div className="project-grid">
-                {featuredProjects.map((project) => (
-                  <a className="project-link" href={project.url} target="_blank" rel="noreferrer" key={project.name} data-track-event="project_opened" data-track-detail={project.name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}>
-                    <span className="project-status">{project.status}</span>
-                    <strong>{project.name}</strong>
-                    <p>{project.summary}</p>
-                    <small>{project.stack}</small>
-                    <ArrowUpRightIcon className="project-arrow" size={18} aria-hidden="true" />
-                  </a>
-                ))}
-              </div>
-            </section>
           </div>
         ) : (
           <div className="messages" aria-live="polite">
@@ -337,10 +339,13 @@ export function Chat() {
                     {message.role === "user" ? "你的问题" : "Ask Me"}
                   </p>
                   {message.role === "assistant" && !message.content ? (
-                    <div className="skeleton" aria-label="正在生成回答">
-                      <span />
-                      <span />
-                      <span />
+                    <div className="thinking-state" role="status" aria-live="polite">
+                      <span className="thinking-indicator" aria-hidden="true">
+                        <span />
+                        <span />
+                        <span />
+                      </span>
+                      <span>正在核对资料并整理回答</span>
                     </div>
                   ) : (
                     message.role === "assistant"
@@ -432,14 +437,25 @@ export function Chat() {
 
       <div className="composer-dock">
         {hasCompletedAnswer && !loading && followUpQuestions.length > 0 && (
-          <div className="contextual-suggestions" aria-label="根据上一问题推荐的追问">
-            <span>接着了解</span>
-            <div>
+          <section className="contextual-suggestions" aria-labelledby="follow-up-title">
+            <div className="contextual-suggestions-heading">
+              <span className="contextual-suggestions-icon" aria-hidden="true">
+                <SparkleIcon size={15} weight="fill" />
+              </span>
+              <span>
+                <strong id="follow-up-title">继续了解张倬玮</strong>
+                <small>根据刚才的问题，为您推荐 3 个追问</small>
+              </span>
+            </div>
+            <div className="contextual-suggestions-list">
               {followUpQuestions.map((question) => (
-                <button key={question} type="button" onClick={() => void send(question, true)}>{question}</button>
+                <button key={question} type="button" onClick={() => void send(question, true)}>
+                  <span>{question}</span>
+                  <ArrowUpRightIcon size={14} aria-hidden="true" />
+                </button>
               ))}
             </div>
-          </div>
+          </section>
         )}
         {error && (
           <div className="chat-error" role="alert">
