@@ -4,9 +4,11 @@ import {
 import { AppFrame } from "@/components/app-frame";
 import { Chat } from "@/components/chat";
 import { InteractionTracker } from "@/components/interaction-tracker";
+import { buildHomepagePresetAnswers } from "@/lib/preset-answers";
 import { profile } from "@/lib/profile";
 
 export default function Home() {
+  const presetAnswers = buildHomepagePresetAnswers();
   return (
     <AppFrame>
       <InteractionTracker />
@@ -25,7 +27,7 @@ export default function Home() {
             <FileTextIcon size={15} aria-hidden="true" />
           </a>
         </header>
-        <Chat />
+        <Chat presetAnswers={presetAnswers} />
       </section>
     </AppFrame>
   );

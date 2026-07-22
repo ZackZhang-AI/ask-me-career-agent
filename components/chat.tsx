@@ -11,20 +11,25 @@ import {
   GithubLogoIcon,
   HouseIcon,
   PhoneIcon,
+  SparkleIcon,
   StopIcon,
 } from "@phosphor-icons/react";
 import { FormattedAnswer } from "./formatted-answer";
 import { useConversationControl } from "./conversation-control";
 import { featuredProjects, profile } from "@/lib/profile";
 import { getBrowserSessionId } from "@/lib/client-session";
-import { isNearScrollBottom, prepareQuestionMessages } from "@/lib/chat-session";
+import { isNearScrollBottom, prepareQuestionMessages, presetRevealChunks } from "@/lib/chat-session";
 import {
   getFollowUpQuestions,
   inferQuestionCategory,
   questionGroups,
   type QuestionGroupId,
 } from "@/lib/question-suggestions";
-import type { AnswerCitation, ChatMessage, KnowledgeItem, ResponseStatus, Source } from "@/lib/types";
+import type { AnswerCitation, ChatMessage, KnowledgeItem, PresetAnswerPacket, ResponseStatus, Source } from "@/lib/types";
+
+interface ChatProps {
+  presetAnswers: PresetAnswerPacket[];
+}
 
 interface DisplayMessage extends ChatMessage {
   sources?: Source[];
@@ -35,6 +40,9 @@ interface DisplayMessage extends ChatMessage {
   sourceIds?: string[];
   citations?: AnswerCitation[];
   latencyMs?: number;
+  firstTokenLatencyMs?: number;
+  deliveryPath?: "preset" | "api";
+  contractId?: string;
   followUpQuestions?: string[];
 }
 
@@ -58,6 +66,27 @@ const feedbackReasons = [
   { id: "missing_evidence", label: "证据不足" },
 ] as const;
 
+const PRESET_THINKING_MS = 90;
+const PRESET_REVEAL_INTERVAL_MS = 35;
+
+function waitFor(ms: number, signal: AbortSignal) {
+  return new Promise<void>((resolve, reject) => {
+    if (signal.aborted) {
+      reject(new DOMException("Aborted", "AbortError"));
+      return;
+    }
+    const onAbort = () => {
+      window.clearTimeout(timer);
+      reject(new DOMException("Aborted", "AbortError"));
+    };
+    const timer = window.setTimeout(() => {
+      signal.removeEventListener("abort", onAbort);
+      resolve();
+    }, ms);
+    signal.addEventListener("abort", onAbort, { once: true });
+  });
+}
+
 function track(event: string, sessionId: string, detail = "", metadata: Partial<DisplayMessage> & { questionCategory?: string } = {}) {
   void fetch("/api/events", {
     method: "POST",
@@ -70,13 +99,16 @@ function track(event: string, sessionId: string, detail = "", metadata: Partial<
       claimIds: metadata.claimIds,
       sourceIds: metadata.sourceIds,
       latencyMs: metadata.latencyMs,
+      firstTokenLatencyMs: metadata.firstTokenLatencyMs,
+      deliveryPath: metadata.deliveryPath,
+      contractId: metadata.contractId,
       questionCategory: metadata.questionCategory,
     }),
     keepalive: true,
   });
 }
 
-export function Chat() {
+export function Chat({ presetAnswers }: ChatProps) {
   const [messages, setMessages] = useState<DisplayMessage[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -106,6 +138,7 @@ export function Chat() {
     if (!clean || loading) return;
     const sessionId = getBrowserSessionId();
     const conversationEpoch = conversationEpochRef.current;
+    const startedAt = performance.now();
 
     setInput("");
     setError("");
@@ -120,6 +153,38 @@ export function Chat() {
     const abort = new AbortController();
     abortRef.current = abort;
     try {
+      const preset = !retry && messages.length === 0
+        ? presetAnswers.find((answer) => answer.question === clean)
+        : undefined;
+      if (preset) {
+        await waitFor(PRESET_THINKING_MS, abort.signal);
+        const chunks = presetRevealChunks(preset.content);
+        let answer = chunks[0] ?? preset.content;
+        const metadata: Partial<DisplayMessage> = {
+          sources: preset.sources,
+          mode: preset.mode,
+          responseStatus: preset.responseStatus,
+          claimIds: preset.claimIds,
+          sourceIds: preset.sourceIds,
+          citations: preset.citations,
+          followUpQuestions: preset.followUpQuestions,
+          contractId: preset.contractId,
+          deliveryPath: "preset",
+          firstTokenLatencyMs: Math.round(performance.now() - startedAt),
+        };
+        setMessages([...nextMessages, { role: "assistant", content: answer, ...metadata }]);
+        for (const chunk of chunks.slice(1)) {
+          await waitFor(PRESET_REVEAL_INTERVAL_MS, abort.signal);
+          if (conversationEpoch !== conversationEpochRef.current) return;
+          answer += chunk;
+          setMessages([...nextMessages, { role: "assistant", content: answer, ...metadata }]);
+        }
+        metadata.latencyMs = Math.round(performance.now() - startedAt);
+        setMessages([...nextMessages, { role: "assistant", content: answer, ...metadata }]);
+        track("answer_completed", sessionId, "", { ...metadata, questionCategory: inferQuestionCategory(clean) });
+        return;
+      }
+
       const response = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -162,7 +227,14 @@ export function Chat() {
             citations: event.citations,
             followUpQuestions: event.followUpQuestions,
           };
-          if (event.type === "delta") answer += event.content;
+          if (event.type === "delta") {
+            if (!answer) metadata = {
+              ...metadata,
+              deliveryPath: "api",
+              firstTokenLatencyMs: Math.round(performance.now() - startedAt),
+            };
+            answer += event.content;
+          }
           if (event.type === "done") metadata = { ...metadata, responseStatus: event.responseStatus, latencyMs: event.latencyMs };
           if (event.type === "error") throw new Error(event.message);
           setMessages([...nextMessages, { role: "assistant", content: answer, ...metadata }]);
@@ -186,7 +258,7 @@ export function Chat() {
         abortRef.current = null;
       }
     }
-  }, [loading, messages]);
+  }, [loading, messages, presetAnswers]);
 
   const resetConversation = useCallback(() => {
     conversationEpochRef.current += 1;
@@ -242,8 +314,9 @@ export function Chat() {
   const askedQuestions = messages.filter((message) => message.role === "user").map((message) => message.content);
   const lastQuestion = askedQuestions[askedQuestions.length - 1] ?? "";
   const latestAssistant = [...messages].reverse().find((message) => message.role === "assistant" && message.content);
-  const followUpQuestions = latestAssistant?.followUpQuestions?.filter((question) => !askedQuestions.includes(question)).slice(0, 3)
-    ?? (lastQuestion ? getFollowUpQuestions(lastQuestion, askedQuestions) : []);
+  const followUpQuestions = lastQuestion
+    ? getFollowUpQuestions(lastQuestion, askedQuestions, 3, latestAssistant?.followUpQuestions)
+    : [];
   const hasCompletedAnswer = !error && messages.some((message) => message.role === "assistant" && message.content);
 
   return (
@@ -277,6 +350,24 @@ export function Chat() {
               </nav>
             </section>
 
+            <section className="project-proof" aria-labelledby="project-title">
+              <div className="proof-heading">
+                <h2 id="project-title">可直接核验的项目</h2>
+                <a href={profile.github} target="_blank" rel="noreferrer" data-track-event="project_opened" data-track-detail="all-repositories"><GithubLogoIcon size={16} aria-hidden="true" />全部仓库</a>
+              </div>
+              <div className="project-grid">
+                {featuredProjects.map((project) => (
+                  <a className="project-link" href={project.url} target="_blank" rel="noreferrer" key={project.name} data-track-event="project_opened" data-track-detail={project.name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}>
+                    <span className="project-status">{project.status}</span>
+                    <strong>{project.name}</strong>
+                    <p>{project.summary}</p>
+                    <small>{project.stack}</small>
+                    <ArrowUpRightIcon className="project-arrow" size={18} aria-hidden="true" />
+                  </a>
+                ))}
+              </div>
+            </section>
+
             <section className="question-start" aria-labelledby="question-title">
               <h2 id="question-title">从您可能最关心的问题开始吧。</h2>
               <div className="question-groups" role="tablist" aria-label="问题分类">
@@ -308,24 +399,6 @@ export function Chat() {
                 ))}
               </div>
             </section>
-
-            <section className="project-proof" aria-labelledby="project-title">
-              <div className="proof-heading">
-                <h2 id="project-title">可直接核验的项目</h2>
-                <a href={profile.github} target="_blank" rel="noreferrer" data-track-event="project_opened" data-track-detail="all-repositories"><GithubLogoIcon size={16} aria-hidden="true" />全部仓库</a>
-              </div>
-              <div className="project-grid">
-                {featuredProjects.map((project) => (
-                  <a className="project-link" href={project.url} target="_blank" rel="noreferrer" key={project.name} data-track-event="project_opened" data-track-detail={project.name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}>
-                    <span className="project-status">{project.status}</span>
-                    <strong>{project.name}</strong>
-                    <p>{project.summary}</p>
-                    <small>{project.stack}</small>
-                    <ArrowUpRightIcon className="project-arrow" size={18} aria-hidden="true" />
-                  </a>
-                ))}
-              </div>
-            </section>
           </div>
         ) : (
           <div className="messages" aria-live="polite">
@@ -337,10 +410,13 @@ export function Chat() {
                     {message.role === "user" ? "你的问题" : "Ask Me"}
                   </p>
                   {message.role === "assistant" && !message.content ? (
-                    <div className="skeleton" aria-label="正在生成回答">
-                      <span />
-                      <span />
-                      <span />
+                    <div className="thinking-state" role="status" aria-live="polite">
+                      <span className="thinking-indicator" aria-hidden="true">
+                        <span />
+                        <span />
+                        <span />
+                      </span>
+                      <span>正在核对资料并整理回答</span>
                     </div>
                   ) : (
                     message.role === "assistant"
@@ -432,14 +508,25 @@ export function Chat() {
 
       <div className="composer-dock">
         {hasCompletedAnswer && !loading && followUpQuestions.length > 0 && (
-          <div className="contextual-suggestions" aria-label="根据上一问题推荐的追问">
-            <span>接着了解</span>
-            <div>
+          <section className="contextual-suggestions" aria-labelledby="follow-up-title">
+            <div className="contextual-suggestions-heading">
+              <span className="contextual-suggestions-icon" aria-hidden="true">
+                <SparkleIcon size={15} weight="fill" />
+              </span>
+              <span>
+                <strong id="follow-up-title">继续了解张倬玮</strong>
+                <small>根据刚才的问题，为您推荐 3 个追问</small>
+              </span>
+            </div>
+            <div className="contextual-suggestions-list">
               {followUpQuestions.map((question) => (
-                <button key={question} type="button" onClick={() => void send(question, true)}>{question}</button>
+                <button key={question} type="button" onClick={() => void send(question, true)}>
+                  <span>{question}</span>
+                  <ArrowUpRightIcon size={14} aria-hidden="true" />
+                </button>
               ))}
             </div>
-          </div>
+          </section>
         )}
         {error && (
           <div className="chat-error" role="alert">

@@ -233,3 +233,16 @@ export interface AnswerCitation {
   claimIds: string[];
   sourceIds: string[];
 }
+
+export interface PresetAnswerPacket {
+  contractId: string;
+  question: string;
+  content: string;
+  mode: "stable";
+  responseStatus: "completed";
+  claimIds: string[];
+  sourceIds: string[];
+  citations: AnswerCitation[];
+  sources: Source[];
+  followUpQuestions: string[];
+}

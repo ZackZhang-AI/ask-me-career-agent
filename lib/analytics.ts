@@ -26,6 +26,7 @@ const ANSWER_MODES = new Set(["live", "stable", "demo", "guardrail"]);
 const ANSWER_PATHS = new Set(["generated", "repaired", "fallback", "stable", "demo", "guardrail"]);
 const QUESTION_TOPICS = new Set(["profile", "role_fit", "rag", "deepflow", "ask_me", "local_tools", "audit", "statistics", "skills", "enterprise_ai", "agent", "unknown"]);
 const QUESTION_FACETS = new Set(["overview", "problem", "method", "contribution", "architecture", "collaboration", "evaluation", "transfer", "example", "result", "boundary", "fit"]);
+const DELIVERY_PATHS = new Set(["preset", "api"]);
 export const FEEDBACK_REASONS = ["helpful", "not_relevant", "not_specific", "repetitive", "missing_evidence"] as const;
 const FEEDBACK_REASON_SET = new Set<string>(FEEDBACK_REASONS);
 
@@ -36,6 +37,8 @@ export interface AnalyticsEventInput {
   claimIds?: string[];
   sourceIds?: string[];
   latencyMs?: number;
+  firstTokenLatencyMs?: number;
+  deliveryPath?: string;
   questionCategory?: string;
   targetType?: string;
   targetId?: string;
@@ -57,6 +60,8 @@ export interface SanitizedAnalyticsEvent {
   claimIds: string[];
   sourceIds: string[];
   latencyMs: number | null;
+  firstTokenLatencyMs: number | null;
+  deliveryPath: string | null;
   questionCategory: string | null;
   targetType: string | null;
   targetId: string | null;
@@ -123,6 +128,9 @@ export function sanitizeAnalyticsEvent(value: unknown): SanitizedAnalyticsEvent 
   const responseStatus = typeof input.responseStatus === "string" && RESPONSE_STATUSES.has(input.responseStatus) ? input.responseStatus : null;
   const questionCategory = typeof input.questionCategory === "string" && QUESTION_CATEGORIES.has(input.questionCategory) ? input.questionCategory : null;
   const latency = typeof input.latencyMs === "number" && Number.isFinite(input.latencyMs) ? Math.round(input.latencyMs) : null;
+  const firstTokenLatency = typeof input.firstTokenLatencyMs === "number" && Number.isFinite(input.firstTokenLatencyMs)
+    ? Math.round(input.firstTokenLatencyMs)
+    : null;
   const targetTypeCandidate = typeof input.targetType === "string" && TARGET_TYPES.has(input.targetType) ? input.targetType : inferredTargetType(event);
   const legacyTarget = input.targetId ?? input.detail;
   const safeTargetId = safeTarget(legacyTarget);
@@ -134,6 +142,8 @@ export function sanitizeAnalyticsEvent(value: unknown): SanitizedAnalyticsEvent 
     claimIds: safeIds(input.claimIds, "C"),
     sourceIds: safeIds(input.sourceIds, "S"),
     latencyMs: latency === null ? null : Math.max(0, Math.min(latency, 300_000)),
+    firstTokenLatencyMs: firstTokenLatency === null ? null : Math.max(0, Math.min(firstTokenLatency, 300_000)),
+    deliveryPath: typeof input.deliveryPath === "string" && DELIVERY_PATHS.has(input.deliveryPath) ? input.deliveryPath : null,
     questionCategory,
     targetType: targetTypeCandidate,
     targetId: event === "answer_feedback" && safeTargetId && !FEEDBACK_REASON_SET.has(safeTargetId) ? null : safeTargetId,
@@ -174,6 +184,8 @@ async function ensureSchema(sql: NeonQuery): Promise<void> {
           claim_ids TEXT[] NOT NULL DEFAULT '{}',
           source_ids TEXT[] NOT NULL DEFAULT '{}',
           latency_ms INTEGER,
+          first_token_latency_ms INTEGER,
+          delivery_path TEXT,
           question_category TEXT,
           target_type TEXT,
           target_id TEXT,
@@ -196,6 +208,8 @@ async function ensureSchema(sql: NeonQuery): Promise<void> {
       await sql`ALTER TABLE ask_me_events ADD COLUMN IF NOT EXISTS rewrite_count INTEGER`;
       await sql`ALTER TABLE ask_me_events ADD COLUMN IF NOT EXISTS retrieval_count INTEGER`;
       await sql`ALTER TABLE ask_me_events ADD COLUMN IF NOT EXISTS quality_trigger_count INTEGER`;
+      await sql`ALTER TABLE ask_me_events ADD COLUMN IF NOT EXISTS first_token_latency_ms INTEGER`;
+      await sql`ALTER TABLE ask_me_events ADD COLUMN IF NOT EXISTS delivery_path TEXT`;
       await sql`CREATE INDEX IF NOT EXISTS ask_me_events_occurred_at_idx ON ask_me_events (occurred_at)`;
       await sql`CREATE INDEX IF NOT EXISTS ask_me_events_funnel_idx ON ask_me_events (event_name, occurred_at)`;
     })().catch((error) => {
@@ -216,11 +230,11 @@ export async function persistEvent(value: unknown): Promise<boolean> {
     await sql`
       INSERT INTO ask_me_events (
         event_name, session_hash, response_status, claim_ids, source_ids,
-        latency_ms, question_category, target_type, target_id
+        latency_ms, first_token_latency_ms, delivery_path, question_category, target_type, target_id
         , contract_id, topic, facet, answer_mode, answer_path, rewrite_count, retrieval_count, quality_trigger_count
       ) VALUES (
         ${event.event}, ${event.sessionHash}, ${event.responseStatus}, ${event.claimIds}, ${event.sourceIds},
-        ${event.latencyMs}, ${event.questionCategory}, ${event.targetType}, ${event.targetId}
+        ${event.latencyMs}, ${event.firstTokenLatencyMs}, ${event.deliveryPath}, ${event.questionCategory}, ${event.targetType}, ${event.targetId}
         , ${event.contractId}, ${event.topic}, ${event.facet}, ${event.answerMode}, ${event.answerPath}, ${event.rewriteCount}, ${event.retrievalCount}, ${event.qualityTriggerCount}
       )
     `;
@@ -239,6 +253,8 @@ interface QualityEventRow {
   event_name: string;
   response_status: string | null;
   latency_ms: number | null;
+  first_token_latency_ms?: number | null;
+  delivery_path?: string | null;
   target_id: string | null;
   answer_path: string | null;
   rewrite_count: number | null;
@@ -247,11 +263,11 @@ interface QualityEventRow {
 
 export interface QualityReport {
   days: number;
-  sample: { questions: number; clientCompleted: number; generated: number; feedback: number };
+  sample: { questions: number; clientCompleted: number; presetCompleted: number; generated: number; feedback: number };
   outcomes: { completionRate: number | null; nonFallbackRate: number | null; insufficientEvidenceRate: number | null; helpfulRate: number | null };
-  diagnostics: { repairRate: number | null; fallbackRate: number | null; averageRetrievalCount: number | null; latencyP50Ms: number | null; latencyP95Ms: number | null };
+  diagnostics: { repairRate: number | null; fallbackRate: number | null; averageRetrievalCount: number | null; latencyP50Ms: number | null; latencyP95Ms: number | null; firstTokenP50Ms: number | null; firstTokenP95Ms: number | null; presetFirstTokenP95Ms: number | null };
   feedbackReasons: Record<string, number>;
-  targets: { completionRate: number; nonFallbackRate: number; minimumFeedbackSample: number };
+  targets: { completionRate: number; nonFallbackRate: number; minimumFeedbackSample: number; presetFirstTokenP95Ms: number };
 }
 
 function rate(numerator: number, denominator: number) {
@@ -267,15 +283,18 @@ function percentile(values: number[], ratio: number) {
 export function buildQualityReport(rows: QualityEventRow[], days: number): QualityReport {
   const questions = rows.filter((row) => row.event_name === "question_sent" || row.event_name === "suggestion_clicked").length;
   const clientCompleted = rows.filter((row) => row.event_name === "answer_completed").length;
+  const presetCompletedRows = rows.filter((row) => row.event_name === "answer_completed" && row.delivery_path === "preset");
   const generatedRows = rows.filter((row) => row.event_name === "answer_generated");
   const modelRows = generatedRows.filter((row) => ["generated", "repaired", "fallback"].includes(row.answer_path ?? ""));
   const feedbackRows = rows.filter((row) => row.event_name === "answer_feedback" && row.target_id);
   const feedbackReasons = Object.fromEntries(FEEDBACK_REASONS.map((reason) => [reason, feedbackRows.filter((row) => row.target_id === reason).length]));
   const latencies = generatedRows.flatMap((row) => typeof row.latency_ms === "number" ? [row.latency_ms] : []);
+  const firstTokenLatencies = rows.flatMap((row) => row.event_name === "answer_completed" && typeof row.first_token_latency_ms === "number" ? [row.first_token_latency_ms] : []);
+  const presetFirstTokenLatencies = presetCompletedRows.flatMap((row) => typeof row.first_token_latency_ms === "number" ? [row.first_token_latency_ms] : []);
   const retrievalCounts = generatedRows.flatMap((row) => typeof row.retrieval_count === "number" ? [row.retrieval_count] : []);
   return {
     days,
-    sample: { questions, clientCompleted, generated: generatedRows.length, feedback: feedbackRows.length },
+    sample: { questions, clientCompleted, presetCompleted: presetCompletedRows.length, generated: generatedRows.length, feedback: feedbackRows.length },
     outcomes: {
       completionRate: rate(clientCompleted, questions),
       nonFallbackRate: rate(modelRows.filter((row) => row.answer_path !== "fallback").length, modelRows.length),
@@ -288,9 +307,12 @@ export function buildQualityReport(rows: QualityEventRow[], days: number): Quali
       averageRetrievalCount: retrievalCounts.length ? Number((retrievalCounts.reduce((sum, value) => sum + value, 0) / retrievalCounts.length).toFixed(2)) : null,
       latencyP50Ms: percentile(latencies, 0.5),
       latencyP95Ms: percentile(latencies, 0.95),
+      firstTokenP50Ms: percentile(firstTokenLatencies, 0.5),
+      firstTokenP95Ms: percentile(firstTokenLatencies, 0.95),
+      presetFirstTokenP95Ms: percentile(presetFirstTokenLatencies, 0.95),
     },
     feedbackReasons,
-    targets: { completionRate: 0.95, nonFallbackRate: 0.85, minimumFeedbackSample: 30 },
+    targets: { completionRate: 0.95, nonFallbackRate: 0.85, minimumFeedbackSample: 30, presetFirstTokenP95Ms: 200 },
   };
 }
 
@@ -300,7 +322,7 @@ export async function getQualityReport(days = 7): Promise<QualityReport | null> 
   const safeDays = Math.max(1, Math.min(Math.floor(days), 30));
   await ensureSchema(sql);
   const rows = await sql`
-    SELECT event_name, response_status, latency_ms, target_id, answer_path, rewrite_count, retrieval_count
+    SELECT event_name, response_status, latency_ms, first_token_latency_ms, delivery_path, target_id, answer_path, rewrite_count, retrieval_count
     FROM ask_me_events
     WHERE occurred_at >= NOW() - (${safeDays} * INTERVAL '1 day')
     ORDER BY occurred_at ASC
