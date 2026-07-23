@@ -13,23 +13,23 @@ export const profile = {
 export const featuredProjects = [
   {
     name: "RAG Knowledge Base System",
-    summary: "企业级文档问答系统，覆盖解析、混合检索、引用溯源与 RAGAS 评测。",
+    summary: "专业文档问答原型，已跑通文档摄入、Dense Retrieval 与回答生成主链路；引用和评测能力持续迭代。",
     stack: "FastAPI / Vue 3 / Milvus / RAGAS",
     url: "https://github.com/ZackZhang-AI/RAG-Knowledge-Base-System",
-    status: "已完成公开仓库",
+    status: "公开仓库，持续迭代",
   },
   {
     name: "DeepFlow",
-    summary: "多 Agent 深度研究工作台，覆盖计划、人审、检索、分析和报告生成。",
+    summary: "多 Agent 深度研究工作台，已形成从任务澄清到报告输出的可演示 MVP。",
     stack: "FastAPI / Next.js / Multi-Agent / RAG",
     url: "https://github.com/ZackZhang-AI/DeepFlow",
-    status: "已完成公开仓库",
+    status: "公开仓库，可演示 MVP",
   },
   {
-    name: "Thirty-Minute Brain",
-    summary: "本地优先的桌面上下文检索工具，帮助快速恢复最近工作现场。",
-    stack: "Tauri / React / Rust / SQLite FTS5",
-    url: "https://github.com/ZackZhang-AI/thirty-minute-brain",
-    status: "已完成公开仓库",
+    name: "Ask Me Career Agent",
+    summary: "面向 AI 产品招聘场景的公开资料问答 Agent，支持多轮问答、来源核验与动态追问。",
+    stack: "Next.js / TypeScript / RAG / DeepSeek",
+    url: "https://github.com/ZackZhang-AI/ask-me-career-agent",
+    status: "线上可访问，持续迭代",
   },
 ] as const;

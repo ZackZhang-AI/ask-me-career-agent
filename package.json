@@ -11,7 +11,8 @@
     "test": "tsx --test tests/*.test.ts",
     "upload:resume": "dotenv -e .env.local -- tsx scripts/upload-resume.ts",
     "knowledge:sync": "dotenv -e .env.local -- tsx scripts/sync-obsidian.ts",
-    "eval:interview": "dotenv -e .env.local -- tsx scripts/run-interview-eval.ts"
+    "eval:interview": "dotenv -e .env.local -- tsx scripts/run-interview-eval.ts",
+    "quality:report": "dotenv -e .env.local -- tsx scripts/run-quality-report.ts"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.1.0",

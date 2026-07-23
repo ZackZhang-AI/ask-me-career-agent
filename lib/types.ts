@@ -227,3 +227,22 @@ export interface StableAnswer extends ContentMetadata {
 }
 
 export interface ChatMessage { role: "user" | "assistant"; content: string }
+
+export interface AnswerCitation {
+  paragraphIndex: number;
+  claimIds: string[];
+  sourceIds: string[];
+}
+
+export interface PresetAnswerPacket {
+  contractId: string;
+  question: string;
+  content: string;
+  mode: "stable";
+  responseStatus: "completed";
+  claimIds: string[];
+  sourceIds: string[];
+  citations: AnswerCitation[];
+  sources: Source[];
+  followUpQuestions: string[];
+}

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { candidateNarrative } from "../content/narrative";
 import type { QuestionContract, QuestionFacet, QuestionFrame, QuestionTopic, ResponseShape } from "./types";
 
 const topics = ["profile", "role_fit", "rag", "deepflow", "ask_me", "local_tools", "audit", "statistics", "skills", "enterprise_ai", "agent", "unknown"] as const;
@@ -71,7 +72,7 @@ export const questionContracts: QuestionContract[] = [
     dimensions: ["候选人定位", "三项差异", "代表实践"], knowledge: ["K1", "K2", "K3", "K4", "K8"], shape: "narrative", length: { min: 430, max: 600 },
     goal: "让面试官快速形成是否值得继续沟通的候选人判断。", thesis: "我是张倬玮，一名把数据评测、企业业务理解和 AI 产品落地结合起来的应用统计学学生。",
     required: ["应用统计学与数据分析基础", "审计经历形成的流程和风险意识", "RAG 与 Agent 项目体现产品工程能力"], direct: ["数据", "审计", "AI 产品"],
-    fallback: "我叫张倬玮，目前就读于东北大学应用统计学专业，目标方向是 AI 产品经理。相比只做需求文档或只关注模型能力，我更擅长把**数据评测、企业业务和产品落地**放在同一条链路里思考。\n\n应用统计学训练让我习惯先定义指标、观察差异并分析失败样本；德勤 IT 审计和容诚财务审计经历，让我理解复杂流程、证据口径、风险控制和企业数据边界；RAG 知识库与 DeepFlow 项目则让我把这些判断落实为检索、评测、Agent 分工、人审和可演示 MVP。\n\n在具体项目里，我通常先确认用户到底要完成什么任务，再把问题拆成数据、流程、模型与人工确认节点，并提前定义怎样才算有效。面对复杂方案，我倾向于先跑通最短闭环，用评测集和 Bad Case 判断下一步，而不是为了技术完整度一次堆满功能。\n\n我主要负责问题定义、产品取舍、评测设计和最终验收，AI 编程工具承担实现协作。我的特点不是单点技术最深，而是能把业务问题翻译成**可实现、可验证、可继续迭代**的 AI 产品方案，并让业务与技术围绕同一个结果真正推进。",
+    fallback: candidateNarrative.introductions.seconds60,
     next: ["role_fit", "representative_project", "differentiation"],
   }),
   define({

@@ -47,7 +47,10 @@ npm test
 npm run lint
 npm run build
 npm run eval:interview
+npm run quality:report -- --days 7
 ```
+
+本地 `eval:interview` 是确定性发布门禁；每周 DeepSeek 合成角色预演只生成非阻断报告。匿名质量报告只汇总回答完成、回退、修复、耗时与枚举反馈，不保存问题或回答正文。
 
 PRD 验收与完整评测设计见 `tests/prd-evaluation-draft.md`。
 

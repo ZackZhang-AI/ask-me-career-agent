@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { ANALYTICS_EVENTS, sanitizeAnalyticsEvent } from "../lib/analytics.ts";
+import { ANALYTICS_EVENTS, buildQualityReport, sanitizeAnalyticsEvent } from "../lib/analytics.ts";
 import { checkRequestLimits, extractClientIp, reserveAdditionalModelCall, resetLocalRateLimitsForTests } from "../lib/rate-limit.ts";
 import { GET as getResume } from "../app/resume/route.ts";
 import { NextRequest } from "next/server";
@@ -22,6 +22,8 @@ test("分析字段严格白名单并丢弃联系方式和非法引用", () => {
     claimIds: ["C1", "C1", "C99999", "not-a-claim"],
     sourceIds: ["S2", "https://example.com"],
     latencyMs: 999_999,
+    firstTokenLatencyMs: 999_999,
+    deliveryPath: "preset",
     questionCategory: "project",
     targetId: "zack@example.com",
     rawQuestion: "这是不应存储的原始问题",
@@ -29,6 +31,8 @@ test("分析字段严格白名单并丢弃联系方式和非法引用", () => {
   assert.deepEqual(sanitized?.claimIds, ["C1"]);
   assert.deepEqual(sanitized?.sourceIds, ["S2"]);
   assert.equal(sanitized?.latencyMs, 300_000);
+  assert.equal(sanitized?.firstTokenLatencyMs, 300_000);
+  assert.equal(sanitized?.deliveryPath, "preset");
   assert.equal(sanitized?.targetId, null);
   assert.equal(JSON.stringify(sanitized).includes("原始问题"), false);
   assert.equal(sanitizeAnalyticsEvent({ event: "unknown", sessionId: "x" }), null);
@@ -39,6 +43,49 @@ test("回答反馈仅记录匿名枚举值", () => {
   assert.ok(event);
   assert.equal(event.targetType, "feedback");
   assert.equal(event.targetId, "helpful");
+  assert.equal(sanitizeAnalyticsEvent({ event: "answer_feedback", sessionId: "feedback-session", detail: "自由文本意见" })?.targetId, null);
+});
+
+test("回答诊断只保留稳定枚举和有限计数", () => {
+  const event = sanitizeAnalyticsEvent({
+    event: "answer_generated",
+    sessionId: "quality-session",
+    responseStatus: "completed",
+    contractId: "representative_project",
+    topic: "rag",
+    facet: "overview",
+    answerMode: "live",
+    answerPath: "repaired",
+    rewriteCount: 1,
+    retrievalCount: 4,
+    qualityTriggerCount: 2,
+    rawQuestion: "不应存储的问题",
+  });
+  assert.equal(event?.answerPath, "repaired");
+  assert.equal(event?.contractId, "representative_project");
+  assert.equal(event?.retrievalCount, 4);
+  assert.equal(JSON.stringify(event).includes("不应存储"), false);
+});
+
+test("质量报告区分完成、回退和低样本反馈", () => {
+  const rows = [
+    ...Array.from({ length: 5 }, () => ({ event_name: "question_sent", response_status: null, latency_ms: null, target_id: null, answer_path: null, rewrite_count: null, retrieval_count: null })),
+    { event_name: "answer_completed", response_status: "completed", latency_ms: 440, first_token_latency_ms: 95, delivery_path: "preset", target_id: null, answer_path: null, rewrite_count: null, retrieval_count: null },
+    { event_name: "answer_completed", response_status: "completed", latency_ms: 500, first_token_latency_ms: 110, delivery_path: "preset", target_id: null, answer_path: null, rewrite_count: null, retrieval_count: null },
+    ...Array.from({ length: 2 }, () => ({ event_name: "answer_completed", response_status: "completed", latency_ms: null, target_id: null, answer_path: null, rewrite_count: null, retrieval_count: null })),
+    { event_name: "answer_generated", response_status: "completed", latency_ms: 1000, target_id: null, answer_path: "generated", rewrite_count: 0, retrieval_count: 4 },
+    { event_name: "answer_generated", response_status: "completed", latency_ms: 2000, target_id: null, answer_path: "repaired", rewrite_count: 1, retrieval_count: 3 },
+    { event_name: "answer_generated", response_status: "completed", latency_ms: 5000, target_id: null, answer_path: "fallback", rewrite_count: 1, retrieval_count: 2 },
+    { event_name: "answer_feedback", response_status: null, latency_ms: null, target_id: "helpful", answer_path: null, rewrite_count: null, retrieval_count: null },
+  ];
+  const report = buildQualityReport(rows, 7);
+  assert.equal(report.outcomes.completionRate, 0.8);
+  assert.equal(report.outcomes.nonFallbackRate, 0.6667);
+  assert.equal(report.outcomes.helpfulRate, null);
+  assert.equal(report.diagnostics.fallbackRate, 0.3333);
+  assert.equal(report.diagnostics.latencyP95Ms, 5000);
+  assert.equal(report.sample.presetCompleted, 2);
+  assert.equal(report.diagnostics.presetFirstTokenP95Ms, 110);
 });
 
 test("未配置 Redis 时执行每 IP 分钟限流", async () => {

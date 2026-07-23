@@ -4,6 +4,14 @@ import { candidateNarrative } from "../content/narrative.ts";
 import { answerSimilarity } from "../lib/answer-quality.ts";
 import { contentCatalog, contentCatalogSchema } from "../lib/content.ts";
 import { claims, faqs, knowledge, matchStableAnswer, resolveRetrievalQuery, retrieveKnowledge, sources, stableAnswers, starStories } from "../lib/knowledge.ts";
+import { featuredProjects } from "../lib/profile.ts";
+
+test("首页项目卡片如实区分当前完成度", () => {
+  assert.equal(featuredProjects.every((project) => !project.status.includes("已完成")), true);
+  assert.match(featuredProjects[0].summary, /Dense Retrieval/);
+  assert.match(featuredProjects[1].status, /MVP/);
+  assert.match(featuredProjects[2].status, /持续迭代/);
+});
 
 test("内容目录通过 Zod 与引用完整性校验", () => {
   assert.doesNotThrow(() => contentCatalogSchema.parse(contentCatalog));
@@ -148,7 +156,7 @@ test("百度占位经历与联系方式不进入内容目录", () => {
 test("30、60、90 秒介绍独立成稿且时长层次清晰", () => {
   const introductions = candidateNarrative.introductions;
   assert.equal(introductions.seconds30.length >= 150 && introductions.seconds30.length < introductions.seconds60.length, true);
-  assert.equal(introductions.seconds60.length >= 450 && introductions.seconds60.length <= 560, true);
+  assert.equal(introductions.seconds60.length >= 430 && introductions.seconds60.length <= 600, true);
   assert.equal(introductions.seconds90.length > introductions.seconds60.length, true);
   assert.equal(new Set(Object.values(introductions)).size, 3);
   for (const answer of Object.values(introductions)) assert.doesNotMatch(answer, /百度|Claim|Source|证据边界/);

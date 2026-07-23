@@ -65,6 +65,8 @@ test("安全拒答、证据不足与核心稳定回答返回标准 NDJSON 状态
   assert.equal(verified[0].responseStatus, "completed");
   assert.equal(verified[0].claimIds.includes("C3"), true);
   assert.equal(verified[0].sourceIds.includes("S3"), true);
+  assert.equal(Array.isArray(verified[0].citations), true);
+  assert.equal((verified[0].citations as Array<{ sourceIds: string[] }>).some((citation) => citation.sourceIds.includes("S3")), true);
   assert.equal(typeof verified.at(-1).latencyMs, "number");
 });
 
@@ -165,7 +167,10 @@ test("60 秒介绍返回足够完整的招聘视角回答", async () => {
   assert.match(answer, /企业业务|企业流程/);
   assert.match(answer, /产品落地/);
   assert.doesNotMatch(answer, /证据边界|需要面试核实|\[S\d+\]/);
-  assert.equal(answer.length >= 440 && answer.length <= 560, true);
+  assert.match(answer, /持之以恒/);
+  assert.match(answer, /学习能力/);
+  assert.match(answer, /抗压能力/);
+  assert.equal(answer.length >= 430 && answer.length <= 600, true);
 });
 
 test("模型上游过载和超时返回稳定错误码", async () => {
