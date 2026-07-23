@@ -220,7 +220,8 @@ textarea:focus-visible {
 .sidebar.is-collapsed .sidebar-footer > a span,
 .sidebar.is-collapsed .external-icon,
 .sidebar.is-collapsed .privacy-note,
-.sidebar.is-collapsed .new-chat-label {
+.sidebar.is-collapsed .new-chat-label,
+.sidebar.is-collapsed .history-section {
   display: none;
 }
 
@@ -254,6 +255,125 @@ textarea:focus-visible {
 
 .sidebar-section {
   margin-top: 28px;
+}
+
+.history-section {
+  min-height: 0;
+  margin-top: 20px;
+}
+
+.history-list {
+  max-height: 176px;
+  display: grid;
+  gap: 2px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--line) transparent;
+}
+
+.history-item {
+  min-width: 0;
+  min-height: 36px;
+  padding: 2px 4px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 2px;
+  border-radius: 9px;
+  color: var(--muted);
+}
+
+.history-item:hover,
+.history-item:focus-within,
+.history-item.is-active {
+  background: var(--surface-hover);
+  color: var(--ink);
+}
+
+.history-open {
+  min-width: 0;
+  height: 32px;
+  padding: 0 6px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.history-open span {
+  display: block;
+  overflow: hidden;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.history-actions {
+  display: flex;
+  opacity: 0;
+  transition: opacity 140ms ease;
+}
+
+.history-item:hover .history-actions,
+.history-item:focus-within .history-actions {
+  opacity: 1;
+}
+
+.history-actions button,
+.history-rename button,
+.history-confirm button {
+  width: 27px;
+  height: 27px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--faint);
+  cursor: pointer;
+}
+
+.history-actions button:hover,
+.history-rename button:hover,
+.history-confirm button:hover {
+  background: var(--surface);
+  color: var(--ink);
+}
+
+.history-rename {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 27px;
+  gap: 2px;
+}
+
+.history-rename input {
+  min-width: 0;
+  height: 28px;
+  padding: 0 6px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  outline: 0;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: 12px;
+}
+
+.history-rename input:focus {
+  border-color: color-mix(in srgb, var(--accent) 52%, var(--line));
+}
+
+.history-confirm {
+  grid-column: 1 / -1;
+  padding-left: 6px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 27px 27px;
+  align-items: center;
+  font-size: 11px;
 }
 
 .sidebar-label {
@@ -955,7 +1075,7 @@ textarea:focus-visible {
   display: none;
 }
 
-.sources details[open] summary svg {
+.sources details[open] > summary svg {
   transform: rotate(180deg);
 }
 
@@ -975,6 +1095,85 @@ textarea:focus-visible {
   margin: 0;
   display: grid;
   gap: 8px;
+}
+
+.evidence-group > summary {
+  min-height: 42px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) 15px;
+}
+
+.evidence-summary-title {
+  color: var(--ink);
+  font-weight: 620;
+}
+
+.evidence-preview {
+  min-width: 0;
+  display: flex;
+  justify-content: flex-end;
+  gap: 5px;
+  overflow: hidden;
+}
+
+.evidence-preview > span,
+.evidence-preview > small {
+  min-width: 0;
+  padding: 3px 7px;
+  overflow: hidden;
+  border: 1px solid var(--line-soft);
+  border-radius: 7px;
+  background: var(--surface-soft);
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 540;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.evidence-preview > span {
+  max-width: 150px;
+}
+
+.evidence-list {
+  border-top: 1px solid var(--line-soft);
+}
+
+.answer-actions {
+  margin-top: 11px;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.answer-actions button {
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--faint);
+  cursor: pointer;
+  transition: background 140ms ease, color 140ms ease, transform 140ms ease;
+}
+
+.answer-actions button:hover,
+.answer-actions button[aria-pressed="true"] {
+  background: var(--surface-soft);
+  color: var(--ink);
+}
+
+.answer-actions button:active:not(:disabled) {
+  transform: scale(0.94);
+}
+
+.answer-actions button:disabled {
+  opacity: 0.35;
+  cursor: default;
 }
 
 .inline-citations {
@@ -1200,6 +1399,7 @@ textarea:focus-visible {
   padding: 8px 10px;
   display: grid;
   grid-template-columns: minmax(0, 1fr) 14px;
+  grid-template-rows: auto auto;
   align-items: center;
   gap: 8px;
   border: 1px solid var(--line);
@@ -1211,6 +1411,17 @@ textarea:focus-visible {
   text-align: left;
   cursor: pointer;
   transition: background 160ms ease, color 160ms ease, border-color 160ms ease, transform 160ms ease;
+}
+
+.contextual-suggestions button > small {
+  grid-column: 1 / -1;
+  color: var(--accent);
+  font-size: 10px;
+  font-weight: 680;
+}
+
+.contextual-suggestions button > span {
+  min-width: 0;
 }
 
 .contextual-suggestions button svg {
@@ -1360,6 +1571,35 @@ textarea:focus-visible {
   font-size: 11px;
   line-height: 1.4;
   text-align: center;
+}
+
+.scroll-to-latest {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  position: absolute;
+  right: max(24px, calc((100% - var(--reading-content)) / 2));
+  bottom: 102px;
+  z-index: 4;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--muted);
+  box-shadow: 0 8px 24px rgba(32, 33, 35, 0.12);
+  cursor: pointer;
+  transition: color 140ms ease, transform 140ms ease, background 140ms ease;
+}
+
+.scroll-to-latest:hover {
+  background: var(--surface-soft);
+  color: var(--ink);
+}
+
+.scroll-to-latest:active {
+  transform: scale(0.94);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -1551,6 +1791,10 @@ textarea:focus-visible {
     max-width: 88%;
   }
 
+  .evidence-preview > span:nth-child(2) {
+    display: none;
+  }
+
   .composer-dock {
     padding: 0 10px 8px;
   }
@@ -1590,6 +1834,11 @@ textarea:focus-visible {
 
   .composer-note {
     font-size: 10px;
+  }
+
+  .scroll-to-latest {
+    right: 16px;
+    bottom: 94px;
   }
 }
 

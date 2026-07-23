@@ -23,9 +23,10 @@ test("首屏四题都生成通过质量门禁的公开预设回答包", () => {
   }
 });
 
-test("快速通道仅用于首轮且保留现有加载状态", () => {
-  assert.match(chatSource, /!retry && messages\.length === 0/);
-  assert.match(chatSource, /PRESET_THINKING_MS = 24/);
+test("快速通道仅用于首轮且首字不被加载动画延迟", () => {
+  assert.match(chatSource, /!retry && currentMessages\.length === 0/);
+  assert.doesNotMatch(chatSource, /PRESET_THINKING_MS/);
+  assert.match(chatSource, /let answer = chunks\[0\]/);
   assert.match(chatSource, /className="thinking-state"/);
   assert.match(chatSource, /fetch\("\/api\/chat"/);
 });

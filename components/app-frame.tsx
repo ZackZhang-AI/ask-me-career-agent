@@ -15,7 +15,9 @@ import {
 } from "@phosphor-icons/react";
 import { capabilityNavigation } from "@/lib/capability-navigation";
 import { profile } from "@/lib/profile";
+import { ConversationHistoryList } from "./conversation-history-list";
 import { ConversationControlContext, type ConversationCommand } from "./conversation-control";
+import { useConversationHistory } from "./use-conversation-history";
 
 const publicLinks = [
   { label: "GitHub 项目", href: profile.github, icon: GithubLogoIcon, external: true, event: "project_opened", target: "github" },
@@ -28,22 +30,67 @@ export function AppFrame({ children }: { children: ReactNode }) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [conversationCommand, setConversationCommand] = useState<ConversationCommand | null>(null);
   const commandIdRef = useRef(0);
+  const {
+    history,
+    activeConversationId,
+    persistConversation,
+    openConversation: readConversation,
+    startNewConversation: clearActiveConversation,
+    renameConversation,
+    deleteConversation: removeConversation,
+  } = useConversationHistory();
 
   const startNewConversation = useCallback(() => {
+    clearActiveConversation();
     commandIdRef.current += 1;
     setConversationCommand({ id: commandIdRef.current, type: "reset" });
-  }, []);
+  }, [clearActiveConversation]);
 
   const enqueueQuestion = useCallback((question: string) => {
     commandIdRef.current += 1;
     setConversationCommand({ id: commandIdRef.current, type: "ask", question });
   }, []);
 
+  const openConversation = useCallback((id: string) => {
+    const conversation = readConversation(id);
+    if (!conversation) return;
+    commandIdRef.current += 1;
+    setConversationCommand({
+      id: commandIdRef.current,
+      type: "load",
+      conversationId: conversation.id,
+      messages: conversation.messages,
+    });
+  }, [readConversation]);
+
+  const deleteConversation = useCallback((id: string) => {
+    const wasActive = removeConversation(id);
+    if (!wasActive) return;
+    commandIdRef.current += 1;
+    setConversationCommand({ id: commandIdRef.current, type: "reset" });
+  }, [removeConversation]);
+
   const conversationControl = useMemo(() => ({
     command: conversationCommand,
+    history,
+    activeConversationId,
     startNewConversation,
     enqueueQuestion,
-  }), [conversationCommand, enqueueQuestion, startNewConversation]);
+    openConversation,
+    renameConversation,
+    deleteConversation,
+    persistConversation,
+  }), [
+    activeConversationId,
+    conversationCommand,
+    deleteConversation,
+    enqueueQuestion,
+    history,
+    openConversation,
+    persistConversation,
+    renameConversation,
+    startNewConversation,
+  ]);
 
   return (
     <ConversationControlContext.Provider value={conversationControl}>
@@ -76,6 +123,14 @@ export function AppFrame({ children }: { children: ReactNode }) {
             <span className="new-chat-label">新对话</span>
           </button>
           </div>
+
+          <ConversationHistoryList
+            conversations={history}
+            activeConversationId={activeConversationId}
+            onOpen={openConversation}
+            onRename={renameConversation}
+            onDelete={deleteConversation}
+          />
 
           <section className="sidebar-section" aria-labelledby="profile-label">
           <p className="sidebar-label" id="profile-label">快速了解</p>
@@ -129,7 +184,7 @@ export function AppFrame({ children }: { children: ReactNode }) {
           ))}
           <div className="privacy-note">
             <ShieldCheckIcon size={17} aria-hidden="true" />
-            <p>仅基于候选人维护的公开资料回答</p>
+            <p>仅基于候选人公开资料回答；对话记录只保存在此浏览器</p>
           </div>
           </div>
         </aside>

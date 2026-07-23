@@ -3,6 +3,7 @@ import { buildAnswerPlan, buildContext, systemPrompt } from "@/lib/answer";
 import { buildAnswerCitations } from "@/lib/answer-citations";
 import { repairInstruction, validateAnswer } from "@/lib/answer-quality";
 import { persistEvent } from "@/lib/analytics";
+import { presetRevealChunks } from "@/lib/chat-session";
 import { DeepSeekPlannerError, DeepSeekUpstreamError, generateDeepSeekAnswer, planDeepSeekQuestion } from "@/lib/deepseek";
 import { assessQuestion } from "@/lib/guardrails";
 import { getClaims, getSources, matchStableAnswer, resolveRetrievalQuery, retrieveKnowledge, serializeKnowledgeItems } from "@/lib/knowledge";
@@ -69,9 +70,9 @@ function textStream(input: {
       followUpQuestions: input.followUpQuestions ?? [],
       ...(input.claims ? { claims: input.claims } : {}),
     }));
-    for (let index = 0; index < input.answer.length; index += 12) {
-      controller.enqueue(line({ type: "delta", content: input.answer.slice(index, index + 12) }));
-      await new Promise((resolve) => setTimeout(resolve, 12));
+    for (const chunk of presetRevealChunks(input.answer)) {
+      controller.enqueue(line({ type: "delta", content: chunk }));
+      await new Promise((resolve) => setTimeout(resolve, 16));
     }
     await recordTokenUsage({ actualTokens: input.actualTokens ?? 0, tokenReservation: input.tokenReservation });
     const latencyMs = Date.now() - input.startedAt;

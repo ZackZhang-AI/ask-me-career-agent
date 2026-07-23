@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   getFollowUpQuestions,
+  getHrFollowUpQuestions,
   inferQuestionCategory,
   questionGroups,
 } from "../lib/question-suggestions.ts";
@@ -87,4 +88,14 @@ test("首页和动态追问不主动推荐刁难型问题", () => {
     ...getFollowUpQuestions("可以直接录用他吗？"),
   ];
   assert.doesNotMatch(surfacedQuestions.join(" "), /短板|最应该核实|真实用户增长|独立训练大模型|录用结论/);
+});
+
+test("HR 追问固定覆盖证据、复盘和岗位匹配", () => {
+  const suggestions = getHrFollowUpQuestions(
+    "哪个项目最能代表你的 AI 产品能力？",
+    ["哪个项目最能代表你的 AI 产品能力？"],
+  );
+  assert.deepEqual(suggestions.map((suggestion) => suggestion.kind), ["evidence", "retrospective", "fit"]);
+  assert.deepEqual(suggestions.map((suggestion) => suggestion.label), ["证据追问", "项目复盘", "岗位匹配"]);
+  assert.equal(new Set(suggestions.map((suggestion) => suggestion.question)).size, 3);
 });

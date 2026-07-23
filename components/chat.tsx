@@ -2,9 +2,9 @@
 
 import { FormEvent, KeyboardEvent, useCallback, useEffect, useRef, useState } from "react";
 import {
+  ArrowDownIcon,
   ArrowUpIcon,
   ArrowUpRightIcon,
-  CaretDownIcon,
   CheckCircleIcon,
   EnvelopeSimpleIcon,
   FileTextIcon,
@@ -14,50 +14,25 @@ import {
   SparkleIcon,
   StopIcon,
 } from "@phosphor-icons/react";
+import { AnswerActions } from "./answer-actions";
+import { EvidencePanel } from "./evidence-panel";
 import { FormattedAnswer } from "./formatted-answer";
 import { useConversationControl } from "./conversation-control";
 import { featuredProjects, profile } from "@/lib/profile";
 import { getBrowserSessionId } from "@/lib/client-session";
 import { isNearScrollBottom, prepareQuestionMessages, presetRevealChunks } from "@/lib/chat-session";
+import type { ConversationMessage } from "@/lib/conversation-history";
 import {
-  getFollowUpQuestions,
+  getHrFollowUpQuestions,
   inferQuestionCategory,
   questionGroups,
   type QuestionGroupId,
 } from "@/lib/question-suggestions";
-import type { AnswerCitation, ChatMessage, KnowledgeItem, PresetAnswerPacket, ResponseStatus, Source } from "@/lib/types";
+import type { PresetAnswerPacket } from "@/lib/types";
 
 interface ChatProps {
   presetAnswers: PresetAnswerPacket[];
 }
-
-interface DisplayMessage extends ChatMessage {
-  sources?: Source[];
-  items?: KnowledgeItem[];
-  mode?: "live" | "stable" | "demo" | "guardrail";
-  responseStatus?: ResponseStatus;
-  claimIds?: string[];
-  sourceIds?: string[];
-  citations?: AnswerCitation[];
-  latencyMs?: number;
-  firstTokenLatencyMs?: number;
-  deliveryPath?: "preset" | "api";
-  contractId?: string;
-  followUpQuestions?: string[];
-}
-
-const verificationLabels = {
-  externally_verified: "外部可定位",
-  self_attested: "候选人确认",
-  unverified: "尚未验证",
-} as const;
-
-const statusLabels = {
-  completed: "已完成",
-  in_progress: "进行中",
-  planned: "规划中",
-  archived: "已归档",
-} as const;
 
 const feedbackReasons = [
   { id: "not_relevant", label: "答非所问" },
@@ -66,7 +41,6 @@ const feedbackReasons = [
   { id: "missing_evidence", label: "证据不足" },
 ] as const;
 
-const PRESET_THINKING_MS = 24;
 const PRESET_REVEAL_INTERVAL_MS = 26;
 
 function waitFor(ms: number, signal: AbortSignal) {
@@ -87,7 +61,7 @@ function waitFor(ms: number, signal: AbortSignal) {
   });
 }
 
-function track(event: string, sessionId: string, detail = "", metadata: Partial<DisplayMessage> & { questionCategory?: string } = {}) {
+function track(event: string, sessionId: string, detail = "", metadata: Partial<ConversationMessage> & { questionCategory?: string } = {}) {
   void fetch("/api/events", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -109,7 +83,7 @@ function track(event: string, sessionId: string, detail = "", metadata: Partial<
 }
 
 export function Chat({ presetAnswers }: ChatProps) {
-  const [messages, setMessages] = useState<DisplayMessage[]>([]);
+  const [messages, setMessages] = useState<ConversationMessage[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -117,13 +91,23 @@ export function Chat({ presetAnswers }: ChatProps) {
   const [activeQuestionGroup, setActiveQuestionGroup] = useState<QuestionGroupId>("screening");
   const [answerFeedback, setAnswerFeedback] = useState<Record<number, "helpful" | "not_helpful">>({});
   const [answerFeedbackReason, setAnswerFeedbackReason] = useState<Record<number, string>>({});
+  const [copiedAnswer, setCopiedAnswer] = useState<number | null>(null);
+  const [expandedEvidence, setExpandedEvidence] = useState<Record<number, boolean>>({});
+  const [showScrollToLatest, setShowScrollToLatest] = useState(false);
+  const [thinkingLabel, setThinkingLabel] = useState("正在检索相关经历与项目证据");
   const abortRef = useRef<AbortController | null>(null);
+  const thinkingTimersRef = useRef<number[]>([]);
   const conversationEpochRef = useRef(0);
   const chatScrollRef = useRef<HTMLDivElement | null>(null);
   const messageEndRef = useRef<HTMLDivElement | null>(null);
   const shouldFollowRef = useRef(true);
   const handledCommandRef = useRef(0);
-  const { command } = useConversationControl();
+  const { command, persistConversation } = useConversationControl();
+
+  const clearThinkingTimers = useCallback(() => {
+    for (const timer of thinkingTimersRef.current) window.clearTimeout(timer);
+    thinkingTimersRef.current = [];
+  }, []);
 
   useEffect(() => {
     if (!shouldFollowRef.current) return;
@@ -131,11 +115,20 @@ export function Chat({ presetAnswers }: ChatProps) {
     return () => cancelAnimationFrame(frame);
   }, [messages]);
 
-  useEffect(() => () => abortRef.current?.abort(), []);
+  useEffect(() => () => {
+    clearThinkingTimers();
+    abortRef.current?.abort();
+  }, [clearThinkingTimers]);
 
-  const send = useCallback(async (question: string, fromSuggestion = false, retry = false) => {
+  const send = useCallback(async (
+    question: string,
+    fromSuggestion = false,
+    retry = false,
+    baseMessages?: ConversationMessage[],
+  ) => {
     const clean = question.trim();
     if (!clean || loading) return;
+    const currentMessages = baseMessages ?? messages;
     const sessionId = getBrowserSessionId();
     const conversationEpoch = conversationEpochRef.current;
     const startedAt = performance.now();
@@ -145,23 +138,32 @@ export function Chat({ presetAnswers }: ChatProps) {
     setRetryQuestion("");
     setLoading(true);
     shouldFollowRef.current = true;
-    const nextMessages = prepareQuestionMessages(messages, clean, retry) as DisplayMessage[];
+    setShowScrollToLatest(false);
+    setThinkingLabel("正在检索相关经历与项目证据");
+    clearThinkingTimers();
+    thinkingTimersRef.current = [
+      window.setTimeout(() => setThinkingLabel("正在组织正式面试回答"), 1_400),
+      window.setTimeout(() => setThinkingLabel("正在核验事实与表达"), 4_000),
+    ];
+    const nextMessages = baseMessages
+      ? [...baseMessages, { role: "user" as const, content: clean }]
+      : prepareQuestionMessages(currentMessages, clean, retry) as ConversationMessage[];
     setMessages([...nextMessages, { role: "assistant", content: "" }]);
+    persistConversation(nextMessages);
     track(fromSuggestion ? "suggestion_clicked" : "question_sent", sessionId, "", { questionCategory: inferQuestionCategory(clean) });
-    if (!retry && messages.some((message) => message.role === "user")) track("followup_sent", sessionId);
+    if (!retry && currentMessages.some((message) => message.role === "user")) track("followup_sent", sessionId);
 
     const abort = new AbortController();
     abortRef.current = abort;
     try {
-      const preset = !retry && messages.length === 0
+      const preset = !retry && currentMessages.length === 0
         ? presetAnswers.find((answer) => answer.question === clean)
         : undefined;
       if (preset) {
         const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-        if (!reduceMotion) await waitFor(PRESET_THINKING_MS, abort.signal);
         const chunks = reduceMotion ? [preset.content] : presetRevealChunks(preset.content);
         let answer = chunks[0] ?? preset.content;
-        const streamingMetadata: Partial<DisplayMessage> = {
+        const streamingMetadata: Partial<ConversationMessage> = {
           mode: preset.mode,
           claimIds: preset.claimIds,
           sourceIds: preset.sourceIds,
@@ -176,7 +178,7 @@ export function Chat({ presetAnswers }: ChatProps) {
           answer += chunk;
           setMessages([...nextMessages, { role: "assistant", content: answer, ...streamingMetadata }]);
         }
-        const completedMetadata: Partial<DisplayMessage> = {
+        const completedMetadata: Partial<ConversationMessage> = {
           ...streamingMetadata,
           sources: preset.sources,
           responseStatus: preset.responseStatus,
@@ -184,7 +186,9 @@ export function Chat({ presetAnswers }: ChatProps) {
           followUpQuestions: preset.followUpQuestions,
           latencyMs: Math.round(performance.now() - startedAt),
         };
-        setMessages([...nextMessages, { role: "assistant", content: answer, ...completedMetadata }]);
+        const completedMessages = [...nextMessages, { role: "assistant" as const, content: answer, ...completedMetadata }];
+        setMessages(completedMessages);
+        persistConversation(completedMessages);
         track("answer_completed", sessionId, "", { ...completedMetadata, questionCategory: inferQuestionCategory(clean) });
         return;
       }
@@ -207,7 +211,7 @@ export function Chat({ presetAnswers }: ChatProps) {
       const decoder = new TextDecoder();
       let buffer = "";
       let answer = "";
-      let metadata: Partial<DisplayMessage> = {};
+      let metadata: Partial<ConversationMessage> = {};
       while (true) {
         const { done, value } = await reader.read();
         if (conversationEpoch !== conversationEpochRef.current) {
@@ -244,6 +248,9 @@ export function Chat({ presetAnswers }: ChatProps) {
           setMessages([...nextMessages, { role: "assistant", content: answer, ...metadata }]);
         }
       }
+      const completedMessages = [...nextMessages, { role: "assistant" as const, content: answer, ...metadata }];
+      setMessages(completedMessages);
+      persistConversation(completedMessages);
       track("answer_completed", sessionId, "", { ...metadata, questionCategory: inferQuestionCategory(clean) });
     } catch (caught) {
       if (conversationEpoch !== conversationEpochRef.current) return;
@@ -255,17 +262,23 @@ export function Chat({ presetAnswers }: ChatProps) {
         setError(`回答未完整生成。${message}`);
         track("chat_error", sessionId, message);
       }
-      setMessages((current) => current.filter((message) => message.content));
+      setMessages((current) => {
+        const completed = current.filter((message) => message.content);
+        persistConversation(completed);
+        return completed;
+      });
     } finally {
       if (conversationEpoch === conversationEpochRef.current) {
+        clearThinkingTimers();
         setLoading(false);
         abortRef.current = null;
       }
     }
-  }, [loading, messages, presetAnswers]);
+  }, [clearThinkingTimers, loading, messages, persistConversation, presetAnswers]);
 
   const resetConversation = useCallback(() => {
     conversationEpochRef.current += 1;
+    clearThinkingTimers();
     abortRef.current?.abort();
     abortRef.current = null;
     setMessages([]);
@@ -276,13 +289,35 @@ export function Chat({ presetAnswers }: ChatProps) {
     setActiveQuestionGroup("screening");
     setAnswerFeedback({});
     setAnswerFeedbackReason({});
+    setCopiedAnswer(null);
+    setExpandedEvidence({});
+    setShowScrollToLatest(false);
     shouldFollowRef.current = true;
     window.history.replaceState(null, "", `${window.location.pathname}#top`);
     requestAnimationFrame(() => {
       chatScrollRef.current?.scrollTo({ top: 0, behavior: "smooth" });
       document.getElementById("top")?.scrollIntoView({ behavior: "smooth", block: "start" });
     });
-  }, []);
+  }, [clearThinkingTimers]);
+
+  const loadConversation = useCallback((storedMessages: ConversationMessage[]) => {
+    conversationEpochRef.current += 1;
+    clearThinkingTimers();
+    abortRef.current?.abort();
+    abortRef.current = null;
+    setMessages(storedMessages);
+    setInput("");
+    setError("");
+    setRetryQuestion("");
+    setLoading(false);
+    setAnswerFeedback({});
+    setAnswerFeedbackReason({});
+    setCopiedAnswer(null);
+    setExpandedEvidence({});
+    setShowScrollToLatest(false);
+    shouldFollowRef.current = true;
+    requestAnimationFrame(() => messageEndRef.current?.scrollIntoView({ block: "end" }));
+  }, [clearThinkingTimers]);
 
   useEffect(() => {
     if (!command || handledCommandRef.current === command.id) return;
@@ -290,15 +325,57 @@ export function Chat({ presetAnswers }: ChatProps) {
     const frame = requestAnimationFrame(() => {
       handledCommandRef.current = command.id;
       if (command.type === "reset") resetConversation();
+      else if (command.type === "load") loadConversation(command.messages);
       else void send(command.question, true);
     });
     return () => cancelAnimationFrame(frame);
-  }, [command, loading, resetConversation, send]);
+  }, [command, loading, loadConversation, resetConversation, send]);
 
   function handleScroll() {
     const scroll = chatScrollRef.current;
     if (!scroll) return;
-    shouldFollowRef.current = isNearScrollBottom(scroll.scrollHeight, scroll.scrollTop, scroll.clientHeight);
+    const nearBottom = isNearScrollBottom(scroll.scrollHeight, scroll.scrollTop, scroll.clientHeight);
+    shouldFollowRef.current = nearBottom;
+    setShowScrollToLatest(!nearBottom);
+  }
+
+  function scrollToLatest() {
+    shouldFollowRef.current = true;
+    setShowScrollToLatest(false);
+    messageEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  }
+
+  async function copyAnswer(index: number, content: string) {
+    try {
+      await navigator.clipboard.writeText(content);
+      setCopiedAnswer(index);
+      window.setTimeout(() => setCopiedAnswer((current) => current === index ? null : current), 1_600);
+    } catch {
+      setError("复制失败，请选中文字后手动复制。");
+    }
+  }
+
+  function answerQuestionContext(answerIndex: number) {
+    for (let index = answerIndex - 1; index >= 0; index -= 1) {
+      if (messages[index]?.role === "user") {
+        return {
+          question: messages[index].content,
+          baseMessages: messages.slice(0, index),
+        };
+      }
+    }
+    return null;
+  }
+
+  function regenerateAnswer(answerIndex: number) {
+    const context = answerQuestionContext(answerIndex);
+    if (!context) return;
+    void send(context.question, false, true, context.baseMessages);
+  }
+
+  function condenseAnswer(answerIndex: number) {
+    const baseMessages = messages.slice(0, answerIndex + 1);
+    void send("请把上一条回答精简为 3 个重点，保留结论和关键证据。", true, false, baseMessages);
   }
 
   function submit(event: FormEvent) {
@@ -319,7 +396,7 @@ export function Chat({ presetAnswers }: ChatProps) {
   const lastQuestion = askedQuestions[askedQuestions.length - 1] ?? "";
   const latestAssistant = [...messages].reverse().find((message) => message.role === "assistant" && message.content);
   const followUpQuestions = lastQuestion
-    ? getFollowUpQuestions(lastQuestion, askedQuestions, 3, latestAssistant?.followUpQuestions)
+    ? getHrFollowUpQuestions(lastQuestion, askedQuestions, latestAssistant?.followUpQuestions)
     : [];
   const hasCompletedAnswer = !error && messages.some((message) => message.role === "assistant" && message.content);
 
@@ -423,7 +500,7 @@ export function Chat({ presetAnswers }: ChatProps) {
                         <span />
                         <span />
                       </span>
-                      <span>正在准备回答</span>
+                      <span>{thinkingLabel}</span>
                     </div>
                   ) : (
                     message.role === "assistant"
@@ -433,41 +510,43 @@ export function Chat({ presetAnswers }: ChatProps) {
                             citations={message.citations}
                             sources={message.sources}
                             onCitationClick={(sourceId) => {
-                              const sourceElement = document.getElementById(`source-${index}-${sourceId}`) as HTMLDetailsElement | null;
-                              if (!sourceElement) return;
-                              sourceElement.open = true;
-                              sourceElement.scrollIntoView({ behavior: "smooth", block: "center" });
+                              setExpandedEvidence((current) => ({ ...current, [index]: true }));
+                              requestAnimationFrame(() => {
+                                const sourceElement = document.getElementById(`source-${index}-${sourceId}`) as HTMLDetailsElement | null;
+                                if (!sourceElement) return;
+                                sourceElement.open = true;
+                                sourceElement.scrollIntoView({ behavior: "smooth", block: "center" });
+                              });
                             }}
                           />
                         )
                       : <div className="message-content">{message.content}</div>
                   )}
+                  {message.role === "assistant" && message.content && message.responseStatus && (
+                    <AnswerActions
+                      copied={copiedAnswer === index}
+                      evidenceExpanded={Boolean(expandedEvidence[index])}
+                      hasEvidence={Boolean(message.sources?.length)}
+                      onCopy={() => void copyAnswer(index, message.content)}
+                      onRegenerate={() => regenerateAnswer(index)}
+                      onCondense={() => condenseAnswer(index)}
+                      onToggleEvidence={() => setExpandedEvidence((current) => ({
+                        ...current,
+                        [index]: !current[index],
+                      }))}
+                    />
+                  )}
                   {message.sources && message.sources.length > 0 && (
-                    <div className="sources">
-                      <p>进一步了解</p>
-                      {message.sources.map((source) => (
-                        <details
-                          id={`source-${index}-${source.id}`}
-                          key={source.id}
-                          onToggle={(event) => event.currentTarget.open && track("source_opened", getBrowserSessionId(), source.id)}
-                        >
-                          <summary>
-                            <span>{source.title}</span>
-                            <CaretDownIcon size={15} aria-hidden="true" />
-                          </summary>
-                          <div className="source-detail">
-                            <dl className="source-facts">
-                              <div><dt>验证方式</dt><dd>{verificationLabels[source.verification]}</dd></div>
-                              {source.projectStatus && <div><dt>项目状态</dt><dd>{statusLabels[source.projectStatus]}</dd></div>}
-                              <div><dt>可核验内容</dt><dd>{source.supports}</dd></div>
-                              <div><dt>当前不能证明</dt><dd>{source.limitations}</dd></div>
-                            </dl>
-                            <p className="source-checked">最后检查：{source.lastChecked}</p>
-                            {source.url && <a href={source.url} target="_blank" rel="noreferrer">查看公开来源 <ArrowUpRightIcon size={14} aria-hidden="true" /></a>}
-                          </div>
-                        </details>
-                      ))}
-                    </div>
+                    <EvidencePanel
+                      answerIndex={index}
+                      sources={message.sources}
+                      expanded={Boolean(expandedEvidence[index])}
+                      onExpandedChange={(expanded) => setExpandedEvidence((current) => ({
+                        ...current,
+                        [index]: expanded,
+                      }))}
+                      onSourceOpen={(sourceId) => track("source_opened", getBrowserSessionId(), sourceId)}
+                    />
                   )}
                   {message.role === "assistant" && message.content && message.responseStatus === "completed" && (
                     <div className="answer-feedback" aria-label="回答反馈">
@@ -522,13 +601,14 @@ export function Chat({ presetAnswers }: ChatProps) {
               </span>
               <span>
                 <strong id="follow-up-title">继续了解张倬玮</strong>
-                <small>根据刚才的问题，为您推荐 3 个追问</small>
+                <small>从证据、复盘和岗位匹配继续追问</small>
               </span>
             </div>
             <div className="contextual-suggestions-list">
-              {followUpQuestions.map((question) => (
-                <button key={question} type="button" onClick={() => void send(question, true)}>
-                  <span>{question}</span>
+              {followUpQuestions.map((suggestion) => (
+                <button key={suggestion.kind} type="button" onClick={() => void send(suggestion.question, true)}>
+                  <small>{suggestion.label}</small>
+                  <span>{suggestion.question}</span>
                   <ArrowUpRightIcon size={14} aria-hidden="true" />
                 </button>
               ))}
@@ -579,6 +659,17 @@ export function Chat({ presetAnswers }: ChatProps) {
         </form>
         <p className="composer-note">AI 可能会出错。重要经历与数据请在面试中进一步核实。</p>
       </div>
+      {showScrollToLatest && !isEmpty && (
+        <button
+          className="scroll-to-latest"
+          type="button"
+          aria-label="回到最新回答"
+          title="回到最新回答"
+          onClick={scrollToLatest}
+        >
+          <ArrowDownIcon size={17} weight="bold" aria-hidden="true" />
+        </button>
+      )}
     </div>
   );
 }
