@@ -11,6 +11,7 @@ import { findQuestionContract } from "../lib/question-contracts.ts";
 test("首屏问题按招聘关注点分组", () => {
   assert.deepEqual(questionGroups.map((group) => group.id), ["screening", "projects", "experience", "capabilities"]);
   for (const group of questionGroups) assert.equal(group.questions.length, 4);
+  assert.doesNotMatch(questionGroups.flatMap((group) => group.questions).join(" "), /(^|\s)他|他的|帮助他|体现了他/);
 });
 
 test("项目问题推荐核心工作和效果追问", () => {

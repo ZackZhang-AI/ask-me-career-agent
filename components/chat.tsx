@@ -42,6 +42,7 @@ const feedbackReasons = [
 ] as const;
 
 const PRESET_REVEAL_INTERVAL_MS = 26;
+const PRESET_THINKING_MS = 420;
 
 function waitFor(ms: number, signal: AbortSignal) {
   return new Promise<void>((resolve, reject) => {
@@ -162,6 +163,8 @@ export function Chat({ presetAnswers }: ChatProps) {
       if (preset) {
         const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
         const chunks = reduceMotion ? [preset.content] : presetRevealChunks(preset.content);
+        await waitFor(PRESET_THINKING_MS, abort.signal);
+        if (conversationEpoch !== conversationEpochRef.current) return;
         let answer = chunks[0] ?? preset.content;
         const streamingMetadata: Partial<ConversationMessage> = {
           mode: preset.mode,
