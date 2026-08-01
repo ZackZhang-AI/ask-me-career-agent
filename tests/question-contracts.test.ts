@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { buildAnswerPlan } from "../lib/answer.ts";
+import { extractAnswerEmphasis, isHighSignalEmphasis } from "../lib/answer-format.ts";
 import { answerSimilarity, validateAnswer } from "../lib/answer-quality.ts";
 import { retrieveKnowledge } from "../lib/knowledge.ts";
 import {
@@ -94,4 +95,12 @@ test("所有契约的稳定兜底均通过相关性与事实门禁", () => {
     return result.passed ? [] : [`${contract.id}: ${result.triggers.join(", ")}`];
   });
   assert.deepEqual(failures, []);
+});
+
+test("长篇契约回答使用两到三个高信息量阅读重点", () => {
+  for (const contract of questionContracts) {
+    const emphasized = extractAnswerEmphasis(contract.fallbackAnswer);
+    assert.equal(emphasized.length >= 2 && emphasized.length <= 3, true, contract.id);
+    assert.equal(emphasized.every(isHighSignalEmphasis), true, `${contract.id}: ${emphasized.join(" | ")}`);
+  }
 });

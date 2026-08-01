@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { candidateNarrative } from "../content/narrative.ts";
+import { extractAnswerEmphasis, isHighSignalEmphasis } from "../lib/answer-format.ts";
 import { answerSimilarity } from "../lib/answer-quality.ts";
 import { contentCatalog, contentCatalogSchema } from "../lib/content.ts";
 import { claims, faqs, knowledge, matchStableAnswer, resolveRetrievalQuery, retrieveKnowledge, sources, stableAnswers, starStories } from "../lib/knowledge.ts";
@@ -121,9 +122,11 @@ test("招聘方高频问题都有结构化证据", () => {
 
 test("核心回答用克制的短词组突出招聘重点", () => {
   for (const answer of stableAnswers) {
-    const emphasized = [...answer.standardAnswer.matchAll(/\*\*([^*]+)\*\*/g)].map((match) => match[1]);
+    const emphasized = extractAnswerEmphasis(answer.standardAnswer);
     assert.equal(emphasized.length >= 1 && emphasized.length <= 3, true, answer.id);
+    if (answer.standardAnswer.length > 240) assert.equal(emphasized.length >= 2, true, answer.id);
     assert.equal(emphasized.every((text) => text.length <= 12 && !/[。！？；：]/.test(text)), true, answer.id);
+    assert.equal(emphasized.every(isHighSignalEmphasis), true, `${answer.id}: ${emphasized.join(" | ")}`);
   }
 });
 

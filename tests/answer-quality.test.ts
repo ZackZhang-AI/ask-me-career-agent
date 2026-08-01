@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { candidateNarrative } from "../content/narrative.ts";
-import { buildAnswerPlan } from "../lib/answer.ts";
+import { buildAnswerPlan, systemPrompt } from "../lib/answer.ts";
 import { validateAnswer } from "../lib/answer-quality.ts";
 import { parseAnswerEmphasis } from "../lib/answer-format.ts";
 import { matchStableAnswer, retrieveKnowledge } from "../lib/knowledge.ts";
@@ -86,6 +86,25 @@ test("质量门禁拒绝过度加粗和整句加粗", () => {
   const longEmphasis = plan.fallbackAnswer.replace("**AI Coding Evaluator Agent**", "**这是一个明显超过长度限制而且不应该被整段加粗的标题文本因为它仍在继续扩展**");
   assert.equal(validateAnswer(overformatted, plan).triggers.includes("excessive_emphasis"), true);
   assert.equal(validateAnswer(longEmphasis, plan).triggers.includes("long_emphasis"), true);
+});
+
+test("质量门禁拒绝只有栏目作用的加黑词语", () => {
+  const lowInformation = plan.fallbackAnswer.replace("**AI Coding Evaluator Agent**", "**核心项目**");
+  assert.equal(validateAnswer(lowInformation, plan).triggers.includes("low_information_emphasis"), true);
+});
+
+test("长篇契约回答至少保留两个阅读重点", () => {
+  const underformatted = plan.fallbackAnswer.replace("**单样例 MVP**", "单样例 MVP");
+  assert.equal(validateAnswer(underformatted, plan).triggers.includes("insufficient_emphasis"), true);
+});
+
+test("回答长度按问题弹性组织而不是机械卡字数", () => {
+  const artificiallyNarrowPlan = { ...plan, targetLength: { min: 800, max: 820 } };
+  const result = validateAnswer(plan.fallbackAnswer, artificiallyNarrowPlan);
+  assert.equal(result.triggers.includes("answer_too_short"), false);
+  assert.match(systemPrompt, /正式面试/);
+  assert.match(systemPrompt, /适度美化/);
+  assert.match(systemPrompt, /未被问到的限制不要主动展开或放大/);
 });
 
 test("有序列表编号不会被误判为候选人的业务数字", () => {
