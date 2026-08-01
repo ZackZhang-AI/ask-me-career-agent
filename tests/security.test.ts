@@ -51,8 +51,10 @@ test("应用源码与配置示例不包含疑似真实 API 密钥", () => {
   assert.deepEqual(findings, []);
 });
 
-test("公开证据不包含未确认的百度占位经历", () => {
+test("公开证据包含确认的百度经历但不包含旧占位", () => {
   const serialized = JSON.stringify({ knowledge, claims, sources });
   assert.equal(serialized.includes("2026.X"), false);
-  assert.equal(serialized.includes("百度"), false);
+  assert.equal(serialized.includes("百度"), true);
+  assert.equal(serialized.includes("待本人校核"), false);
+  assert.equal(serialized.includes("规划口径"), false);
 });

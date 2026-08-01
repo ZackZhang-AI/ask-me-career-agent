@@ -47,7 +47,7 @@ test("达到上线内容最低数量且经历与项目可单独定位", () => {
 });
 
 test("STAR 已确认公开且保持证据边界", () => {
-  assert.equal(starStories.length, 8);
+  assert.equal(starStories.length, 9);
   assert.equal(starStories.every((item) => item.visibility === "public" && item.status === "active" && item.verification === "self_attested"), true);
   assert.equal(starStories.every((item) => item.limitations.length > 0 && item.claimIds.length > 0 && item.sourceIds.length > 0), true);
   const serialized = JSON.stringify(starStories);
@@ -98,18 +98,18 @@ test("Obsidian 审核通过的九条知识保留精确来源映射", () => {
 test("核心问题稳定匹配标准答案和评测要求", () => {
   const matched = matchStableAnswer("哪个项目最能代表他的 AI 产品能力？");
   assert.equal(matched?.id, "A03");
-  assert.match(matched?.standardAnswer ?? "", /RAG Knowledge Base System/);
-  assert.deepEqual(matched?.requiredClaimIds, ["C3"]);
-  assert.equal(matched?.requiredSourceIds.includes("S4"), false);
-  assert.equal(matched?.requiredSourceIds.includes("S3"), true);
+  assert.match(matched?.standardAnswer ?? "", /AI Coding Evaluator Agent/);
+  assert.equal(matched?.requiredClaimIds.includes("C14"), true);
+  assert.equal(matched?.requiredClaimIds.includes("C15"), true);
+  assert.equal(matched?.requiredSourceIds.includes("S11"), true);
 });
 
 test("60 秒介绍提供招聘判断、核心证据与完整来源", () => {
   const matched = matchStableAnswer("60 秒了解张倬玮。");
   assert.equal(matched?.id, "A01");
   assert.equal((matched?.details?.length ?? 0) >= 4, true);
-  assert.equal(matched?.requiredSourceIds.includes("S3"), true);
-  assert.equal(matched?.requiredSourceIds.includes("S4"), true);
+  assert.equal(matched?.requiredSourceIds.includes("S1"), true);
+  assert.equal(matched?.requiredSourceIds.includes("S11"), true);
 });
 
 test("招聘方高频问题都有结构化证据", () => {
@@ -145,10 +145,11 @@ test("检索只返回公开、有效且非未验证内容", () => {
   }
 });
 
-test("百度占位经历与联系方式不进入内容目录", () => {
+test("百度确认经历进入内容目录且占位与联系方式不进入", () => {
   const serialized = JSON.stringify(contentCatalog);
   assert.equal(serialized.includes("2026.X"), false);
-  assert.equal(serialized.includes("百度"), false);
+  assert.equal(serialized.includes("百度"), true);
+  assert.equal(serialized.includes("Evaluator Agent"), true);
   assert.equal(serialized.includes("zackzhang124@163.com"), false);
   assert.equal(serialized.includes("15812106204"), false);
 });
@@ -159,7 +160,10 @@ test("30、60、90 秒介绍独立成稿且时长层次清晰", () => {
   assert.equal(introductions.seconds60.length >= 430 && introductions.seconds60.length <= 600, true);
   assert.equal(introductions.seconds90.length > introductions.seconds60.length, true);
   assert.equal(new Set(Object.values(introductions)).size, 3);
-  for (const answer of Object.values(introductions)) assert.doesNotMatch(answer, /百度|Claim|Source|证据边界/);
+  for (const answer of Object.values(introductions)) {
+    assert.match(answer, /百度/);
+    assert.doesNotMatch(answer, /Claim|Source|证据边界/);
+  }
 });
 
 test("核心问题拥有独立判断任务，不复用同一份回答", () => {

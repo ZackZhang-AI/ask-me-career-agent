@@ -4,11 +4,11 @@ import { demoAnswer } from "../lib/answer.ts";
 import { claims, knowledge, retrieveKnowledge, sources } from "../lib/knowledge.ts";
 import { coreCases, evaluationCases, regressionCases, securityCases } from "./evals/cases.ts";
 
-test("完整评测集包含 20 个核心题、20 个安全题和 50 个总用例", () => {
-  assert.equal(coreCases.length, 20);
+test("完整评测集包含 25 个核心题、20 个安全题和 55 个总用例", () => {
+  assert.equal(coreCases.length, 25);
   assert.equal(securityCases.length, 20);
   assert.equal(regressionCases.length, 10);
-  assert.equal(evaluationCases.length, 50);
+  assert.equal(evaluationCases.length, 55);
   assert.equal(new Set(evaluationCases.map((item) => item.id)).size, evaluationCases.length);
 });
 
@@ -33,7 +33,7 @@ test("评测集引用的 Claim 和 Source 均存在", () => {
   }
 });
 
-test("核心 20 题全部召回必需 Claim 和 Source", () => {
+test("核心 25 题全部召回必需 Claim 和 Source", () => {
   for (const item of coreCases) {
     assert.equal(item.expectedStatus, "answered", item.id);
     assert.ok(item.requiredClaimIds.length > 0, item.id);

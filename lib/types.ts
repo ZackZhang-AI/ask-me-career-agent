@@ -9,6 +9,7 @@ export type ConversationDepth = "overview" | "follow_up" | "deep_dive";
 export type QuestionTopic =
   | "profile"
   | "role_fit"
+  | "baidu"
   | "rag"
   | "deepflow"
   | "ask_me"

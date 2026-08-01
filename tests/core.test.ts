@@ -63,7 +63,7 @@ test("稳定回答由回答卡自然说明完成边界，不追加机械尾注",
   const normal = demoAnswer("哪个项目最能代表他的 AI 产品能力？", [], stable);
   const boundary = demoAnswer("哪个项目最能代表他的 AI 产品能力？请说明当前完成边界。", [], stable);
   assert.doesNotMatch(normal, /\*\*当前阶段\*\*/);
-  assert.match(boundary, /Dense Retrieval|主链路/);
+  assert.match(boundary, /单样例 MVP|11 阶段/);
   assert.doesNotMatch(boundary, /\*\*当前阶段\*\*/);
 });
 
@@ -265,10 +265,12 @@ test("联系方式不进入模型知识库", () => {
   assert.equal(context.includes("15812106204"), false);
 });
 
-test("未确认的占位经历不进入公开知识库", () => {
+test("确认的百度经历进入公开知识库且未确认占位不进入", () => {
   const context = JSON.stringify({ knowledge, claims });
   assert.equal(context.includes("2026.X"), false);
-  assert.equal(context.includes("百度"), false);
+  assert.equal(context.includes("百度"), true);
+  assert.equal(context.includes("待本人校核"), false);
+  assert.equal(context.includes("规划口径"), false);
 });
 
 test("代表项目拥有外部可定位的 GitHub 来源", () => {

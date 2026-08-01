@@ -452,7 +452,9 @@ function contractQualityMetrics() {
   const routeFixtures = [
     ["RAG 项目体现了你哪些产品方法？", "rag", "method"],
     ["应用统计学背景如何帮助你做 AI 产品？", "statistics", "transfer"],
-    ["你的实习经历沉淀了哪些可迁移能力？", "audit", "transfer"],
+    ["你的实习经历沉淀了哪些可迁移能力？", "profile", "transfer"],
+    ["Evaluator Agent 项目具体做了什么？", "baidu", "architecture"],
+    ["你如何证明自动评测结果可信？", "baidu", "evaluation"],
     ["举一个审计问题转成产品的例子。", "audit", "example"],
     ["你的统计学背景能怎样支持产品决策？", "statistics", "transfer"],
     ["Agent 之间如何协作？", "deepflow", "collaboration"],

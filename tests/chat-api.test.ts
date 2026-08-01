@@ -63,10 +63,10 @@ test("安全拒答、证据不足与核心稳定回答返回标准 NDJSON 状态
   const verified = await events(await POST(request({ sessionId: "api-verified", messages: [{ role: "user", content: "哪个项目最能代表他的 AI 产品能力？" }] })));
   assert.equal(verified[0].mode, "stable");
   assert.equal(verified[0].responseStatus, "completed");
-  assert.equal(verified[0].claimIds.includes("C3"), true);
-  assert.equal(verified[0].sourceIds.includes("S3"), true);
+  assert.equal(verified[0].claimIds.includes("C14"), true);
+  assert.equal(verified[0].sourceIds.includes("S11"), true);
   assert.equal(Array.isArray(verified[0].citations), true);
-  assert.equal((verified[0].citations as Array<{ sourceIds: string[] }>).some((citation) => citation.sourceIds.includes("S3")), true);
+  assert.equal((verified[0].citations as Array<{ sourceIds: string[] }>).some((citation) => citation.sourceIds.includes("S11")), true);
   assert.equal(typeof verified.at(-1).latencyMs, "number");
 });
 
@@ -163,9 +163,9 @@ test("60 秒介绍返回足够完整的招聘视角回答", async () => {
 
   assert.equal(responseEvents[0].mode, "stable");
   assert.match(answer, /我叫张倬玮/);
-  assert.match(answer, /数据评测/);
-  assert.match(answer, /企业业务|企业流程/);
-  assert.match(answer, /产品落地/);
+  assert.match(answer, /百度/);
+  assert.match(answer, /七维指标|Evaluator Agent/);
+  assert.match(answer, /企业流程|证据链/);
   assert.doesNotMatch(answer, /证据边界|需要面试核实|\[S\d+\]/);
   assert.match(answer, /持之以恒/);
   assert.match(answer, /学习能力/);
@@ -204,7 +204,7 @@ test("核心回答在模型幻觉连续失败后回退稳定事实骨架", async
   const answer = responseEvents.filter((event) => event.type === "delta").map((event) => event.content).join("");
   assert.equal(calls, 2);
   assert.equal(responseEvents[0].mode, "stable");
-  assert.match(answer, /RAG Knowledge Base System/);
+  assert.match(answer, /AI Coding Evaluator Agent/);
   assert.doesNotMatch(answer, /校园数据门户|30 人|90%/);
   assert.equal(responseEvents.at(-1).responseStatus, "completed");
 });

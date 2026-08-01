@@ -87,7 +87,7 @@ test("已知幻觉一律触发硬事实失败且可信度归零", () => {
 
 test("报告包含核心覆盖、长度、结构、套话、硬事实与多轮指标", async () => {
   const report = await localReport();
-  assert.equal(report.coreResults.length, 20);
+  assert.equal(report.coreResults.length, 25);
   assert.equal(report.hallucinationResults.length, 5);
   assert.equal(report.multiTurnResults.length, 4);
   assert.equal(report.multiTurnResults.filter((item) => item.turns.length === 3).length, 3);

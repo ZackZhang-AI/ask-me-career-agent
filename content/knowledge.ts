@@ -1,10 +1,10 @@
-const updated = "2026-07-17";
+const updated = "2026-08-01";
 const publicActive = { visibility: "public", status: "active", lastUpdated: updated } as const;
 
 export const strengthContent = [
-  { title: "数据分析与评测", description: "应用统计学背景，能用指标、评测集和 Badcase 分析驱动 AI 产品迭代。" },
+  { title: "模型评测与归因", description: "结合统计学与百度实习，能用指标、Gate、评测集和 Bad Case 归因推动 AI 产品迭代。" },
   { title: "审计与业务理解", description: "具备财务审计和 IT 审计经历，理解流程、风险、证据和企业数据边界。" },
-  { title: "AI 产品工程落地", description: "持续构建 RAG、Multi-Agent 与本地优先工具，把产品判断转化为公开代码。" },
+  { title: "AI 产品工程落地", description: "参与 Evaluator Agent MVP，并持续构建 RAG 与 Multi-Agent 项目，把产品判断转成可运行、可验收链路。" },
 ] as const;
 
 export const projectAliases = {
@@ -14,6 +14,7 @@ export const projectAliases = {
   "local-first-tools": ["本地优先", "read later", "downloads butler", "效率工具"],
   "audit-tools": ["审计工具", "归档助手", "日志抽查", "audit assistant"],
   "ask-me": ["ask me", "数字分身", "求职agent", "本项目"],
+  "baidu-ai-coding-evaluation": ["百度", "baidu", "ai coding", "evaluator agent", "模型评测", "七维指标", "硬门槛", "gate", "dashboard样例"],
 } as const;
 
 export const knowledgeContent = [
@@ -29,6 +30,11 @@ export const knowledgeContent = [
   { ...publicActive, id: "K10", title: "德勤校园大使", keywords: ["德勤", "校园大使", "校招", "主持", "推广"], content: "曾担任德勤校园大使，公开职责描述包括流程主持与校招推广。", verification: "self_attested", candidateContribution: "候选人提供并确认职责描述。", aiAssistance: "无。", limitations: "活动范围与效果需面试核实。", claimIds: ["C6", "C11"], supportsClaimIds: ["C6", "C11"], sourceIds: ["S1"] },
   { ...publicActive, id: "K11", title: "能力边界", keywords: ["短板", "不足", "边界", "缺口", "风险", "待核实"], content: "当前公开证据的主要缺口是大规模商业化 AI 产品、真实用户增长与留存、长期跨职能团队管理，以及公开项目在生产环境中的稳定性数据。", verification: "self_attested", candidateContribution: "候选人主动说明当前能力限制。", aiAssistance: "无。", limitations: "能力边界会随实习和项目进展更新。", claimIds: ["C8"], supportsClaimIds: ["C8"], sourceIds: ["S1", "S10"] },
   { ...publicActive, id: "K12", title: "Ask Me 项目", keywords: ["ask me", "数字分身", "求职agent", "本项目"], relatedProject: "ask-me", content: "Ask Me 是面向 AI 产品经理招聘场景的求职数字分身，通过静态摘要、可追问对话、事实引用和状态管理，帮助招聘方快速获得可验证信息。", projectStatus: "in_progress", verification: "self_attested", candidateContribution: "负责需求洞察、PRD、信息架构、Claim-Source 模型、安全边界和工程验收。", aiAssistance: "AI 编程 Agent 参与代码生成、资料整理和测试。", limitations: "仍在持续更新，尚未提供招聘转化或大规模使用数据。", claimIds: ["C12"], supportsClaimIds: ["C12"], sourceIds: ["S2"] },
+  { ...publicActive, id: "K22", title: "百度 AI 产品经理实习", keywords: ["百度", "baidu", "实习", "ai产品经理", "模型评测", "策略优化", "bad case", "行业研究"], relatedProject: "baidu-ai-coding-evaluation", content: "自 2026 年 4 月起参与百度 AI 产品经理实习，工作主线包括执行模型或 Agent 版本评测、记录并横向比较结果、整理 Bad Case，以及把问题拆到模型、Prompt、检索、工具或评测器等环节。", projectStatus: "in_progress", verification: "self_attested", candidateContribution: "参与版本测试、结果分析、问题归因与评测材料沉淀。", aiAssistance: "模型和自动化工具是评测对象与执行工具，产品判断和结果边界由候选人负责。", limitations: "不公开具体业务线、模型版本、内部数据或保密材料；团队分工与独立完成比例需面试核实。", claimIds: ["C13"], supportsClaimIds: ["C13"], sourceIds: ["S1", "S11"] },
+  { ...publicActive, id: "K23", title: "AI Coding 七维评测与 Gate", keywords: ["ai coding", "七维", "指标", "权重", "gate", "硬门槛", "功能正确性", "视觉", "交互", "响应式", "可访问性", "代码质量"], relatedProject: "baidu-ai-coding-evaluation", content: "AI Coding Web 评测从用户能否获得可运行、可交互应用出发，设置功能正确性、端到端可用性、视觉美观度、交互体验、响应式适配、可访问性和代码质量七个维度；构建或启动失败、核心流程失败、白屏等情况由 Gate 保护核心可用性。", projectStatus: "in_progress", verification: "self_attested", candidateContribution: "参与指标、权重与 Gate 规则设计，并通过样例验证规则能否产生可解释证据。", aiAssistance: "确定性工具负责硬检查，LLM Judge 处理开放体验维度，人工负责校准。", limitations: "现有权重与门槛属于 MVP 规则，不是行业标准，仍需通过多任务 Pilot 和人工评分校准。", claimIds: ["C14"], supportsClaimIds: ["C14"], sourceIds: ["S1", "S11"] },
+  { ...publicActive, id: "K24", title: "Evaluator Agent MVP", keywords: ["evaluator agent", "评测器", "mvp", "11阶段", "playwright", "axe-core", "三视口", "结构化报告", "dashboard", "90.9", "99.2", "76.0", "20项测试"], relatedProject: "baidu-ai-coding-evaluation", content: "Evaluator Agent MVP 以 Task Spec、候选项目、运行配置和 Rubric 为输入，依次完成任务解析、项目检查、依赖安装、构建、服务启动、HTTP 探活、浏览器加载、核心功能流、多视口与可访问性检查、Judge 评分归因和报告汇总。Dashboard 单样例得到 Final 90.9、Auto 99.2、Judge 76.0，20 项工程测试通过。", projectStatus: "in_progress", verification: "self_attested", candidateContribution: "参与 Benchmark 调研、流程与验收设计、MVP 实现验证、样例测试和交付材料整理。", aiAssistance: "Python、Playwright、axe-core 与日志提供确定性证据，LLM Judge 负责开放维度评分。", limitations: "结果仅证明单样例链路可运行、可留证；不代表生产平台、大规模模型比较或业务指标提升。", claimIds: ["C14", "C15"], supportsClaimIds: ["C14", "C15"], sourceIds: ["S1", "S11"] },
+  { ...publicActive, id: "K25", title: "自动评测可信度与当前边界", keywords: ["可信", "一致性", "误报", "漏报", "黄金集", "judge", "校准", "稳定性", "边界", "局限", "重试", "人工"], relatedProject: "baidu-ai-coding-evaluation", content: "当前只能确认工程测试和单样例链路可运行，尚未形成完整的人机一致性、误报漏报、重复运行稳定性、成本和批量模型对比统计。可靠方案是固定 Judge 版本与参数，建立人工黄金集，区分工具失败与候选产品失败，并让冲突或低置信度结果转人工。", projectStatus: "in_progress", verification: "self_attested", candidateContribution: "明确评测器本身也需要被评测，并将可靠性校准作为 MVP 后续优先级。", aiAssistance: "LLM Judge 不是绝对真值，需要确定性证据、重复运行和人工仲裁共同约束。", limitations: "没有统计前不报告人机一致率、自动化率、ROI 或模型提升比例。", claimIds: ["C14", "C15"], supportsClaimIds: ["C14", "C15"], sourceIds: ["S11"] },
+  { ...publicActive, id: "K26", title: "Coding Benchmark 调研", keywords: ["benchmark", "humaneval", "swe-bench", "web-bench", "webdevjudge", "fullstack bench", "13项", "行业研究"], relatedProject: "baidu-ai-coding-evaluation", content: "调研 13 项 Coding Benchmark，并按单函数或算法、仓库级修复、Web 或全栈项目、评测器可靠性四类整理。核心结论是公开 Benchmark 可以提供任务构造、可执行测试和环境复现方法，但真实 AI Coding 产品还要补充视觉、交互、用户可用性与业务边界。", projectStatus: "in_progress", verification: "self_attested", candidateContribution: "整理各 Benchmark 的任务、数据、指标、环境与局限，并提炼可迁移到业务评测的部分。", aiAssistance: "AI 可辅助资料整理，最终分类和业务取舍由候选人完成。", limitations: "不把 Benchmark 排行榜或论文结论当作本人项目成果；具体阅读深度以面试说明为准。", claimIds: ["C16"], supportsClaimIds: ["C16"], sourceIds: ["S1", "S11"] },
 ] as const;
 
 export const suggestedQuestionContent = [

@@ -2,7 +2,7 @@ const confirmed = {
   visibility: "public",
   status: "active",
   verification: "self_attested",
-  lastUpdated: "2026-07-17",
+  lastUpdated: "2026-08-01",
 } as const;
 
 export const starStoryContent = [
@@ -115,5 +115,19 @@ export const starStoryContent = [
     result: "产品方向从“证明每句话”调整为“让面试官更快形成清晰、可信、愿意追问的候选人判断”，同时继续保留内部事实门禁。",
     limitations: "产品方向调整已经发生，但最终招聘转化仍需真人软测试验证。",
     claimIds: ["C12"], supportsClaimIds: ["C12"], sourceIds: ["S2"],
+  },
+  {
+    ...confirmed,
+    id: "ST9",
+    title: "把 AI Coding 静态评测方案转成可执行 MVP",
+    relatedProject: "baidu-ai-coding-evaluation",
+    competency: "模型评测与产品验收",
+    interviewUse: ["百度实习", "Evaluator Agent", "代表项目", "AI Coding 评测", "项目挑战"],
+    situation: "原有方案能够描述 AI Coding Web 项目需要评什么，但不能稳定回答候选项目能否安装、启动、操作并留下可复核证据。",
+    task: "在导师确定的方向下，需要把七维指标、硬门槛和证据要求转成一条可运行的 Evaluator Agent MVP 链路。",
+    action: "我参与 Benchmark 调研、指标与 Gate 设计、流程和验收拆解、MVP 实现验证、样例测试及交付材料整理。方案把构建、探活、浏览器操作和可访问性等确定性检查交给工具，把视觉层级和产品完成度交给 Judge，并保留人工校准。",
+    result: "Dashboard 单样例跑通 11 阶段链路，Final Score 90.9、Auto Score 99.2、Judge Score 76.0，20 项工程测试通过，并生成桌面、平板和手机三视口截图与结构化报告。",
+    limitations: "这是单样例 MVP 可行性验证，只能证明链路可运行、可留证；不能推出模型效果、用户满意度或业务效率提升，也不表述为本人独立搭建生产平台。",
+    claimIds: ["C14", "C15"], supportsClaimIds: ["C14", "C15"], sourceIds: ["S1", "S11"],
   },
 ] as const;
