@@ -63,7 +63,7 @@ test("稳定回答由回答卡自然说明完成边界，不追加机械尾注",
   const normal = demoAnswer("哪个项目最能代表他的 AI 产品能力？", [], stable);
   const boundary = demoAnswer("哪个项目最能代表他的 AI 产品能力？请说明当前完成边界。", [], stable);
   assert.doesNotMatch(normal, /\*\*当前阶段\*\*/);
-  assert.match(boundary, /单样例 MVP|11 阶段/);
+  assert.match(boundary, /Dense Retrieval|持续迭代/);
   assert.doesNotMatch(boundary, /\*\*当前阶段\*\*/);
 });
 

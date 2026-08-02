@@ -14,10 +14,10 @@ test("首屏问题按招聘关注点分组", () => {
   assert.doesNotMatch(questionGroups.flatMap((group) => group.questions).join(" "), /(^|\s)他|他的|帮助他|体现了他/);
 });
 
-test("代表项目问题优先推荐百度贡献并保持话题覆盖", () => {
+test("代表项目问题优先推荐 RAG 贡献并保持话题覆盖", () => {
   const questions = getFollowUpQuestions("哪个项目最能代表他的 AI 产品能力？");
   assert.equal(inferQuestionCategory("哪个项目最能代表他的 AI 产品能力？"), "project");
-  assert.match(questions[0], /百度实习中具体负责/);
+  assert.match(questions[0], /RAG 项目中负责/);
   assert.equal(new Set(questions.map((question) => findQuestionContract(question)?.frame.topic)).size, 3);
 });
 

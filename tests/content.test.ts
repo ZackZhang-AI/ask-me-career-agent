@@ -101,10 +101,10 @@ test("Obsidian 审核通过的九条知识保留精确来源映射", () => {
 test("核心问题稳定匹配标准答案和评测要求", () => {
   const matched = matchStableAnswer("哪个项目最能代表他的 AI 产品能力？");
   assert.equal(matched?.id, "A03");
-  assert.match(matched?.standardAnswer ?? "", /AI Coding Evaluator Agent/);
-  assert.equal(matched?.requiredClaimIds.includes("C14"), true);
-  assert.equal(matched?.requiredClaimIds.includes("C15"), true);
-  assert.equal(matched?.requiredSourceIds.includes("S11"), true);
+  assert.match(matched?.standardAnswer ?? "", /RAG Knowledge Base System/);
+  assert.doesNotMatch(matched?.standardAnswer ?? "", /AI Coding Evaluator Agent|百度实习/);
+  assert.deepEqual(matched?.requiredClaimIds, ["C3"]);
+  assert.equal(matched?.requiredSourceIds.includes("S3"), true);
 });
 
 test("60 秒介绍提供招聘判断、核心证据与完整来源", () => {

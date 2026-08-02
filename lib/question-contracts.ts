@@ -92,12 +92,12 @@ export const questionContracts: QuestionContract[] = [
     next: ["baidu_contribution", "baidu_project", "baidu_metrics"],
   }),
   define({
-    id: "representative_project", question: "哪个项目最能代表你的 AI 产品能力？", aliases: ["哪个项目最能代表他的 AI 产品能力？"], topic: "baidu", facet: "overview",
-    dimensions: ["项目问题", "产品判断", "验证边界"], knowledge: ["K23", "K24", "K25"], stories: ["ST9"], shape: "project_arc", length: { min: 360, max: 540 }, forbidden: ["rag", "deepflow", "local_tools", "audit"],
-    goal: "用百度 AI Coding Evaluator 项目证明候选人的模型评测、产品判断和工程验证能力。", thesis: "最能代表我 AI 产品能力的是百度实习中的 AI Coding Evaluator Agent MVP。",
-    required: ["AI Coding 端到端质量问题", "七维指标与工具 Judge 分工", "单样例结果与边界"], direct: ["AI Coding", "评测", "Evaluator Agent"],
-    fallback: "最能代表我 AI 产品能力的是百度实习中的 **AI Coding Evaluator Agent**。它解决的问题不是给代码做一次简单打分，而是判断模型生成的 Web 项目能否真正安装、启动、操作，并留下可复核的质量证据。\n\n我参与了 Benchmark 调研、七维指标和 Gate 设计、MVP 实现验证、样例测试及交付材料整理。方案把构建、探活、浏览器操作和可访问性等确定性检查交给 Python、Playwright 与 axe-core，把视觉层级和产品完成度等开放判断交给 Judge，再由人工负责校准和争议判断。\n\nDashboard 单样例最终跑通 11 阶段链路，20 项工程测试通过，并生成三视口截图和结构化报告。这个项目体现了我把模糊的“模型生成效果”转成任务、指标、证据和验收流程的能力；同时我会明确它目前只是**单样例 MVP**，不能推出模型效果或业务效率已经提升。",
-    next: ["baidu_contribution", "baidu_metrics", "baidu_reliability"],
+    id: "representative_project", question: "哪个项目最能代表你的 AI 产品能力？", aliases: ["哪个项目最能代表他的 AI 产品能力？"], topic: "rag", facet: "overview",
+    dimensions: ["项目问题", "产品判断", "验证边界"], knowledge: ["K4", "K14", "K17"], stories: ["ST1"], shape: "project_arc", length: { min: 390, max: 540 }, forbidden: ["baidu", "deepflow", "local_tools", "audit"],
+    goal: "用 RAG 项目证明候选人的问题定义、方案取舍、评测设计与工程落地能力。", thesis: "最能代表我 AI 产品能力的是 RAG Knowledge Base System。",
+    required: ["专业资料可信问答问题", "Dense Retrieval 基线与控制变量迭代", "最终质量判断由我负责"], direct: ["RAG", "Dense Retrieval", "评测"],
+    fallback: "最能代表我 AI 产品能力的是 RAG Knowledge Base System。它面向**可信专业问答**，核心不是再做一个聊天界面，而是让用户更快获得有原文依据、能够检查的答案。\n\n**先建立质量基线**：我把产品链路拆成文档摄入、检索、回答生成、引用和评测。项目早期同时有混合检索、Rerank、引用溯源和 RAGAS 等多个方向，如果一起推进，出现 Bad Case 时很难判断问题来自哪个环节。因此我先用 Dense Retrieval 跑通可重复检查的主链路，再依据召回相关性、回答忠实度和引用支持情况决定下一步迭代。\n\n我负责确定产品定位、梳理端到端流程、设计检索与评测思路，并推动实现和验收；AI 编程工具参与开发、调试和文档整理，但需求取舍、迭代顺序、测试设计和最终质量判断由我负责。\n\n公开仓库可以核验当前代码、文档与 Dense Retrieval 主链路。混合检索、Rerank、完整引用和自动评测仍属于持续迭代方向，我不会把规划能力包装成已验证结果。这个项目最能体现我把模糊的“可信问答”需求转成产品链路、质量指标和迭代闭环的能力。",
+    next: ["project_contribution", "rag_methods", "evaluation"],
   }),
   define({
     id: "rag_overview", question: "请介绍一下你的 RAG 知识库项目。", aliases: ["介绍一下你的 RAG 知识库项目。", "介绍一下你的 RAG Knowledge Base System。"], topic: "rag", facet: "overview",
@@ -148,7 +148,7 @@ export const questionContracts: QuestionContract[] = [
     next: ["baidu_metrics", "baidu_badcase", "baidu_project"],
   }),
   define({
-    id: "project_contribution", question: "你在代表项目中负责哪些核心工作？", aliases: ["他在代表项目中负责哪些核心工作？", "你在 RAG 项目中的个人贡献是什么？", "你的核心贡献是什么？", "他在 RAG 项目中负责什么？", "你在这个项目中最关键的产品取舍是什么？", "最难的产品取舍是什么？"], topic: "rag", facet: "contribution",
+    id: "project_contribution", question: "你在 RAG 项目中负责哪些核心工作？", aliases: ["你在代表项目中负责哪些核心工作？", "他在代表项目中负责哪些核心工作？", "你在 RAG 项目中的个人贡献是什么？", "你的核心贡献是什么？", "他在 RAG 项目中负责什么？", "你在这个项目中最关键的产品取舍是什么？", "最难的产品取舍是什么？"], topic: "rag", facet: "contribution",
     dimensions: ["本人判断", "核心行动", "验收责任"], knowledge: ["K4", "K17", "K14"], stories: ["ST1"], shape: "contribution", length: { min: 330, max: 500 }, forbidden: ["deepflow", "local_tools", "audit"],
     goal: "清楚区分候选人判断与 AI 工具协作。", thesis: "我在 RAG 项目中负责的核心不是堆功能，而是决定做什么、为什么这样取舍以及如何验收。",
     required: ["产品定位", "检索和评测取舍", "整体推进与验收"], direct: ["负责", "取舍", "验收"],
