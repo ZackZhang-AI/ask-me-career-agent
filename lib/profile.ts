@@ -26,10 +26,10 @@ export const featuredProjects = [
     status: "公开仓库，可演示 MVP",
   },
   {
-    name: "Ask Me Career Agent",
-    summary: "面向 AI 产品招聘场景的公开资料问答 Agent，支持多轮问答、来源核验与动态追问。",
-    stack: "Next.js / TypeScript / RAG / DeepSeek",
-    url: "https://github.com/ZackZhang-AI/ask-me-career-agent",
-    status: "线上可访问，持续迭代",
+    name: "AgentScope",
+    summary: "AI Agent 黑匣子回放器，追踪工具调用、延迟与错误，支持安全 Fork、运行对比与确定性评测。",
+    stack: "Next.js / TypeScript / PostgreSQL / Playwright",
+    url: "https://github.com/ZackZhang-AI/HarnessLab",
+    status: "公开仓库，线上可演示",
   },
 ] as const;

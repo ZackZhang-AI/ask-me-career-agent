@@ -11,7 +11,9 @@ test("首页项目卡片如实区分当前完成度", () => {
   assert.equal(featuredProjects.every((project) => !project.status.includes("已完成")), true);
   assert.match(featuredProjects[0].summary, /Dense Retrieval/);
   assert.match(featuredProjects[1].status, /MVP/);
-  assert.match(featuredProjects[2].status, /持续迭代/);
+  assert.equal(featuredProjects[2].name, "AgentScope");
+  assert.match(featuredProjects[2].url, /HarnessLab$/);
+  assert.match(featuredProjects[2].status, /线上可演示/);
 });
 
 test("内容目录通过 Zod 与引用完整性校验", () => {
