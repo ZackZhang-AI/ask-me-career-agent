@@ -29,12 +29,13 @@ const intentPatterns: Array<[AnswerIntent, RegExp]> = [
   ["ai_collaboration", /AI\s*(?:编程|写|生成)|代码.*AI|AI.*占比|用了多少\s*AI/i],
   ["contribution", /个人贡献|你做了什么|你负责|具体做了|你的工作|主导/],
   ["challenge", /挑战|困难|失败|取舍|踩坑|复盘|怎么推进|如何推进/],
-  ["diagnosis", /没有改善|没改善|没有效果|没效果|优先排查|先排查|先.{0,3}看什么|定位问题|为什么没有/],
+  ["diagnosis", /没有改善|没改善|没有效果|没效果|优先排查|先排查|先.{0,3}看什么|定位问题|(?:如何|怎么).{0,4}定位|为什么没有/],
   ["privacy", /隐私|机密|企业数据|数据边界/],
   ["experience_value", /企业级?\s*AI|企业\s*AI|企业场景|业务问题.{0,8}(?:转化|转成|变成).{0,8}(?:AI|产品)|(?:AI|产品)方案/i],
   ["skills", /技术能力|技术栈|会什么|数据分析|(?:AI\s*)?评测|如何评估|有哪些实践/i],
   ["result", /结果|量化(?:结果|效果)|效果数据|用户规模|增长|留存|上线|生产状态|完成(?:了吗|情况)/],
   ["limitation", /短板|不足|弱点|限制|能力缺口/],
+  ["career_transition", /(?:为什么|为何).{0,8}(?:从)?(?:财会|会计|财务|审计|统计)(?!问题)(?:背景|专业|经历)?.{0,8}(?:转向|转(?!化)|选择|改做|走到|进入).{0,8}(?:AI\s*产品|产品经理|产品)|(?:(?:从)(?:财会|会计|财务|审计|统计|原专业|传统行业)|(?:财会|会计|财务|审计|统计|原专业|传统行业)(?:背景|专业|经历)).{0,12}(?:转向|转(?!化)|选择|改做|走到|进入).{0,8}(?:AI\s*产品|产品经理|产品)|(?:为什么|为何).{0,8}转向\s*AI\s*产品/i],
   ["role_fit", /为什么(?:选|选择|适合)|岗位匹配|入职.*做什么|优势/],
   ["representative_project", /代表项目|最能代表|最有价值的项目/],
   ["introduction", /自我介绍|介绍一下|60\s*秒/],
@@ -42,7 +43,7 @@ const intentPatterns: Array<[AnswerIntent, RegExp]> = [
 
 const defaultShapeByIntent: Record<AnswerIntent, ResponseShape> = {
   agent_identity: "direct", capability_scope: "direct",
-  introduction: "narrative", role_fit: "fit_mapping", representative_project: "project_arc",
+  introduction: "narrative", career_transition: "narrative", role_fit: "fit_mapping", representative_project: "project_arc",
   project_overview: "project_arc", project_problem: "direct", contribution: "contribution",
   ai_collaboration: "direct", challenge: "star", diagnosis: "direct", result: "shortcoming", limitation: "shortcoming",
   skills: "fit_mapping", experience: "direct", experience_value: "fit_mapping", privacy: "direct",
@@ -139,10 +140,47 @@ function firstPersonFact(fact: string) {
     .replace(/^完成/, "我完成");
 }
 
+function careerTransitionFacts() {
+  return [
+    candidateNarrative.careerTransition.thesis,
+    candidateNarrative.careerTransition.continuity,
+    candidateNarrative.careerTransition.motivation,
+    candidateNarrative.capabilityEvidence.find((item) => item.id === "learning_resilience")?.evidence ?? "",
+  ].filter(Boolean);
+}
+
+function roleFitFacts(targetRole?: string) {
+  const role = targetRole ?? "目标产品岗位";
+  return [
+    `${role}需要把业务目标、数据判断和产品推进连接起来。`,
+    ...candidateNarrative.capabilityEvidence.flatMap((item) => [`${item.label}：${item.evidence}`, item.value]),
+  ];
+}
+
+function careerTransitionAnswer() {
+  return [
+    `我从财会和审计走向 AI 产品，并不是一次突然的换赛道，而是在连续实践中逐步确认：我更擅长也更愿意做连接**业务问题、数据判断和技术落地**的工作。`,
+    `财务审计和 IT 审计让我真正接触企业流程，也养成了对证据、口径、权限和风险的敏感度；应用统计学训练则让我习惯先定义样本和指标，再判断结论边界。这些经历没有被丢掉，而是构成了我做产品时理解业务和验证效果的基础。`,
+    `之后通过 RAG、Agent 等项目，以及百度实习中的模型评测和 Bad Case 归因，我开始把原来偏分析和检查的能力，用在**定义问题、设计方案并推动验证**上。这个过程让我确认，AI 产品同时需要用户理解、数据实验和技术边界判断，与我的能力积累是连续的。`,
+    `所以与其说我是“从财会转产品”，不如说我是在持续学习和实践中，把统计与审计形成的能力迁移到了更适合自己的方向。这也体现了我面对陌生领域时的**学习能力和持续推进能力**。`,
+  ].join("\n\n");
+}
+
+function roleFitAnswer(targetRole?: string) {
+  const role = targetRole ?? "目标产品岗位";
+  return [
+    `我和${role}的匹配，主要体现在**业务理解、数据判断和产品落地**这三项能够形成闭环，而不是只掌握某一个工具。`,
+    `应用统计学让我习惯用样本、指标和对照判断问题；财务审计与 IT 审计经历让我理解企业流程中的证据、权限、口径和风险。这让我面对一个岗位场景时，能够先理解业务目标和约束，再决定产品应该解决什么。`,
+    `百度实习中的模型评测、Bad Case 归因，以及 AI Coding 七维指标和 Gate 实践，训练了我把“效果不好”拆成**任务、指标、证据和下一轮动作**。RAG、DeepFlow 与 Ask Me 等项目，则让我持续练习需求拆解、方案取舍、原型推进和工程验收。`,
+    `因此，即使具体业务需要继续学习，我也已经具备从业务问题出发、用数据验证判断并把方案推进到可运行状态的能力。对${role}而言，我能较快承担需求分析、问题归因、方案验证和跨角色协作，并在实践中持续补齐行业知识。`,
+  ].join("\n\n");
+}
+
 function openPointLabels(intent: AnswerIntent, facet: QuestionFrame["facet"]) {
   if (intent === "agent_identity") return ["服务定位", "可以回答", "信息边界"];
   if (intent === "capability_scope") return ["可以了解", "回答方式", "信息边界"];
   if (intent === "skills") return ["相关实践", "判断方式", "产品价值"];
+  if (intent === "career_transition") return ["成长连续性", "方向验证", "长期选择"];
   if (intent === "experience_value") return ["业务判断", "方案边界", "验证方式"];
   if (intent === "privacy") return ["数据资格", "流程约束", "风险控制"];
   if (facet === "collaboration") return ["协作机制", "责任边界", "质量控制"];
@@ -191,11 +229,13 @@ function openAnswer(plan: Omit<AnswerPlan, "fallbackAnswer">, facts: string[], s
   return [plan.thesis, ...points.map((point, index) => `**${labels[index]}**：${point}`)].filter(Boolean).join("\n\n");
 }
 
-function openThesis(question: string, intent: AnswerIntent, items: KnowledgeItem[], depth: ConversationDepth, story?: StarStory) {
+function openThesis(question: string, intent: AnswerIntent, items: KnowledgeItem[], depth: ConversationDepth, story?: StarStory, frame?: QuestionFrame) {
   if (intent === "agent_identity") return agentProfile.identity;
   if (intent === "capability_scope") {
     return "我可以帮助你从面试官最关心的角度，更完整地了解张倬玮的经历、项目、能力和岗位匹配。";
   }
+  if (intent === "career_transition") return candidateNarrative.careerTransition.thesis;
+  if (intent === "role_fit" && frame?.targetRole) return `我和${frame.targetRole}的匹配，主要体现在业务理解、数据判断和产品落地能够形成闭环。`;
   if (intent === "diagnosis") {
     return "如果同一组 Bad Case 没有改善，我会先验证测量是否可信，再定位链路哪里失真，而不是立刻换模型或继续堆功能。";
   }
@@ -213,6 +253,7 @@ function openThesis(question: string, intent: AnswerIntent, items: KnowledgeItem
 }
 
 function intentFromFrame(frame: QuestionFrame, detected: AnswerIntent): AnswerIntent {
+  if (frame.answerIntent !== "general") return frame.answerIntent;
   if (detected !== "general") return detected;
   if (frame.facet === "contribution") return "contribution";
   if (frame.facet === "result" || frame.facet === "boundary") return "result";
@@ -248,8 +289,14 @@ export function buildAnswerPlan(
     || ["example", "transfer"].includes(frame.facet);
   const relatedStory = storyIntent ? selectStory(items, stableAnswer, historyText, frame.allowedStoryIds) : undefined;
   const storyFacts = relatedStory ? [relatedStory.situation, relatedStory.task, relatedStory.action, relatedStory.result] : [];
-  const itemFacts = projectFacts(items, intent, frame);
-  const allowedFacts = unique([...(skeleton?.allowedFacts ?? []), contract?.thesis, ...(contract?.requiredPoints ?? []), contract?.fallbackAnswer, ...itemFacts, ...storyFacts]);
+  const composableFacts = intent === "career_transition"
+    ? careerTransitionFacts()
+    : intent === "role_fit" ? roleFitFacts(frame.targetRole) : [];
+  const itemFacts = unique([...composableFacts, ...projectFacts(items, intent, frame)]);
+  const curatedOpenAnswer = intent === "career_transition"
+    ? careerTransitionAnswer()
+    : intent === "role_fit" ? roleFitAnswer(frame.targetRole) : undefined;
+  const allowedFacts = unique([...(skeleton?.allowedFacts ?? []), contract?.thesis, ...(contract?.requiredPoints ?? []), contract?.fallbackAnswer, curatedOpenAnswer, ...itemFacts, ...storyFacts]);
   const projectItems = [...new Map(items.filter((item) => item.relatedProject).map((item) => [item.relatedProject, item])).values()];
   const multiProjectResult = intent === "result" && projectItems.length > 1
     ? `目前公开材料能确认 ${projectItems.slice(0, 3).map((item) => item.title).join("、")} 的核心流程或可演示成果，但还没有形成可以公开说明的真实用户规模、增长或生产数据。`
@@ -258,9 +305,13 @@ export function buildAnswerPlan(
   const thesis = contract?.thesis
     ?? skeleton?.thesis
     ?? multiProjectResult
-    ?? openThesis(question, intent, items, depth, relatedStory);
+    ?? openThesis(question, intent, items, depth, relatedStory, frame);
+  const intentPoints = intent === "career_transition"
+    ? [candidateNarrative.careerTransition.continuity, candidateNarrative.careerTransition.motivation, "持续学习使职业方向在项目和实习中逐步收敛"]
+    : intent === "role_fit" ? roleFitFacts(frame.targetRole).slice(1, 4) : undefined;
   const exclusivePoints = contract?.requiredPoints
     ?? stableAnswer?.exclusivePoints
+    ?? intentPoints
     ?? (intent === "diagnosis"
       ? diagnosticMethodFacts
       : intent === "challenge"
@@ -283,7 +334,10 @@ export function buildAnswerPlan(
     contractId: contract?.id,
     topic: frame.topic,
     facet: frame.facet,
-    directAnswerTerms: contract?.directAnswerTerms ?? [],
+    focusTerms: frame.focusTerms,
+    targetRole: frame.targetRole,
+    directAnswerTerms: contract?.directAnswerTerms
+      ?? (intent === "career_transition" ? ["转", "产品"] : intent === "role_fit" ? [frame.targetRole ?? "岗位", "匹配"] : []),
     forbiddenTopics: frame.forbiddenTopics,
     intent,
     thesis,
@@ -304,15 +358,17 @@ export function buildAnswerPlan(
     avoidPoints,
     conversationDepth: depth,
     responseShape,
-    closingPurpose: stableAnswer?.closingPurpose ?? "停在与当前问题最相关的产品判断，不追加通用岗位价值。",
+    closingPurpose: stableAnswer?.closingPurpose
+      ?? (intent === "career_transition" ? "说明这是一条连续积累、逐步收敛的职业选择。" : intent === "role_fit" ? "总结已有能力如何迁移到目标岗位，不虚构岗位业绩。" : "停在与当前问题最相关的产品判断，不追加通用岗位价值。"),
     targetLength: contract?.frame.targetLength ?? targetLengthFor(intent, responseShape, depth, stableAnswer),
     followUpQuestions: getFollowUpQuestions(question, askedQuestions, 3, stableAnswer?.followUpQuestions),
     recentAnswers: history.filter((message) => message.role === "assistant").slice(-3).map((message) => message.content),
-    answerableWithoutRetrievedEvidence: metaIntents.includes(intent) || Boolean(contract),
+    answerableWithoutRetrievedEvidence: metaIntents.includes(intent) || ["career_transition", "role_fit"].includes(intent) || Boolean(contract),
   };
   const fallbackFacts = intent === "challenge" ? [...storyFacts, ...itemFacts] : [...itemFacts, ...storyFacts];
   const baseAnswer = contract?.fallbackAnswer
     ?? stableAnswer?.standardAnswer
+    ?? curatedOpenAnswer
     ?? (intent === "diagnosis" ? diagnosticFallback : openAnswer(partialPlan, fallbackFacts, relatedStory));
   const fallbackAnswer = shouldMentionLimitations && limitations && !baseAnswer.includes(limitations)
     ? `${baseAnswer}\n\n${stableAnswer || contract ? "目前公开材料没有记录可对外说明的相关规模或量化结果。" : `**当前阶段**：${limitations}`}`
@@ -325,7 +381,7 @@ export function buildContext(items: KnowledgeItem[], plan?: AnswerPlan) {
     "<answer_task>",
     `候选人定位：${candidateNarrative.positioning}`,
     `本题要帮助面试官判断：${plan.evaluationGoal}`,
-    `本题主题：${plan.topic}；回答维度：${plan.facet}。第一段必须直接回应：${plan.directAnswerTerms.join("、") || "当前问题"}。`,
+    `本题意图：${plan.intent}；主题：${plan.topic}；回答维度：${plan.facet}。第一段必须直接回应：${plan.directAnswerTerms.join("、") || "当前问题"}。`,
     `回答结构：${plan.responseShape}；对话深度：${plan.conversationDepth}；参考长度：${plan.targetLength.min}-${plan.targetLength.max} 个中文字符。根据问题复杂度自然调整，简单事实短答，项目、贡献与复盘问题讲完整，不为凑字数重复。`,
     `本轮必须带来这些新信息：${plan.newInformationGoal.join("；")}`,
     `必须覆盖：${plan.mustInclude.join("；")}`,

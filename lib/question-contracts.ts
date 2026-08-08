@@ -1,13 +1,60 @@
 import { z } from "zod";
 import { candidateNarrative } from "../content/narrative";
-import type { QuestionContract, QuestionFacet, QuestionFrame, QuestionTopic, ResponseShape } from "./types";
+import type { AnswerIntent, QuestionContract, QuestionFacet, QuestionFrame, QuestionTopic, ResponseShape } from "./types";
 
 const topics = ["profile", "role_fit", "baidu", "rag", "deepflow", "ask_me", "local_tools", "audit", "statistics", "skills", "enterprise_ai", "agent", "unknown"] as const;
 const facets = ["overview", "problem", "method", "contribution", "architecture", "collaboration", "evaluation", "transfer", "example", "result", "boundary", "fit"] as const;
+const answerIntents = ["agent_identity", "capability_scope", "introduction", "career_transition", "role_fit", "representative_project", "project_overview", "project_problem", "contribution", "ai_collaboration", "challenge", "diagnosis", "result", "limitation", "skills", "experience", "experience_value", "privacy", "education", "credentials", "hiring_recommendation", "general"] as const;
+
+const careerTransitionPattern = /(?:为什么|为何).{0,8}(?:从)?(?:财会|会计|财务|审计|统计)(?!问题)(?:背景|专业|经历)?.{0,8}(?:转向|转(?!化)|选择|改做|走到|进入).{0,8}(?:AI\s*产品|产品经理|产品)|(?:(?:从)(?:财会|会计|财务|审计|统计|原专业|传统行业)|(?:财会|会计|财务|审计|统计|原专业|传统行业)(?:背景|专业|经历)).{0,12}(?:转向|转(?!化)|选择|改做|走到|进入).{0,8}(?:AI\s*产品|产品经理|产品)|(?:为什么|为何).{0,8}转向\s*AI\s*产品/i;
+const roleFitPattern = /匹配(?:之处|点|度|证据)?|契合(?:之处|点|度)?|适合|胜任|为什么.{0,8}(?:选择你|选你)|能为.{0,16}(?:岗位|岗|团队|业务).{0,8}(?:带来|创造)|与.{0,18}(?:岗位|岗).{0,8}(?:关系|匹配)/i;
+const resultEvidencePattern = /(?:有没有|是否|能否证明|做过|负责过|实现过|取得|形成|达到|已经|目前).{0,16}(?:商业化|变现|营收|收入|增长|用户|留存|上线|结果|成果|规模)|(?:商业化|变现|营收|收入|增长|用户|留存|上线).{0,12}(?:数据|结果|成果|规模|经验|案例|证明|做过|负责过|实现过|怎么样|如何)/i;
+
+export function extractTargetRole(question: string) {
+  const namedRole = question.match(/((?:AI|商业化|增长|搜索|数据|策略|平台|企业服务|B\s*端|C\s*端|广告|用户|内容|推荐|国际化|电商|支付|风控|运营|智能体|Agent)[A-Za-z0-9\u4e00-\u9fa5·+\-\s]{0,10}(?:产品经理|PM))/i)?.[1];
+  if (namedRole) return namedRole.replace(/\s+/g, " ").trim();
+  const contextualRole = question.match(/(?:和|与|应聘|申请|面试|目标是?|针对)\s*([^，。！？?]{2,24}?(?:产品经理|PM|工程师|设计师|运营|分析师))(?=这个岗|该岗|岗位|职位|有什么|的匹配|匹配|契合|适合)/i)?.[1];
+  return contextualRole?.trim();
+}
+
+export function inferAnswerIntent(question: string, topic: QuestionTopic = "unknown", facet: QuestionFacet = "overview"): AnswerIntent {
+  if (/^(?:(?:你|您)?(?:是谁|叫什么(?:名字)?|是什么(?:身份|助手|Agent|角色)?|的身份是什么)|(?:请)?(?:介绍|说明)(?:一下)?你的身份)[？?。.！!\s]*$/i.test(question)) return "agent_identity";
+  if (/^(?:(?:你|您)(?:能|可以)(?:做|回答|介绍|帮我)(?:些什么|什么|哪些(?:问题|内容)?)?|能问你什么|可以问什么|功能范围|能力范围)[？?。.！!\s]*$/i.test(question)) return "capability_scope";
+  if (careerTransitionPattern.test(question)) return "career_transition";
+  if (roleFitPattern.test(question)) return "role_fit";
+  if (resultEvidencePattern.test(question)) return "result";
+  if (/AI\s*(?:编程|写|生成)|代码.*AI|AI.*占比|用了多少\s*AI/i.test(question)) return "ai_collaboration";
+  if (/个人贡献|你做了什么|你负责|具体做了|你的工作|主导/i.test(question)) return "contribution";
+  if (/挑战|困难|失败|取舍|踩坑|复盘|怎么推进|如何推进/i.test(question)) return "challenge";
+  if (/没有改善|没改善|没有效果|没效果|优先排查|先排查|先.{0,3}看什么|定位问题|(?:如何|怎么).{0,4}定位|为什么没有/i.test(question)) return "diagnosis";
+  if (/隐私|机密|企业数据|数据边界/i.test(question)) return "privacy";
+  if (/短板|不足|弱点|限制|能力缺口/i.test(question) || facet === "boundary") return "limitation";
+  if (/结果|量化(?:结果|效果)|效果数据|用户规模|增长|留存|上线|生产状态|完成(?:了吗|情况)/i.test(question) || facet === "result") return "result";
+  if (/代表项目|最能代表|最有价值的项目/i.test(question)) return "representative_project";
+  if (/自我介绍|介绍一下自己|60\s*秒/i.test(question)) return "introduction";
+  if (/技术能力|技术栈|会什么|数据分析|(?:AI\s*)?评测|如何评估|有哪些实践/i.test(question) || facet === "evaluation") return "skills";
+  if (/企业级?\s*AI|企业\s*AI|企业场景|业务问题.{0,8}(?:转化|转成|变成).{0,8}(?:AI|产品)|(?:AI|产品)方案/i.test(question)) return "experience_value";
+  if (facet === "contribution") return "contribution";
+  if ((facet === "fit" && topic === "role_fit") || topic === "role_fit") return "role_fit";
+  if (facet === "example" || (facet === "transfer" && ["audit", "statistics", "profile"].includes(topic))) return "experience_value";
+  if (["rag", "deepflow", "ask_me", "local_tools", "agent"].includes(topic)) return "project_overview";
+  return "general";
+}
+
+function focusTermsFor(intent: AnswerIntent, targetRole?: string) {
+  if (intent === "career_transition") return ["转型动机", "经历连续性", "选择依据"];
+  if (intent === "role_fit") return [targetRole ?? "目标岗位", "岗位要求", "经历证据", "可迁移价值"];
+  if (intent === "result") return ["已验证结果", "证据边界"];
+  if (intent === "challenge" || intent === "diagnosis") return ["问题判断", "处理过程", "复盘改进"];
+  return ["当前问题", "相关实践", "判断依据"];
+}
 
 export const plannedQuestionFrameSchema = z.object({
   topic: z.enum(topics),
   facet: z.enum(facets),
+  answerIntent: z.enum(answerIntents),
+  focusTerms: z.array(z.string().min(2).max(30)).min(1).max(4),
+  targetRole: z.string().min(2).max(30).optional(),
   requestedDimensions: z.array(z.string().min(2).max(30)).min(1).max(4),
   activeProject: z.enum(["baidu-ai-coding-evaluation", "rag-knowledge-base", "deepflow", "ask-me", "local-first-tools", "audit-tools"]).optional(),
   useHistory: z.boolean(),
@@ -35,6 +82,8 @@ type ContractInput = {
 };
 
 function define(input: ContractInput): QuestionContract {
+  const answerIntent = inferAnswerIntent(input.question, input.topic, input.facet);
+  const targetRole = answerIntent === "role_fit" ? extractTargetRole(input.question) : undefined;
   return {
     id: input.id,
     question: input.question,
@@ -42,6 +91,9 @@ function define(input: ContractInput): QuestionContract {
     frame: {
       topic: input.topic,
       facet: input.facet,
+      answerIntent,
+      focusTerms: input.dimensions.slice(0, 4),
+      targetRole,
       requestedDimensions: input.dimensions,
       activeProject: ({ baidu: "baidu-ai-coding-evaluation", rag: "rag-knowledge-base", deepflow: "deepflow", ask_me: "ask-me", local_tools: "local-first-tools", audit: "audit-tools" } as Partial<Record<QuestionTopic, string>>)[input.topic],
       useHistory: false,
@@ -341,7 +393,7 @@ const topicPatterns: Array<[QuestionTopic, RegExp]> = [
   ["baidu", /百度|\bbaidu\b|ai\s*coding|evaluator\s*agent|七维指标|硬门槛|dashboard\s*样例/i], ["rag", /\brag\b|知识库|检索|引用/i], ["deepflow", /deepflow/i], ["agent", /agent|多智能体|多代理/i],
   ["local_tools", /thirty[-\s]?minute brain|read[-\s]?later regret|downloads butler|本地优先效率工具|信息债|下载文件夹/i],
   ["audit", /审计|德勤|容诚|日志核查|底稿|函证|盘点/i], ["statistics", /统计|指标|样本|数据分析|产品决策/i],
-  ["enterprise_ai", /企业级?\s*ai|企业场景|业务问题.*(?:ai|产品)/i], ["role_fit", /岗位|适合|胜任|优势|团队价值/i],
+  ["enterprise_ai", /企业级?\s*ai|企业场景|业务问题.*(?:ai|产品)/i], ["role_fit", /岗位|(?:这个|该|目标)?岗(?:位)?|匹配|契合|适合|胜任|优势|团队价值/i],
   ["profile", /自我介绍|介绍一下|背景|经历组合/i], ["skills", /技能|技术|评测|ai\s*编程|协作|sql|python|fastapi|ragas/i], ["ask_me", /ask\s*me|数字分身/i],
 ];
 
@@ -349,7 +401,7 @@ const facetPatterns: Array<[QuestionFacet, RegExp]> = [
   ["example", /举例|例子|案例/i], ["contribution", /贡献|负责|做了什么|核心工作|职责/i], ["collaboration", /协作|分工|交接|配合/i],
   ["evaluation", /评测|评估|指标|验收|效果|质量|错误|失败|检查|bad\s*case/i], ["transfer", /迁移|沉淀|帮助|支持/i], ["result", /结果|成果|完成|上线|规模/i],
   ["boundary", /短板|不足|限制|边界|风险/i], ["architecture", /架构|链路|技术方案/i], ["method", /方法|如何|怎么|思考|取舍/i],
-  ["problem", /解决.*问题|什么问题|痛点/i], ["fit", /适合|胜任|优势|价值|能力组合/i],
+  ["problem", /解决.*问题|什么问题|痛点/i], ["fit", /匹配|契合|适合|胜任|优势|价值|能力组合/i],
 ];
 
 function responseShapeFor(facet: QuestionFacet): ResponseShape {
@@ -372,6 +424,8 @@ export function buildLocalQuestionFrame(question: string, history: { role: "user
     return {
       topic: "profile",
       facet: "overview",
+      answerIntent: inferAnswerIntent(question, "profile", "overview"),
+      focusTerms: ["Agent 身份", "能力范围"],
       requestedDimensions: ["Agent 身份或能力范围"],
       useHistory: false,
       confidence: 0.98,
@@ -385,9 +439,12 @@ export function buildLocalQuestionFrame(question: string, history: { role: "user
     };
   }
   if (/\brag\b/i.test(question) && /deepflow/i.test(question)) {
+    const facet = /结果|成果|上线|规模|用户|完成/.test(question) ? "result" : "overview";
     return {
       topic: "profile",
-      facet: /结果|成果|上线|规模|用户|完成/.test(question) ? "result" : "overview",
+      facet,
+      answerIntent: inferAnswerIntent(question, "profile", facet),
+      focusTerms: ["RAG", "DeepFlow", facet === "result" ? "结果边界" : "项目对比"],
       requestedDimensions: ["RAG 当前状态", "DeepFlow 当前状态", "公开结果边界"],
       useHistory: false,
       confidence: 0.94,
@@ -400,8 +457,13 @@ export function buildLocalQuestionFrame(question: string, history: { role: "user
       routeSource: "local",
     };
   }
-  const topic = topicPatterns.find(([, pattern]) => pattern.test(question))?.[0] ?? "unknown";
-  const facet = facetPatterns.find(([, pattern]) => pattern.test(question))?.[0] ?? "overview";
+  const detectedTopic = topicPatterns.find(([, pattern]) => pattern.test(question))?.[0] ?? "unknown";
+  const detectedFacet = facetPatterns.find(([, pattern]) => pattern.test(question))?.[0] ?? "overview";
+  const initialIntent = inferAnswerIntent(question, detectedTopic, detectedFacet);
+  const topic = initialIntent === "career_transition" ? "profile" : initialIntent === "role_fit" ? "role_fit" : detectedTopic;
+  const facet = initialIntent === "career_transition" ? "transfer" : initialIntent === "role_fit" ? "fit" : initialIntent === "result" ? "result" : detectedFacet;
+  const answerIntent = inferAnswerIntent(question, topic, facet);
+  const targetRole = answerIntent === "role_fit" ? extractTargetRole(question) : undefined;
   const reference = /这个|该项目|其中|它|上述|这套|这种|这些|那些|那次|当时|刚才|前面/.test(question);
   const historyProject = [...history].reverse().find((message) => /百度|baidu|ai\s*coding|evaluator\s*agent|rag|deepflow|ask\s*me/i.test(message.content))?.content.match(/百度|baidu|ai\s*coding|evaluator\s*agent|rag|deepflow|ask\s*me/i)?.[0]?.toLowerCase();
   const inferredTopic = topic === "unknown" && reference
@@ -411,14 +473,17 @@ export function buildLocalQuestionFrame(question: string, history: { role: "user
   return {
     topic: inferredTopic,
     facet,
+    answerIntent,
+    focusTerms: focusTermsFor(answerIntent, targetRole),
+    targetRole,
     requestedDimensions: [facet === "overview" ? "直接回答当前问题" : `${facet}相关判断`, "具体实践", "验证或落地方式"],
     activeProject: inferredTopic === "baidu" ? "baidu-ai-coding-evaluation" : inferredTopic === "rag" ? "rag-knowledge-base" : inferredTopic === "deepflow" || inferredTopic === "agent" ? "deepflow" : inferredTopic === "ask_me" ? "ask-me" : undefined,
     useHistory: reference,
-    confidence: explicitTopic && facet !== "overview" ? 0.86 : explicitTopic ? 0.72 : facet !== "overview" ? 0.58 : 0.35,
-    requiredKnowledgeIds: topicKnowledge[inferredTopic],
+    confidence: ["career_transition", "role_fit"].includes(answerIntent) ? 0.92 : explicitTopic && facet !== "overview" ? 0.86 : explicitTopic ? 0.72 : facet !== "overview" ? 0.58 : 0.35,
+    requiredKnowledgeIds: answerIntent === "career_transition" ? ["K2", "K3", "K9", "K22"] : topicKnowledge[inferredTopic],
     allowedStoryIds: facet === "example" ? (inferredTopic === "baidu" ? ["ST9"] : inferredTopic === "audit" ? ["ST4", "ST6"] : inferredTopic === "rag" ? ["ST1"] : inferredTopic === "deepflow" || inferredTopic === "agent" ? ["ST2"] : []) : [],
     forbiddenTopics: forbiddenFor(inferredTopic),
-    responseShape: responseShapeFor(facet),
+    responseShape: answerIntent === "career_transition" ? "narrative" : responseShapeFor(facet),
     targetLength: { min: facet === "overview" ? 220 : 280, max: 480 },
     answerGoal: "直接回应当前问题，并使用最相关的公开实践解释判断。",
     routeSource: "local",
@@ -426,22 +491,30 @@ export function buildLocalQuestionFrame(question: string, history: { role: "user
 }
 
 export function mergePlannedFrame(local: QuestionFrame, planned: z.infer<typeof plannedQuestionFrameSchema>): QuestionFrame {
-  const topic = planned.topic === "unknown" ? local.topic : planned.topic;
+  const keepLocalIntent = local.confidence >= 0.82 && local.answerIntent !== "general";
+  const answerIntent = keepLocalIntent ? local.answerIntent : planned.answerIntent;
+  const plannedTopic = planned.topic === "unknown" ? local.topic : planned.topic;
+  const topic = answerIntent === "career_transition" ? "profile" : answerIntent === "role_fit" ? "role_fit" : plannedTopic;
+  const facet = answerIntent === "career_transition" ? "transfer" : answerIntent === "role_fit" ? "fit" : planned.facet;
+  const targetRole = local.targetRole ?? planned.targetRole;
   return {
     ...local,
     topic,
-    facet: planned.facet,
+    facet,
+    answerIntent,
+    focusTerms: keepLocalIntent ? local.focusTerms : planned.focusTerms,
+    targetRole,
     requestedDimensions: planned.requestedDimensions,
     activeProject: planned.activeProject ?? (topic === "baidu" ? "baidu-ai-coding-evaluation" : topic === "rag" ? "rag-knowledge-base" : topic === "deepflow" || topic === "agent" ? "deepflow" : undefined),
     useHistory: planned.useHistory,
     confidence: planned.confidence,
-    requiredKnowledgeIds: topicKnowledge[topic],
-    allowedStoryIds: planned.facet === "example" || planned.facet === "transfer"
+    requiredKnowledgeIds: answerIntent === "career_transition" ? ["K2", "K3", "K9", "K22"] : topicKnowledge[topic],
+    allowedStoryIds: facet === "example" || facet === "transfer"
       ? (topic === "baidu" ? ["ST9"] : topic === "audit" ? ["ST4", "ST6"] : topic === "rag" ? ["ST1"] : topic === "deepflow" || topic === "agent" ? ["ST2"] : [])
       : [],
     forbiddenTopics: forbiddenFor(topic),
-    responseShape: responseShapeFor(planned.facet),
-    targetLength: { min: planned.facet === "overview" ? 220 : 280, max: 480 },
+    responseShape: answerIntent === "career_transition" ? "narrative" : responseShapeFor(facet),
+    targetLength: { min: facet === "overview" ? 220 : 280, max: 480 },
     answerGoal: "先直接回答问题，再使用最相关的公开实践说明判断、机制或迁移价值。",
     routeSource: "model",
   };

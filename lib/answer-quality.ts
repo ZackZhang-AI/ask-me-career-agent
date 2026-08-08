@@ -172,6 +172,23 @@ export function validateAnswer(candidate: string, plan: AnswerPlan): QualityGate
   if (plan.directAnswerTerms.length && !plan.directAnswerTerms.some((term) => firstParagraph.toLowerCase().includes(term.toLowerCase()))) {
     triggers.push("indirect_opening");
   }
+  if (plan.targetRole && !clean.toLowerCase().includes(plan.targetRole.toLowerCase())) triggers.push("missing_target_role");
+  if (plan.intent === "role_fit" && !plan.contractId) {
+    const fitDimensions = [
+      /业务|流程|用户|场景/,
+      /数据|指标|评测|样本|Bad\s*Case/i,
+      /需求|方案|原型|落地|推进|验收/,
+      /学习|协作|沟通|抗压|韧性/,
+    ].filter((pattern) => pattern.test(clean)).length;
+    if (!/匹配|适合|胜任|契合/.test(firstParagraph)) triggers.push("intent_mismatch:role_fit");
+    if (fitDimensions < 2) triggers.push("weak_role_evidence_mapping");
+  }
+  if (plan.intent === "career_transition" && !plan.contractId) {
+    if (!/转|转向|选择|走向/.test(firstParagraph) || !/产品/.test(firstParagraph)) triggers.push("intent_mismatch:career_transition");
+    if (!/(?:财会|财务|会计|审计|统计)/.test(clean)) triggers.push("missing_transition_origin");
+    if (!/(?:逐步|连续|积累|迁移|收敛|确认)/.test(clean)) triggers.push("missing_transition_continuity");
+    if (!/(?:更适合|更擅长|愿意|选择|因为|符合|一致)/.test(clean)) triggers.push("missing_transition_motivation");
+  }
 
   plan.mustInclude.forEach((required, index) => {
     if (!semanticallyCovered(required, clean)) triggers.push(`missing_required:${index + 1}`);

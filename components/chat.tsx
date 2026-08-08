@@ -214,7 +214,46 @@ export function Chat({ presetAnswers }: ChatProps) {
       const decoder = new TextDecoder();
       let buffer = "";
       let answer = "";
+      let receivedDone = false;
       let metadata: Partial<ConversationMessage> = {};
+      const consumeStreamEvent = (event: {
+        type?: string;
+        content?: string;
+        sources?: ConversationMessage["sources"];
+        items?: ConversationMessage["items"];
+        mode?: ConversationMessage["mode"];
+        responseStatus?: ConversationMessage["responseStatus"];
+        claimIds?: string[];
+        sourceIds?: string[];
+        citations?: ConversationMessage["citations"];
+        followUpQuestions?: string[];
+        latencyMs?: number;
+        message?: string;
+      }) => {
+        if (event.type === "meta") metadata = {
+          sources: event.sources,
+          items: event.items,
+          mode: event.mode,
+          responseStatus: event.responseStatus,
+          claimIds: event.claimIds,
+          sourceIds: event.sourceIds,
+          citations: event.citations,
+          followUpQuestions: event.followUpQuestions,
+        };
+        if (event.type === "delta") {
+          if (!answer) metadata = {
+            ...metadata,
+            deliveryPath: "api",
+            firstTokenLatencyMs: Math.round(performance.now() - startedAt),
+          };
+          answer += event.content ?? "";
+        }
+        if (event.type === "done") {
+          receivedDone = true;
+          metadata = { ...metadata, responseStatus: event.responseStatus, latencyMs: event.latencyMs };
+        }
+        if (event.type === "error") throw new Error(event.message ?? "问答服务返回异常。");
+      };
       while (true) {
         const { done, value } = await reader.read();
         if (conversationEpoch !== conversationEpochRef.current) {
@@ -227,30 +266,14 @@ export function Chat({ presetAnswers }: ChatProps) {
         buffer = rows.pop() ?? "";
         for (const row of rows) {
           if (!row.trim()) continue;
-          const event = JSON.parse(row);
-          if (event.type === "meta") metadata = {
-            sources: event.sources,
-            items: event.items,
-            mode: event.mode,
-            responseStatus: event.responseStatus,
-            claimIds: event.claimIds,
-            sourceIds: event.sourceIds,
-            citations: event.citations,
-            followUpQuestions: event.followUpQuestions,
-          };
-          if (event.type === "delta") {
-            if (!answer) metadata = {
-              ...metadata,
-              deliveryPath: "api",
-              firstTokenLatencyMs: Math.round(performance.now() - startedAt),
-            };
-            answer += event.content;
-          }
-          if (event.type === "done") metadata = { ...metadata, responseStatus: event.responseStatus, latencyMs: event.latencyMs };
-          if (event.type === "error") throw new Error(event.message);
+          consumeStreamEvent(JSON.parse(row));
           setMessages([...nextMessages, { role: "assistant", content: answer, ...metadata }]);
         }
       }
+      buffer += decoder.decode();
+      if (buffer.trim()) consumeStreamEvent(JSON.parse(buffer));
+      if (!answer.trim()) throw new Error("没有收到有效回答，请重试。");
+      if (!receivedDone) throw new Error("回答连接提前结束，请重试。");
       const completedMessages = [...nextMessages, { role: "assistant" as const, content: answer, ...metadata }];
       setMessages(completedMessages);
       persistConversation(completedMessages);

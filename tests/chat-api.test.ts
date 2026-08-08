@@ -173,20 +173,42 @@ test("60 秒介绍返回足够完整的招聘视角回答", async () => {
   assert.equal(answer.length >= 430 && answer.length <= 600, true);
 });
 
-test("模型上游过载和超时返回稳定错误码", async () => {
+test("模型上游过载和超时仍返回可见兜底回答", async () => {
   process.env.DEEPSEEK_API_KEY = "test-only-placeholder";
   const question = "请详细说明 Milvus 检索与 Rerank 的产品取舍";
 
   globalThis.fetch = async () => new Response(null, { status: 503 });
   const overloaded = await POST(request({ sessionId: "api-overload", messages: [{ role: "user", content: question }] }));
-  assert.equal(overloaded.status, 503);
-  assert.equal((await overloaded.json()).code, "upstream_error");
+  assert.equal(overloaded.status, 200);
+  const overloadedEvents = await events(overloaded);
+  assert.ok(overloadedEvents.some((event) => event.type === "delta" && String(event.content).trim()));
+  assert.equal(overloadedEvents.at(-1)?.type, "done");
 
   resetLocalRateLimitsForTests();
   globalThis.fetch = async () => { throw Object.assign(new Error("timeout"), { name: "AbortError" }); };
   const timeout = await POST(request({ sessionId: "api-timeout", messages: [{ role: "user", content: question }] }));
-  assert.equal(timeout.status, 504);
-  assert.equal((await timeout.json()).code, "upstream_error");
+  assert.equal(timeout.status, 200);
+  const timeoutEvents = await events(timeout);
+  assert.ok(timeoutEvents.some((event) => event.type === "delta" && String(event.content).trim()));
+  assert.equal(timeoutEvents.at(-1)?.type, "done");
+});
+
+test("模型返回空内容时开放题仍返回完整面试回答", async () => {
+  process.env.DEEPSEEK_API_KEY = "test-only-placeholder";
+  globalThis.fetch = async () => deepSeekStream("");
+
+  for (const [sessionId, question, expected] of [
+    ["api-empty-transition", "为什么财会转产品？", /不是一次突然的换赛道|逐步确认/],
+    ["api-empty-role-fit", "你和商业化产品经理这个岗有什么匹配之处？", /商业化产品经理.*匹配/],
+  ] as const) {
+    resetLocalRateLimitsForTests();
+    const responseEvents = await events(await POST(request({ sessionId, messages: [{ role: "user", content: question }] })));
+    const answer = responseEvents.filter((event) => event.type === "delta").map((event) => event.content).join("");
+    assert.match(answer, expected);
+    assert.ok(answer.trim().length > 120);
+    assert.equal(responseEvents.at(-1)?.type, "done");
+    assert.equal(responseEvents.at(-1)?.responseStatus, "completed");
+  }
 });
 
 test("核心回答在模型幻觉连续失败后回退稳定事实骨架", async () => {

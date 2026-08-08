@@ -56,7 +56,8 @@ function textStream(input: {
     qualityTriggerCount?: number;
   };
 }) {
-  const citations = buildAnswerCitations(input.answer, input.claims ?? getClaims(input.claimIds));
+  const answer = input.answer.trim() || "这次回答没有完整生成。我可以继续根据已经公开的经历，从岗位匹配、项目实践或能力迁移的角度回答，请重新发送刚才的问题。";
+  const citations = buildAnswerCitations(answer, input.claims ?? getClaims(input.claimIds));
   return new Response(new ReadableStream({ async start(controller) {
     controller.enqueue(line({
       type: "meta",
@@ -70,7 +71,7 @@ function textStream(input: {
       followUpQuestions: input.followUpQuestions ?? [],
       ...(input.claims ? { claims: input.claims } : {}),
     }));
-    for (const chunk of presetRevealChunks(input.answer)) {
+    for (const chunk of presetRevealChunks(answer)) {
       controller.enqueue(line({ type: "delta", content: chunk }));
       await new Promise((resolve) => setTimeout(resolve, 16));
     }
@@ -202,6 +203,8 @@ export async function POST(request: NextRequest) {
     contractId: contract?.id,
     topic: frame.topic,
     facet: frame.facet,
+    answerIntent: frame.answerIntent,
+    hasTargetRole: Boolean(frame.targetRole),
     plannerUsed,
     plannerFallbackReason,
     historyCount: history.length,
@@ -308,6 +311,8 @@ export async function POST(request: NextRequest) {
       contractId: plan.contractId,
       topic: plan.topic,
       facet: plan.facet,
+      answerIntent: plan.intent,
+      hasTargetRole: Boolean(plan.targetRole),
       plannerUsed,
       retrievalItemIds: items.map((item) => item.id),
       answerPath: path,
@@ -337,28 +342,26 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     clearTimeout(timeout);
-    if (stableAnswer || plan.answerableWithoutRetrievedEvidence) {
-      return textStream({
-        answer: plan.fallbackAnswer,
-        mode: stableAnswer ? "stable" : "demo",
-        responseStatus: "completed",
-        claimIds,
-        sourceIds,
-        sources: matchedSources,
-        items,
-        followUpQuestions: plan.followUpQuestions,
-        startedAt,
-        tokenReservation: totalReservation,
-        actualTokens: totalTokens,
-        diagnostic: { ...diagnosticBase, answerPath: "fallback", qualityTriggerCount: firstTriggers.length },
-      });
-    }
-    await recordTokenUsage({ actualTokens: totalTokens, tokenReservation: totalReservation });
-    const status = error instanceof DeepSeekUpstreamError ? error.status : 504;
-    const errors: Record<number, string> = { 401: "模型服务配置无效。", 402: "模型服务余额不足。", 429: "模型服务繁忙，请稍后重试。", 503: "模型服务暂时过载。" };
-    const timeoutMessage = error instanceof Error && error.name === "AbortError" ? "回答超时，请重试。" : undefined;
-    const message = timeoutMessage ?? errors[status] ?? "问答服务暂时不可用。";
-    return errorResponse(status === 402 ? "budget_exhausted" : "upstream_error", message, status >= 500 ? (status === 504 ? 504 : 503) : 502);
+    console.warn("ask-me-answer-fallback", JSON.stringify({
+      answerIntent: plan.intent,
+      topic: plan.topic,
+      hasTargetRole: Boolean(plan.targetRole),
+      reason: error instanceof DeepSeekUpstreamError ? `upstream_${error.status}` : error instanceof Error ? error.name : "unknown",
+    }));
+    return textStream({
+      answer: plan.fallbackAnswer,
+      mode: stableAnswer ? "stable" : "demo",
+      responseStatus: items.length || plan.answerableWithoutRetrievedEvidence ? "completed" : "insufficient_evidence",
+      claimIds,
+      sourceIds,
+      sources: matchedSources,
+      items,
+      followUpQuestions: plan.followUpQuestions,
+      startedAt,
+      tokenReservation: totalReservation,
+      actualTokens: totalTokens,
+      diagnostic: { ...diagnosticBase, answerPath: "fallback", qualityTriggerCount: firstTriggers.length },
+    });
   } finally {
     clearTimeout(timeout);
   }

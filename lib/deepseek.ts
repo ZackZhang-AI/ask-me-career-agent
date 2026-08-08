@@ -41,11 +41,11 @@ export async function planDeepSeekQuestion(input: PlanQuestionInput) {
       messages: [
         {
           role: "system",
-          content: `你只负责把面试问题分类为 JSON，不回答问题，也不生成候选人事实。\n可选 topic：profile, role_fit, rag, deepflow, ask_me, local_tools, audit, statistics, skills, enterprise_ai, agent, unknown。\n可选 facet：overview, problem, method, contribution, architecture, collaboration, evaluation, transfer, example, result, boundary, fit。\nactiveProject 只能省略或选择 rag-knowledge-base, deepflow, ask-me, local-first-tools, audit-tools。\nrequestedDimensions 只写本题需要回答的 1-4 个维度。confidence 是 0-1。必须输出一个完整 JSON 对象。`,
+          content: `你只负责把面试问题分类为 JSON，不回答问题，也不生成候选人事实。先判断提问动作 answerIntent，再识别讨论对象 topic 和 targetRole；不能因为“商业化”一个词就把岗位匹配题判成结果题。\n可选 answerIntent：agent_identity, capability_scope, introduction, career_transition, role_fit, representative_project, project_overview, project_problem, contribution, ai_collaboration, challenge, diagnosis, result, limitation, skills, experience, experience_value, privacy, education, credentials, hiring_recommendation, general。\n可选 topic：profile, role_fit, baidu, rag, deepflow, ask_me, local_tools, audit, statistics, skills, enterprise_ai, agent, unknown。\n可选 facet：overview, problem, method, contribution, architecture, collaboration, evaluation, transfer, example, result, boundary, fit。\nactiveProject 只能省略或选择 baidu-ai-coding-evaluation, rag-knowledge-base, deepflow, ask-me, local-first-tools, audit-tools。\nfocusTerms 与 requestedDimensions 各写本题需要的 1-4 项；targetRole 仅在问题明确提到岗位时填写；confidence 是 0-1。必须输出完整 JSON。`,
         },
         {
           role: "user",
-          content: `最近问题：${recentQuestions.length ? recentQuestions.join("｜") : "无"}\n当前问题：${input.question}\nJSON 示例：{"topic":"rag","facet":"evaluation","requestedDimensions":["评测目标","失败定位"],"activeProject":"rag-knowledge-base","useHistory":false,"confidence":0.92}`,
+          content: `最近问题：${recentQuestions.length ? recentQuestions.join("｜") : "无"}\n当前问题：${input.question}\nJSON 示例：{"topic":"rag","facet":"evaluation","answerIntent":"skills","focusTerms":["RAG评测","失败定位"],"requestedDimensions":["评测目标","失败定位"],"activeProject":"rag-knowledge-base","useHistory":false,"confidence":0.92}`,
         },
       ],
       thinking: { type: "disabled" },

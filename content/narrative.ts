@@ -11,6 +11,17 @@ export const candidateNarrative = {
   ],
   projectAnchors: ["AI Coding Evaluator Agent", "RAG Knowledge Base System"],
   roleDirections: ["AI 应用产品", "模型评测产品", "企业工作流产品"],
+  careerTransition: {
+    thesis: "我从财会和审计走向产品，并不是突然换赛道，而是在连续的学习与实践中逐步确认：我更擅长也更愿意做连接业务问题、数据判断和技术落地的工作。",
+    continuity: "财务与 IT 审计让我理解企业流程、证据链、口径和风险；应用统计学让我习惯用样本、指标和边界判断问题；AI 项目与百度实习则让我把这些能力用于需求拆解、模型评测、Bad Case 归因和原型验证。",
+    motivation: "AI 产品同时需要用户理解、数据实验和技术边界判断，与我的能力积累高度一致，也让我能够从检查既有结果进一步走向定义问题、设计方案并推动验证。",
+  },
+  capabilityEvidence: [
+    { id: "data_evaluation", label: "数据与评测", evidence: "应用统计学训练，以及百度模型评测、七维指标、Gate 和 Bad Case 归因实践。", value: "能把模糊的效果问题拆成任务、指标、证据和迭代动作。" },
+    { id: "business_risk", label: "业务与风险", evidence: "财务审计和 IT 审计中的流程、证据、权限、口径与人工复核经验。", value: "能理解企业场景中产品价值与风险控制需要同时成立。" },
+    { id: "product_delivery", label: "产品落地", evidence: "RAG、DeepFlow、Ask Me 等项目中的问题定义、方案取舍、原型推进和工程验收。", value: "能把需求推进到可运行、可检查、可继续迭代的产品闭环。" },
+    { id: "learning_resilience", label: "学习与韧性", evidence: "从统计、审计到 AI 评测与产品实践的持续跨领域学习。", value: "面对陌生问题和反复迭代时能够快速补足知识并保持推进节奏。" },
+  ],
   voice: {
     person: "first_person",
     tone: ["自信", "自然", "具体", "有判断"],

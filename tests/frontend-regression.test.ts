@@ -14,6 +14,8 @@ test("回答首字出现前保留可感知的加载状态", () => {
   assert.match(chatSource, /正在核验事实与表达/);
   assert.match(globalStyles, /@keyframes thinking-wave/);
   assert.match(globalStyles, /\.message\.assistant\.streaming/);
+  assert.match(chatSource, /if \(!answer\.trim\(\)\) throw new Error\("没有收到有效回答，请重试。"\)/);
+  assert.match(chatSource, /if \(!receivedDone\) throw new Error\("回答连接提前结束，请重试。"\)/);
 });
 
 test("每轮回答后保留三栏推荐问题卡片", () => {

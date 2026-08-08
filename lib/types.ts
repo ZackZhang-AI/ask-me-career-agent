@@ -38,6 +38,9 @@ export type QuestionRouteSource = "contract" | "local" | "model";
 export interface QuestionFrame {
   topic: QuestionTopic;
   facet: QuestionFacet;
+  answerIntent: AnswerIntent;
+  focusTerms: string[];
+  targetRole?: string;
   requestedDimensions: string[];
   activeProject?: string;
   useHistory: boolean;
@@ -66,6 +69,7 @@ export type AnswerIntent =
   | "agent_identity"
   | "capability_scope"
   | "introduction"
+  | "career_transition"
   | "role_fit"
   | "representative_project"
   | "project_overview"
@@ -101,6 +105,8 @@ export interface AnswerPlan {
   contractId?: string;
   topic: QuestionTopic;
   facet: QuestionFacet;
+  focusTerms: string[];
+  targetRole?: string;
   directAnswerTerms: string[];
   forbiddenTopics: QuestionTopic[];
   intent: AnswerIntent;
