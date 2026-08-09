@@ -96,6 +96,12 @@ export function retrieveKnowledge(question: string, limitOrOptions: number | Ret
   })();
   const retrievable = knowledge.filter(isRetrievable);
 
+  // Agent 能力说明和真正未规划的开放题不能靠“问题、产品、项目”等弱词召回一条随机材料。
+  // 模型规划完成后会带回明确主题，再进入正常证据检索。
+  if (frame && (frame.questionMode === "agent_meta" || (frame.topic === "unknown" && frame.answerIntent === "general"))) {
+    return [];
+  }
+
   if (frame?.requiredKnowledgeIds.length && (frame.routeSource === "contract" || ["career_transition", "role_fit"].includes(frame.answerIntent))) {
     const byId = new Map(retrievable.map((item) => [item.id, item]));
     return frame.requiredKnowledgeIds

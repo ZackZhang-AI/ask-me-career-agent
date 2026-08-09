@@ -55,10 +55,47 @@ const routingCases: Array<{ question: string; intent: AnswerIntent; targetRole?:
   { question: "模型效果没有改善时你先排查什么？", intent: "diagnosis" },
   { question: "如何定位检索和生成之间的问题？", intent: "diagnosis" },
   { question: "同一批 Bad Case 仍然失败，你会怎么处理？", intent: "challenge" },
+
+  { question: "为什么要转型 AI 产品？", intent: "career_transition" },
+  { question: "为什么选择 AI 产品而不是继续做审计？", intent: "career_transition" },
+  { question: "财会经历和产品经理方向有什么连续性？", intent: "career_transition" },
+  { question: "你是如何确认自己适合做产品的？", intent: "role_fit" },
+  { question: "从统计学到 AI 产品，你做了哪些准备？", intent: "career_transition" },
+  { question: "你为什么想从财务转向 AI 应用？", intent: "career_transition" },
+
+  { question: "你和商业分析产品经理岗位有什么匹配之处？", intent: "role_fit", targetRole: "商业分析产品经理" },
+  { question: "你与 AI 平台产品经理岗位如何匹配？", intent: "role_fit", targetRole: "AI 平台产品经理" },
+  { question: "你和企业 AI 产品经理的匹配点是什么？", intent: "role_fit", targetRole: "企业 AI 产品经理" },
+  { question: "你能为智能客服产品经理岗位带来什么？", intent: "role_fit", targetRole: "智能客服产品经理" },
+  { question: "你为什么适合做数据分析产品？", intent: "role_fit", targetRole: "数据分析产品" },
+  { question: "你与商业分析岗位有哪些可迁移能力？", intent: "role_fit", targetRole: "商业分析岗位" },
+
+  { question: "你有真实的收入或付费转化结果吗？", intent: "result" },
+  { question: "目前项目有没有可公开的用户数据？", intent: "result" },
+  { question: "你做过正式上线并持续运营的产品吗？", intent: "result" },
+  { question: "项目的留存、转化或规模结果如何？", intent: "result" },
+
+  { question: "你从财务工作中积累了哪些产品能力？", intent: "experience_value" },
+  { question: "审计训练如何帮助你做需求判断？", intent: "experience_value" },
+  { question: "你如何把数据分析能力迁移到 AI 产品？", intent: "experience_value" },
+  { question: "你的项目经历对企业服务产品有什么价值？", intent: "experience_value" },
+
+  { question: "如果产品上线后核心指标没有达到预期，你会怎么办？", intent: "diagnosis" },
+  { question: "假设需求方和研发对方案有分歧，你会怎么推进？", intent: "challenge" },
+  { question: "如果只能保留一个功能，你会如何取舍？", intent: "challenge" },
+  { question: "你怎么看待 AI 产品中的人工确认环节？", intent: "general" },
+  { question: "如果没有足够数据验证方案，你会如何决策？", intent: "diagnosis" },
+  { question: "你会如何判断一个 AI 功能是否值得做？", intent: "general" },
+  { question: "如果模型效果和用户体验发生冲突，你会怎么处理？", intent: "diagnosis" },
+  { question: "你如何理解产品经理在跨团队协作中的作用？", intent: "general" },
+
+  { question: "你不能回答开放问题吗？", intent: "capability_scope" },
+  { question: "你能回答哪些开放题？", intent: "capability_scope" },
+  { question: "这个 Agent 能不能回答没有标准答案的问题？", intent: "capability_scope" },
 ];
 
-test("45 个未预写开放问题按提问动作稳定路由", () => {
-  assert.ok(routingCases.length >= 40);
+test("75 个未预写开放问题按提问动作稳定路由", () => {
+  assert.ok(routingCases.length >= 75);
   for (const fixture of routingCases) {
     const frame = buildLocalQuestionFrame(fixture.question);
     assert.equal(frame.answerIntent, fixture.intent, fixture.question);

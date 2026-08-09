@@ -20,13 +20,17 @@ async function events(response: Response) {
 }
 
 function deepSeekStream(content: string, totalTokens = 100) {
-  const frame = JSON.stringify({ choices: [{ delta: { content } }], usage: { total_tokens: totalTokens } });
-  return new Response(`data: ${frame}\n\ndata: [DONE]\n\n`, { status: 200 });
+  return new Response(JSON.stringify({
+    content: [{ type: "text", text: content }],
+    finishReason: "stop",
+    usage: { inputTokens: { total: 20 }, outputTokens: { total: totalTokens - 20 } },
+  }), { status: 200, headers: { "Content-Type": "application/json" } });
 }
 
 beforeEach(() => {
   resetLocalRateLimitsForTests();
   delete process.env.DEEPSEEK_API_KEY;
+  delete process.env.AI_GATEWAY_API_KEY;
   process.env.RATE_LIMIT_PER_MINUTE = "100";
   process.env.SESSION_QUESTION_LIMIT = "20";
   process.env.DAILY_REQUEST_LIMIT = "100";
@@ -36,6 +40,7 @@ beforeEach(() => {
 afterEach(() => {
   globalThis.fetch = originalFetch;
   delete process.env.DEEPSEEK_API_KEY;
+  delete process.env.AI_GATEWAY_API_KEY;
 });
 
 test("聊天接口拒绝非法 JSON 和超限会话", async () => {
@@ -71,7 +76,7 @@ test("安全拒答、证据不足与核心稳定回答返回标准 NDJSON 状态
 });
 
 test("Agent 基础开放问题进入模型并返回各自独立答案", async () => {
-  process.env.DEEPSEEK_API_KEY = "test-only-placeholder";
+  process.env.AI_GATEWAY_API_KEY = "test-only-placeholder";
   const history = [
     { role: "user" as const, content: "介绍一下你的背景。" },
     { role: "assistant" as const, content: "我介绍了教育、审计和项目经历。" },
@@ -84,7 +89,11 @@ test("Agent 基础开放问题进入模型并返回各自独立答案", async ()
   globalThis.fetch = async (_input, init) => {
     calls += 1;
     const payload = JSON.parse(String(init?.body));
-    const question = payload.messages.at(-1).content as string;
+    const prompt = Array.isArray(payload.prompt) ? payload.prompt : [];
+    const rawContent = prompt.at(-1)?.content;
+    const question = Array.isArray(rawContent)
+      ? rawContent.map((part: { text?: string }) => part.text ?? "").join("")
+      : String(rawContent ?? payload.prompt ?? "");
     return deepSeekStream(buildAnswerPlan(question, [], undefined, history).fallbackAnswer);
   };
 
@@ -104,6 +113,10 @@ test("Agent 基础开放问题进入模型并返回各自独立答案", async ()
   assert.equal(capabilityEvents[0].mode, "live");
   assert.equal(identityEvents[0].responseStatus, "completed");
   assert.equal(capabilityEvents[0].responseStatus, "completed");
+  assert.equal(identityEvents.at(-1)?.modelPath, "flash");
+  assert.equal(identityEvents.at(-1)?.degraded, false);
+  assert.equal(capabilityEvents.at(-1)?.modelPath, "flash");
+  assert.equal(capabilityEvents.at(-1)?.degraded, false);
   assert.match(identityAnswer, /张倬玮的 AI Career Agent/);
   assert.match(capabilityAnswer, /教育背景|审计经历|AI 项目/);
   assert.notEqual(identityAnswer, capabilityAnswer);
@@ -174,7 +187,7 @@ test("60 秒介绍返回足够完整的招聘视角回答", async () => {
 });
 
 test("模型上游过载和超时仍返回可见兜底回答", async () => {
-  process.env.DEEPSEEK_API_KEY = "test-only-placeholder";
+  process.env.AI_GATEWAY_API_KEY = "test-only-placeholder";
   const question = "请详细说明 Milvus 检索与 Rerank 的产品取舍";
 
   globalThis.fetch = async () => new Response(null, { status: 503 });
@@ -194,7 +207,7 @@ test("模型上游过载和超时仍返回可见兜底回答", async () => {
 });
 
 test("模型返回空内容时开放题仍返回完整面试回答", async () => {
-  process.env.DEEPSEEK_API_KEY = "test-only-placeholder";
+  process.env.AI_GATEWAY_API_KEY = "test-only-placeholder";
   globalThis.fetch = async () => deepSeekStream("");
 
   for (const [sessionId, question, expected] of [
@@ -212,7 +225,7 @@ test("模型返回空内容时开放题仍返回完整面试回答", async () =>
 });
 
 test("核心回答在模型幻觉连续失败后回退稳定事实骨架", async () => {
-  process.env.DEEPSEEK_API_KEY = "test-only-placeholder";
+  process.env.AI_GATEWAY_API_KEY = "test-only-placeholder";
   let calls = 0;
   globalThis.fetch = async () => {
     calls += 1;
@@ -233,7 +246,7 @@ test("核心回答在模型幻觉连续失败后回退稳定事实骨架", async
 });
 
 test("核心回答在模型不可用时仍返回稳定答案", async () => {
-  process.env.DEEPSEEK_API_KEY = "test-only-placeholder";
+  process.env.AI_GATEWAY_API_KEY = "test-only-placeholder";
   globalThis.fetch = async () => new Response(null, { status: 503 });
   const responseEvents = await events(await POST(request({
     sessionId: "api-stable-upstream-fallback",
@@ -243,8 +256,43 @@ test("核心回答在模型不可用时仍返回稳定答案", async () => {
   assert.equal(responseEvents.at(-1).responseStatus, "completed");
 });
 
+test("Flash 质量门禁失败后由 Pro 重写并标记模型路径", async () => {
+  process.env.AI_GATEWAY_API_KEY = "test-only-placeholder";
+  let calls = 0;
+  globalThis.fetch = async () => {
+    calls += 1;
+    if (calls === 1) return deepSeekStream("我做过一个项目，效果很好。", 60);
+    const question = "哪个项目最能代表他的 AI 产品能力？";
+    return deepSeekStream(buildAnswerPlan(question, [], undefined).fallbackAnswer, 180);
+  };
+
+  const responseEvents = await events(await POST(request({
+    sessionId: "api-pro-repair",
+    messages: [{ role: "user", content: "哪个项目最能代表他的 AI 产品能力？" }],
+  })));
+  const answer = responseEvents.filter((event) => event.type === "delta").map((event) => event.content).join("");
+  assert.equal(calls, 2);
+  assert.equal(responseEvents.at(-1)?.modelPath, "pro");
+  assert.equal(responseEvents.at(-1)?.degraded, false);
+  assert.match(answer, /RAG Knowledge Base System/);
+});
+
+test("开放题双模型失败时显示明确的本地降级状态", async () => {
+  process.env.AI_GATEWAY_API_KEY = "test-only-placeholder";
+  globalThis.fetch = async () => new Response(null, { status: 503 });
+  const responseEvents = await events(await POST(request({
+    sessionId: "api-open-fallback",
+    messages: [{ role: "user", content: "为什么要转型 AI 产品？" }],
+  })));
+  const answer = responseEvents.filter((event) => event.type === "delta").map((event) => event.content).join("");
+  assert.ok(answer.includes("财会") || answer.includes("审计"));
+  assert.equal(responseEvents.at(-1)?.modelPath, "local_fallback");
+  assert.equal(responseEvents.at(-1)?.degraded, true);
+  assert.equal(responseEvents.at(-1)?.responseStatus, "completed");
+});
+
 test("质量重写预算不足时不发起第二次模型调用", async () => {
-  process.env.DEEPSEEK_API_KEY = "test-only-placeholder";
+  process.env.AI_GATEWAY_API_KEY = "test-only-placeholder";
   process.env.DAILY_REQUEST_LIMIT = "1";
   let calls = 0;
   globalThis.fetch = async () => {

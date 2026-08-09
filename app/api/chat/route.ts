@@ -4,7 +4,7 @@ import { buildAnswerCitations } from "@/lib/answer-citations";
 import { repairInstruction, validateAnswer } from "@/lib/answer-quality";
 import { persistEvent } from "@/lib/analytics";
 import { presetRevealChunks } from "@/lib/chat-session";
-import { DeepSeekPlannerError, DeepSeekUpstreamError, generateDeepSeekAnswer, planDeepSeekQuestion } from "@/lib/deepseek";
+import { DeepSeekPlannerError, DeepSeekUpstreamError, generateDeepSeekAnswer, generateDeepSeekRepair, planDeepSeekQuestion, type ModelPath } from "@/lib/deepseek";
 import { assessQuestion } from "@/lib/guardrails";
 import { getClaims, getSources, matchStableAnswer, resolveRetrievalQuery, retrieveKnowledge, serializeKnowledgeItems } from "@/lib/knowledge";
 import { getFollowUpQuestions } from "@/lib/question-suggestions";
@@ -43,6 +43,8 @@ function textStream(input: {
   startedAt: number;
   tokenReservation: number;
   actualTokens?: number;
+  modelPath?: ModelPath | "local_fallback";
+  degraded?: boolean;
   claims?: ReturnType<typeof getClaims>;
   followUpQuestions?: string[];
   diagnostic?: {
@@ -54,6 +56,8 @@ function textStream(input: {
     rewriteCount?: number;
     retrievalCount?: number;
     qualityTriggerCount?: number;
+    modelPath?: ModelPath | "local_fallback";
+    degraded?: boolean;
   };
 }) {
   const answer = input.answer.trim() || "这次回答没有完整生成。我可以继续根据已经公开的经历，从岗位匹配、项目实践或能力迁移的角度回答，请重新发送刚才的问题。";
@@ -69,6 +73,8 @@ function textStream(input: {
       sources: input.sources,
       items: serializeKnowledgeItems(input.items),
       followUpQuestions: input.followUpQuestions ?? [],
+      modelPath: input.modelPath ?? "local_fallback",
+      degraded: input.degraded ?? false,
       ...(input.claims ? { claims: input.claims } : {}),
     }));
     for (const chunk of presetRevealChunks(answer)) {
@@ -77,7 +83,7 @@ function textStream(input: {
     }
     await recordTokenUsage({ actualTokens: input.actualTokens ?? 0, tokenReservation: input.tokenReservation });
     const latencyMs = Date.now() - input.startedAt;
-    controller.enqueue(line({ type: "done", responseStatus: input.responseStatus, latencyMs }));
+    controller.enqueue(line({ type: "done", responseStatus: input.responseStatus, latencyMs, modelPath: input.modelPath ?? "local_fallback", degraded: input.degraded ?? false }));
     controller.close();
     if (input.diagnostic) await persistEvent({
       event: "answer_generated",
@@ -94,6 +100,8 @@ function textStream(input: {
       rewriteCount: input.diagnostic.rewriteCount,
       retrievalCount: input.diagnostic.retrievalCount,
       qualityTriggerCount: input.diagnostic.qualityTriggerCount,
+      modelPath: input.diagnostic.modelPath,
+      degraded: input.diagnostic.degraded,
     });
   }}), { headers: { "Content-Type": "application/x-ndjson; charset=utf-8", "Cache-Control": "no-store" } });
 }
@@ -144,7 +152,7 @@ export async function POST(request: NextRequest) {
   }
 
   const history = body.messages.slice(0, -1).slice(-12);
-  const apiKey = process.env.DEEPSEEK_API_KEY;
+  const gatewayConfigured = Boolean(process.env.AI_GATEWAY_API_KEY || process.env.VERCEL_OIDC_TOKEN || process.env.VERCEL);
   const contract = findQuestionContract(assessment.question);
   const localFrame = buildLocalQuestionFrame(assessment.question, history);
   let frame = localFrame;
@@ -152,8 +160,9 @@ export async function POST(request: NextRequest) {
   let plannerFallbackReason: string | undefined;
   let plannerTokens = 0;
   let plannerReservation = 0;
+  let plannerModelPath: ModelPath | undefined;
 
-  if (!contract && localFrame.confidence < 0.8 && apiKey) {
+  if (!contract && localFrame.questionMode !== "agent_meta" && gatewayConfigured) {
     const plannerBudget = await reserveAdditionalModelCall(1_200);
     if (!plannerBudget.ok) {
       plannerFallbackReason = "planner_budget_exhausted";
@@ -164,14 +173,15 @@ export async function POST(request: NextRequest) {
       request.signal.addEventListener("abort", () => plannerController.abort(), { once: true });
       try {
         const planned = await planDeepSeekQuestion({
-          apiKey,
           question: assessment.question,
           history,
           signal: plannerController.signal,
+          userId: body.sessionId,
         });
         frame = mergePlannedFrame(localFrame, planned.frame);
         plannerTokens = planned.totalTokens;
         plannerUsed = true;
+        plannerModelPath = planned.modelPath;
       } catch (error) {
         plannerFallbackReason = error instanceof DeepSeekPlannerError
           ? error.reason
@@ -190,6 +200,9 @@ export async function POST(request: NextRequest) {
   const sourceIds = stableAnswer ? [...stableAnswer.requiredSourceIds] : [...new Set(items.flatMap((item) => item.sourceIds))];
   const matchedSources = getSources(sourceIds);
   const plan = buildAnswerPlan(assessment.question, items, stableAnswer, history, frame, contract);
+  const deliveryFallback = frame.topic === "unknown" && frame.answerIntent === "general"
+    ? "回答服务暂时不可用，我没有找到与这个问题直接相关的公开资料。请点击重新生成，或换一种方式描述你想了解的面试问题。"
+    : plan.fallbackAnswer;
   const retrievalTrace = resolveRetrievalQuery(assessment.question, history);
   const diagnosticBase = {
     sessionId: body.sessionId,
@@ -206,6 +219,7 @@ export async function POST(request: NextRequest) {
     answerIntent: frame.answerIntent,
     hasTargetRole: Boolean(frame.targetRole),
     plannerUsed,
+    plannerModelPath,
     plannerFallbackReason,
     historyCount: history.length,
     contextApplied: retrievalTrace.contextApplied,
@@ -216,7 +230,7 @@ export async function POST(request: NextRequest) {
 
   if (!stableAnswer && !plan.answerableWithoutRetrievedEvidence && (!items.length || !claimIds.length || !sourceIds.length)) {
     return textStream({
-      answer: plan.fallbackAnswer,
+      answer: deliveryFallback,
       mode: "demo",
       responseStatus: "insufficient_evidence",
       claimIds: [],
@@ -227,13 +241,15 @@ export async function POST(request: NextRequest) {
       startedAt,
       tokenReservation: rate.tokenReservation + plannerReservation,
       actualTokens: plannerTokens,
+      modelPath: "local_fallback",
+      degraded: false,
       diagnostic: { ...diagnosticBase, answerPath: "demo" },
     });
   }
 
-  if (!apiKey) {
+  if (!gatewayConfigured) {
     return textStream({
-      answer: plan.fallbackAnswer,
+      answer: deliveryFallback,
       mode: stableAnswer ? "stable" : "demo",
       responseStatus: "completed",
       claimIds,
@@ -244,6 +260,8 @@ export async function POST(request: NextRequest) {
       startedAt,
       tokenReservation: rate.tokenReservation + plannerReservation,
       actualTokens: plannerTokens,
+      modelPath: "local_fallback",
+      degraded: !stableAnswer,
       diagnostic: { ...diagnosticBase, answerPath: stableAnswer ? "stable" : "demo" },
     });
   }
@@ -257,19 +275,20 @@ export async function POST(request: NextRequest) {
   let firstTriggers: string[] = [];
   try {
     const first = await generateDeepSeekAnswer({
-      apiKey,
       messages: [
         { role: "system", content: systemPrompt },
         { role: "system", content: contextMessage },
         ...recentModelMessages,
       ],
       signal: controller.signal,
+      userId: body.sessionId,
     });
     totalTokens += first.totalTokens;
     const firstGate = validateAnswer(first.text, plan);
     firstTriggers = firstGate.triggers;
 
     let answer = first.text;
+    let answerModelPath: ModelPath | "local_fallback" = first.modelPath;
     let path: "generated" | "repaired" | "fallback" = "generated";
     let rewriteCount = 0;
     let finalTriggers = firstGate.triggers;
@@ -278,13 +297,13 @@ export async function POST(request: NextRequest) {
       rewriteCount = 1;
       const retryBudget = await reserveAdditionalModelCall(estimatedTokens);
       if (!retryBudget.ok) {
-        answer = plan.fallbackAnswer;
+        answer = deliveryFallback;
         path = "fallback";
+        answerModelPath = "local_fallback";
         finalTriggers = [...firstGate.triggers, "repair_budget_exhausted"];
       } else {
         totalReservation += retryBudget.tokenReservation;
-        const repaired = await generateDeepSeekAnswer({
-          apiKey,
+        const repaired = await generateDeepSeekRepair({
           messages: [
             { role: "system", content: systemPrompt },
             { role: "system", content: contextMessage },
@@ -292,6 +311,7 @@ export async function POST(request: NextRequest) {
             ...recentModelMessages,
           ],
           signal: controller.signal,
+          userId: body.sessionId,
         });
         totalTokens += repaired.totalTokens;
         const repairedGate = validateAnswer(repaired.text, plan);
@@ -299,9 +319,11 @@ export async function POST(request: NextRequest) {
         if (repairedGate.passed) {
           answer = repaired.text;
           path = "repaired";
+          answerModelPath = repaired.modelPath;
         } else {
-          answer = plan.fallbackAnswer;
+          answer = deliveryFallback;
           path = "fallback";
+          answerModelPath = "local_fallback";
         }
       }
     }
@@ -314,6 +336,8 @@ export async function POST(request: NextRequest) {
       answerIntent: plan.intent,
       hasTargetRole: Boolean(plan.targetRole),
       plannerUsed,
+      plannerModelPath,
+      modelPath: answerModelPath,
       retrievalItemIds: items.map((item) => item.id),
       answerPath: path,
       rewriteCount,
@@ -333,11 +357,15 @@ export async function POST(request: NextRequest) {
       startedAt,
       tokenReservation: totalReservation,
       actualTokens: totalTokens,
+      modelPath: answerModelPath,
+      degraded: answerModelPath === "local_fallback",
       diagnostic: {
         ...diagnosticBase,
         answerPath: path,
         rewriteCount,
         qualityTriggerCount: [...new Set([...firstTriggers, ...finalTriggers])].length,
+        modelPath: answerModelPath,
+        degraded: answerModelPath === "local_fallback",
       },
     });
   } catch (error) {
@@ -346,10 +374,12 @@ export async function POST(request: NextRequest) {
       answerIntent: plan.intent,
       topic: plan.topic,
       hasTargetRole: Boolean(plan.targetRole),
+      plannerModelPath,
+      modelPath: "local_fallback",
       reason: error instanceof DeepSeekUpstreamError ? `upstream_${error.status}` : error instanceof Error ? error.name : "unknown",
     }));
     return textStream({
-      answer: plan.fallbackAnswer,
+      answer: deliveryFallback,
       mode: stableAnswer ? "stable" : "demo",
       responseStatus: items.length || plan.answerableWithoutRetrievedEvidence ? "completed" : "insufficient_evidence",
       claimIds,
@@ -360,7 +390,9 @@ export async function POST(request: NextRequest) {
       startedAt,
       tokenReservation: totalReservation,
       actualTokens: totalTokens,
-      diagnostic: { ...diagnosticBase, answerPath: "fallback", qualityTriggerCount: firstTriggers.length },
+      modelPath: "local_fallback",
+      degraded: !stableAnswer,
+      diagnostic: { ...diagnosticBase, answerPath: "fallback", qualityTriggerCount: firstTriggers.length, modelPath: "local_fallback", degraded: !stableAnswer },
     });
   } finally {
     clearTimeout(timeout);

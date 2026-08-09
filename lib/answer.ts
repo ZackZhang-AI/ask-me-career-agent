@@ -232,7 +232,7 @@ function openAnswer(plan: Omit<AnswerPlan, "fallbackAnswer">, facts: string[], s
 function openThesis(question: string, intent: AnswerIntent, items: KnowledgeItem[], depth: ConversationDepth, story?: StarStory, frame?: QuestionFrame) {
   if (intent === "agent_identity") return agentProfile.identity;
   if (intent === "capability_scope") {
-    return "我可以帮助你从面试官最关心的角度，更完整地了解张倬玮的经历、项目、能力和岗位匹配。";
+    return "可以。我能围绕张倬玮的经历、项目、能力和岗位匹配回答开放问题，也能按正式面试口吻组织动机、方法、取舍和复盘。对于没有公开事实的假设题，我会明确说明这是处理思路，不把推演说成已经发生的经历。";
   }
   if (intent === "career_transition") return candidateNarrative.careerTransition.thesis;
   if (intent === "role_fit" && frame?.targetRole) return `我和${frame.targetRole}的匹配，主要体现在业务理解、数据判断和产品落地能够形成闭环。`;
@@ -249,7 +249,10 @@ function openThesis(question: string, intent: AnswerIntent, items: KnowledgeItem
   if (intent === "experience_value") {
     return "我通常先把业务问题拆成用户任务、流程阻力和验收标准，再决定规则、模型与人工确认分别承担什么。";
   }
-  return firstPersonFact(items[0]?.content ?? "这部分现有资料没有记录。我可以从已经公开的 AI 产品项目、产品方法或业务经历继续回答，但不会补造个人事实。");
+  if (frame?.questionMode === "candidate_reasoning") {
+    return "面对这类开放问题，我会先明确目标和约束，再拆解关键假设，用小范围验证和可复盘的指标推动下一步，而不是直接给出脱离场景的结论。";
+  }
+  return "这部分现有资料没有记录。我可以从已经公开的 AI 产品项目、产品方法或业务经历继续回答，但不会用不相关的项目事实替代当前问题。";
 }
 
 function intentFromFrame(frame: QuestionFrame, detected: AnswerIntent): AnswerIntent {
@@ -336,6 +339,8 @@ export function buildAnswerPlan(
     facet: frame.facet,
     focusTerms: frame.focusTerms,
     targetRole: frame.targetRole,
+    questionMode: frame.questionMode,
+    evidencePolicy: frame.evidencePolicy,
     directAnswerTerms: contract?.directAnswerTerms
       ?? (intent === "career_transition" ? ["转", "产品"] : intent === "role_fit" ? [frame.targetRole ?? "岗位", "匹配"] : []),
     forbiddenTopics: frame.forbiddenTopics,
@@ -363,7 +368,7 @@ export function buildAnswerPlan(
     targetLength: contract?.frame.targetLength ?? targetLengthFor(intent, responseShape, depth, stableAnswer),
     followUpQuestions: getFollowUpQuestions(question, askedQuestions, 3, stableAnswer?.followUpQuestions),
     recentAnswers: history.filter((message) => message.role === "assistant").slice(-3).map((message) => message.content),
-    answerableWithoutRetrievedEvidence: metaIntents.includes(intent) || ["career_transition", "role_fit"].includes(intent) || Boolean(contract),
+    answerableWithoutRetrievedEvidence: frame.questionMode !== "candidate_fact" || metaIntents.includes(intent) || ["career_transition", "role_fit"].includes(intent) || Boolean(contract),
   };
   const fallbackFacts = intent === "challenge" ? [...storyFacts, ...itemFacts] : [...itemFacts, ...storyFacts];
   const baseAnswer = contract?.fallbackAnswer
@@ -382,6 +387,7 @@ export function buildContext(items: KnowledgeItem[], plan?: AnswerPlan) {
     `候选人定位：${candidateNarrative.positioning}`,
     `本题要帮助面试官判断：${plan.evaluationGoal}`,
     `本题意图：${plan.intent}；主题：${plan.topic}；回答维度：${plan.facet}。第一段必须直接回应：${plan.directAnswerTerms.join("、") || "当前问题"}。`,
+    `回答模式：${plan.questionMode}；证据策略：${plan.evidencePolicy}。candidate_reasoning 可以回答方法和推演，但必须明确不是已发生的事实；candidate_fact 不得在证据不足时补造经历。`,
     `回答结构：${plan.responseShape}；对话深度：${plan.conversationDepth}；参考长度：${plan.targetLength.min}-${plan.targetLength.max} 个中文字符。根据问题复杂度自然调整，简单事实短答，项目、贡献与复盘问题讲完整，不为凑字数重复。`,
     `本轮必须带来这些新信息：${plan.newInformationGoal.join("；")}`,
     `必须覆盖：${plan.mustInclude.join("；")}`,

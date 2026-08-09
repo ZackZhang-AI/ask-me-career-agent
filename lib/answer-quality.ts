@@ -173,6 +173,12 @@ export function validateAnswer(candidate: string, plan: AnswerPlan): QualityGate
     triggers.push("indirect_opening");
   }
   if (plan.targetRole && !clean.toLowerCase().includes(plan.targetRole.toLowerCase())) triggers.push("missing_target_role");
+  if (plan.questionMode === "agent_meta" && !/(?:可以|能够|回答|帮助|能力|范围|开放问题|面试)/.test(firstParagraph)) {
+    triggers.push("intent_mismatch:agent_meta");
+  }
+  if (plan.questionMode === "candidate_reasoning" && /(?:我曾经|我负责过|我已经上线|真实用户增长|客户营收)/.test(clean)) {
+    triggers.push("reasoning_presented_as_fact");
+  }
   if (plan.intent === "role_fit" && !plan.contractId) {
     const fitDimensions = [
       /业务|流程|用户|场景/,

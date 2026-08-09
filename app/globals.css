@@ -1034,6 +1034,12 @@ textarea:focus-visible {
   font-weight: 700;
 }
 
+.answer-degraded {
+  margin-top: 10px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
 .mode-note {
   margin: 18px 0 0;
   padding-top: 13px;

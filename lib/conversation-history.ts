@@ -14,6 +14,8 @@ export interface ConversationMessage extends ChatMessage {
   items?: KnowledgeItem[];
   mode?: "live" | "stable" | "demo" | "guardrail";
   responseStatus?: ResponseStatus;
+  modelPath?: "flash" | "pro" | "local_fallback";
+  degraded?: boolean;
   claimIds?: string[];
   sourceIds?: string[];
   citations?: AnswerCitation[];
@@ -101,6 +103,8 @@ function normalizeMessage(value: unknown): ConversationMessage | null {
     message.mode = value.mode as ConversationMessage["mode"];
   }
   if (typeof value.responseStatus === "string") message.responseStatus = value.responseStatus as ResponseStatus;
+  if (["flash", "pro", "local_fallback"].includes(String(value.modelPath))) message.modelPath = value.modelPath as ConversationMessage["modelPath"];
+  if (typeof value.degraded === "boolean") message.degraded = value.degraded;
   if (typeof value.deliveryPath === "string") message.deliveryPath = value.deliveryPath as "preset" | "api";
   if (typeof value.contractId === "string") message.contractId = value.contractId;
   if (typeof value.latencyMs === "number") message.latencyMs = value.latencyMs;

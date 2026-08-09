@@ -34,11 +34,15 @@ export type QuestionFacet =
   | "boundary"
   | "fit";
 export type QuestionRouteSource = "contract" | "local" | "model";
+export type QuestionMode = "agent_meta" | "candidate_fact" | "candidate_reasoning";
+export type EvidencePolicy = "required" | "supporting" | "none";
 
 export interface QuestionFrame {
   topic: QuestionTopic;
   facet: QuestionFacet;
   answerIntent: AnswerIntent;
+  questionMode: QuestionMode;
+  evidencePolicy: EvidencePolicy;
   focusTerms: string[];
   targetRole?: string;
   requestedDimensions: string[];
@@ -107,6 +111,8 @@ export interface AnswerPlan {
   facet: QuestionFacet;
   focusTerms: string[];
   targetRole?: string;
+  questionMode: QuestionMode;
+  evidencePolicy: EvidencePolicy;
   directAnswerTerms: string[];
   forbiddenTopics: QuestionTopic[];
   intent: AnswerIntent;

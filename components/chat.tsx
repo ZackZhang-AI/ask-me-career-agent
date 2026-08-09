@@ -223,6 +223,8 @@ export function Chat({ presetAnswers }: ChatProps) {
         items?: ConversationMessage["items"];
         mode?: ConversationMessage["mode"];
         responseStatus?: ConversationMessage["responseStatus"];
+        modelPath?: ConversationMessage["modelPath"];
+        degraded?: boolean;
         claimIds?: string[];
         sourceIds?: string[];
         citations?: ConversationMessage["citations"];
@@ -235,6 +237,8 @@ export function Chat({ presetAnswers }: ChatProps) {
           items: event.items,
           mode: event.mode,
           responseStatus: event.responseStatus,
+          modelPath: event.modelPath,
+          degraded: event.degraded,
           claimIds: event.claimIds,
           sourceIds: event.sourceIds,
           citations: event.citations,
@@ -250,7 +254,7 @@ export function Chat({ presetAnswers }: ChatProps) {
         }
         if (event.type === "done") {
           receivedDone = true;
-          metadata = { ...metadata, responseStatus: event.responseStatus, latencyMs: event.latencyMs };
+          metadata = { ...metadata, responseStatus: event.responseStatus, latencyMs: event.latencyMs, modelPath: event.modelPath, degraded: event.degraded };
         }
         if (event.type === "error") throw new Error(event.message ?? "问答服务返回异常。");
       };
@@ -547,6 +551,11 @@ export function Chat({ presetAnswers }: ChatProps) {
                           />
                         )
                       : <div className="message-content">{message.content}</div>
+                  )}
+                  {message.role === "assistant" && message.content && message.degraded && (
+                    <div className="answer-degraded" role="status">
+                      当前基于已公开资料回答，可重新生成
+                    </div>
                   )}
                   {message.role === "assistant" && message.content && message.responseStatus && (
                     <AnswerActions
