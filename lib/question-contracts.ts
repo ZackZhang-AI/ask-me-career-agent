@@ -26,17 +26,18 @@ export function inferAnswerIntent(question: string, topic: QuestionTopic = "unkn
   if (/^(?:(?:你|您)(?:能|可以)(?:做|回答|介绍|帮我)(?:些什么|什么|哪些(?:问题|内容|开放题)?)?|能问你什么|可以问什么|功能范围|能力范围|你不能回答开放(?:问题|题目|题)?(?:吗)?|你能回答开放(?:问题|题目|题)?(?:吗)?|.*(?:Agent|助手).{0,8}(?:能不能|可以不可以|能否)?回答.{0,12}(?:开放|标准答案|问题))[？?。.！!\s]*$/i.test(question)) return "capability_scope";
   if (careerTransitionPattern.test(question) || careerTransitionContextPattern.test(question)) return "career_transition";
   if (roleFitPattern.test(question)) return "role_fit";
-  if (resultEvidencePattern.test(question)) return "result";
   if (/AI\s*(?:编程|写|生成)|代码.*AI|AI.*占比|用了多少\s*AI/i.test(question)) return "ai_collaboration";
-  if (/个人贡献|你做了什么|你负责|具体做了|你的工作|主导/i.test(question)) return "contribution";
   if (/挑战|困难|失败|取舍|踩坑|复盘|怎么推进|如何推进/i.test(question)) return "challenge";
   if (/^(?:如果|假设|当)/.test(question) && /(?:怎么办|怎么|如何|怎样)/.test(question)) return "diagnosis";
+  if (resultEvidencePattern.test(question)) return "result";
+  if (/个人贡献|你做了什么|你负责|具体做了|你的工作|主导/i.test(question)) return "contribution";
   if (/没有改善|没改善|没有效果|没效果|优先排查|先排查|先.{0,3}看什么|定位问题|(?:如何|怎么).{0,4}定位|为什么没有/i.test(question)) return "diagnosis";
   if (/隐私|机密|企业数据|数据边界/i.test(question)) return "privacy";
   if (/短板|不足|弱点|限制|能力缺口/i.test(question) || facet === "boundary") return "limitation";
   if (/结果|量化(?:结果|效果)|效果数据|用户规模|增长|留存|上线|生产状态|完成(?:了吗|情况)/i.test(question) || facet === "result") return "result";
   if (/代表项目|最能代表|最有价值的项目/i.test(question)) return "representative_project";
   if (/自我介绍|介绍一下自己|60\s*秒/i.test(question)) return "introduction";
+  if (/(?:项目|系统|工具|助手).{0,10}(?:能做什么|做什么|有什么功能|如何工作)/i.test(question)) return "project_overview";
   if (/(?:统计|数据分析|审计|财会|财务).{0,14}(?:迁移|帮助|带来|形成).{0,12}(?:AI|产品|决策|能力)/i.test(question)) return "experience_value";
   if (/技术能力|技术栈|会什么|数据分析|(?:AI\s*)?评测|如何评估|有哪些实践/i.test(question) || facet === "evaluation") return "skills";
   if (/企业级?\s*AI|企业\s*AI|企业场景|业务问题.{0,8}(?:转化|转成|变成).{0,8}(?:AI|产品)|(?:AI|产品)方案|项目经历.{0,12}(?:价值|帮助|迁移)|(?:从)?(?:财会|会计|财务|审计|统计).{0,14}(?:积累|迁移|帮助|带来|形成).{0,12}(?:产品|能力|需求|决策)/i.test(question)) return "experience_value";
@@ -385,6 +386,34 @@ export const questionContracts: QuestionContract[] = [
     fallback: "DeepFlow 的 Agent 不是自由聊天，而是围绕研究任务按**角色、输入输出和状态**进行有序交接。Coordinator 负责接收目标和组织流程，Planner 把目标拆成研究计划，Researcher 检索与整理资料，Coder 承担需要计算或结构化处理的任务，Reporter 汇总证据与分析形成报告。\n\n每个角色消费上一步的**明确产物**，而不是共享一段无限增长的对话；任务状态、关键字段和中间结果需要被记录，便于发现资料不足、计划跑偏或报告无法追溯。方向性、高成本或评价标准不清楚的节点加入**人工确认**。\n\n这样的协作设计让 Agent 的自主执行有边界，也使失败能够定位到计划、检索、分析还是报告环节。",
     next: ["deepflow_thinking", "project_contribution", "enterprise_ai"],
   }),
+  define({
+    id: "rag_architecture", question: "你的 RAG 项目如何设计混合检索和引用溯源？", aliases: ["RAG 项目的混合检索和引用溯源是怎样设计的？"], topic: "rag", facet: "architecture",
+    dimensions: ["当前检索基线", "混合检索方案", "引用与评测"], knowledge: ["K4", "K14", "K17"], stories: ["ST1"], forbidden: ["deepflow", "audit", "local_tools"], length: { min: 300, max: 470 }, goal: "讲清 RAG 检索与引用设计，并区分当前实现和后续增强。",
+    thesis: "我的设计顺序是先用 Dense Retrieval 建立可重复检查的基线，再分别验证混合检索、Rerank 和引用溯源。", required: ["Dense Retrieval 基线", "混合检索与 Rerank", "引用溯源和 Bad Case"], direct: ["Dense Retrieval", "混合检索", "引用溯源"],
+    fallback: "我的设计顺序是先用 Dense Retrieval 建立可重复检查的**检索质量基线**，再分别验证混合检索、Rerank 和引用溯源，而不是一次把所有能力都包装成已经完成。\n\n混合检索用于结合语义召回与关键词命中，Rerank 再对候选片段排序；但它们是否值得加入，要用固定问题集比较召回相关性和失败样本。引用溯源则要求回答中的关键结论能够回到具体证据片段，便于用户检查，也便于我区分问题来自摄入、召回、排序还是生成。\n\n当前能够确认的是 Dense Retrieval 主链路；混合检索和完整引用能力仍在**逐步验证**。我会把召回、回答忠实度和引用支持分别纳入评测，让 Bad Case 能够回到下一轮产品取舍。",
+    next: ["rag_methods", "evaluation", "project_contribution"],
+  }),
+  define({
+    id: "audit_archive_tool", question: "你的审计资料智能归档助手能做什么？", aliases: ["他的审计工具如何完成资料归档？"], topic: "audit", facet: "overview",
+    dimensions: ["资料字段抽取", "归档建议", "人工复核"], knowledge: ["K7"], stories: ["ST4"], forbidden: ["rag", "deepflow", "local_tools"], length: { min: 240, max: 390 }, goal: "说明审计资料归档原型的输入、处理方式和风险边界。",
+    thesis: "审计资料智能归档助手把资料识别、字段抽取和归档建议组织成一条可人工复核的流程。", required: ["审计资料和字段抽取", "归档建议", "人工确认与演示数据"], direct: ["审计", "字段抽取", "归档"],
+    fallback: "审计资料智能归档助手把资料识别、**字段抽取与归档建议**组织成一条可人工复核的流程。它先从演示资料中识别文件名、日期、主体等通用字段，再依据预设规则给出目录和命名建议，减少人工逐份整理的重复工作。\n\n对于字段缺失、内容冲突或无法确定的资料，工具只标记问题并交给人确认，不直接替代审计判断。公开原型使用演示数据，不接入真实客户底稿。我的重点是把归档工作拆成清楚的输入、规则、异常状态和**人工复核节点**，让结果可检查、可纠正。",
+    next: ["audit_product_example", "audit_value", "business_to_ai"],
+  }),
+  define({
+    id: "audit_log_tool", question: "你的 IT 审计日志抽查助手能做什么？", aliases: ["IT 审计日志抽查助手能做什么？"], topic: "audit", facet: "overview",
+    dimensions: ["日志结构化", "异常规则", "审计关注点"], knowledge: ["K7"], stories: ["ST4"], forbidden: ["rag", "deepflow", "local_tools"], length: { min: 240, max: 390 }, goal: "说明日志抽查助手如何辅助发现异常并保留人工判断。",
+    thesis: "IT 审计日志抽查助手用于把日志字段、抽查规则和异常关注点整理成可复核结果。", required: ["日志字段与抽查", "异常或风险规则", "人工复核"], direct: ["日志", "抽查", "异常"],
+    fallback: "IT 审计日志抽查助手用于把**日志抽查与异常关注**整理成可复核结果。它先对演示日志做结构化处理，再按时间、账号、操作类型等通用规则标记需要关注的记录，帮助使用者更快定位异常或风险线索。\n\n工具不会把规则命中直接当成审计结论，而是保留原始记录、命中原因和人工复核入口。当前是基于公开问题结构制作的原型，不包含真实客户日志。我的产品判断是让自动化承担重复筛查，让**人工确认最终判断**。",
+    next: ["audit_product_example", "audit_value", "enterprise_ai"],
+  }),
+  define({
+    id: "campus_ambassador", question: "你的德勤校园大使经历体现了哪些业务能力？", aliases: ["他的德勤校园大使经历体现了哪些业务能力？"], topic: "audit", facet: "transfer",
+    dimensions: ["流程主持", "校招推广", "沟通交付"], knowledge: ["K10"], length: { min: 220, max: 360 }, goal: "说明校园大使经历形成的现场沟通和执行能力。",
+    thesis: "德勤校园大使经历主要训练了我在明确目标下组织流程、现场沟通和推进交付的能力。", required: ["校园大使", "主持或流程组织", "校招推广与沟通"], direct: ["校园大使", "主持", "推广"],
+    fallback: "德勤校园大使经历主要训练了我的**流程组织与现场沟通**能力。我参与过流程主持和校招推广，需要把活动信息讲清楚、衔接不同环节，并根据现场反馈及时调整表达和节奏。\n\n这段经历本身不是复杂产品项目，但它补充了我在真实场景中的沟通与执行：面对不同受众时先判断对方最关心什么，再把信息组织成容易理解、能够继续行动的内容；遇到临时变化时保持节奏，把任务推进到结束。这种**信息表达与临场推进**能力可以迁移到需求沟通、评审主持和跨角色协作中。",
+    next: ["internship_value", "audit_value", "role_fit"],
+  }),
 ];
 
 const contractById = new Map(questionContracts.map((contract) => [contract.id, contract]));
@@ -505,6 +534,12 @@ export function buildLocalQuestionFrame(question: string, history: { role: "user
     ? (historyProject === "rag" ? "rag" : historyProject === "deepflow" ? "deepflow" : historyProject?.includes("ask") ? "ask_me" : historyProject ? "baidu" : "unknown")
     : topic;
   const explicitTopic = inferredTopic !== "unknown";
+  const hasMethodContext = /AI|产品|模型|RAG|DeepFlow|Agent|检索|评测|数据|用户|指标|需求|项目|功能|失败|复盘|取舍|协作|团队/i.test(question);
+  const hasExplicitProjectOverviewAction = answerIntent === "project_overview"
+    && /(?:项目|系统|工具|助手).{0,10}(?:能做什么|做什么|有什么功能|如何工作)/i.test(question);
+  const hasStrongLocalIntent = !["general", "project_overview", "challenge", "diagnosis"].includes(answerIntent)
+    || hasExplicitProjectOverviewAction
+    || (["challenge", "diagnosis"].includes(answerIntent) && hasMethodContext);
   return {
     topic: inferredTopic,
     facet,
@@ -516,7 +551,7 @@ export function buildLocalQuestionFrame(question: string, history: { role: "user
     requestedDimensions: [facet === "overview" ? "直接回答当前问题" : `${facet}相关判断`, "具体实践", "验证或落地方式"],
     activeProject: inferredTopic === "baidu" ? "baidu-ai-coding-evaluation" : inferredTopic === "rag" ? "rag-knowledge-base" : inferredTopic === "deepflow" || inferredTopic === "agent" ? "deepflow" : inferredTopic === "ask_me" ? "ask-me" : undefined,
     useHistory: reference,
-    confidence: ["career_transition", "role_fit"].includes(answerIntent) ? 0.92 : explicitTopic && facet !== "overview" ? 0.86 : explicitTopic ? 0.72 : facet !== "overview" ? 0.58 : 0.35,
+    confidence: ["career_transition", "role_fit"].includes(answerIntent) ? 0.92 : hasStrongLocalIntent ? 0.88 : explicitTopic && facet !== "overview" ? 0.86 : explicitTopic ? 0.72 : facet !== "overview" ? 0.58 : 0.35,
     requiredKnowledgeIds: answerIntent === "career_transition" ? ["K2", "K3", "K9", "K22"] : topicKnowledge[inferredTopic],
     allowedStoryIds: facet === "example" ? (inferredTopic === "baidu" ? ["ST9"] : inferredTopic === "audit" ? ["ST4", "ST6"] : inferredTopic === "rag" ? ["ST1"] : inferredTopic === "deepflow" || inferredTopic === "agent" ? ["ST2"] : []) : [],
     forbiddenTopics: forbiddenFor(inferredTopic),

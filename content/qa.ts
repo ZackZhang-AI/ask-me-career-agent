@@ -13,6 +13,7 @@ type AnswerInput = {
   claimIds: string[];
   sourceIds: string[];
   matchKeywords: string[];
+  matchRequiresProjectContext?: boolean;
   evaluationGoal: string;
   exclusivePoints: string[];
   avoidRepeating: string[];
@@ -41,7 +42,8 @@ const answerIntentById: Record<string, AnswerIntent> = {
   A17: "credentials", A18: "project_overview", A19: "result", A20: "hiring_recommendation",
   A21: "experience_value", A22: "experience_value", A23: "skills", A24: "result",
   A25: "experience", A26: "project_overview", A27: "skills", A28: "contribution",
-  A29: "project_problem", A30: "limitation", A31: "project_overview",
+  A29: "project_problem", A30: "limitation", A31: "project_overview", A32: "result",
+  A33: "challenge", A34: "result",
 };
 
 const knownOrganizations = ["东北大学", "百度", "德勤", "容诚", "ACCA"];
@@ -148,8 +150,8 @@ export const stableAnswerContent = [
   answer({
     id: "A04",
     question: "RAG 项目解决了什么问题？",
-    matchKeywords: ["rag解决", "rag项目解决", "知识库问题"],
-    standardAnswer: "**可信答案难获取**：这个项目解决的不是“企业没有文档”，而是专业资料很多、真正需要答案时却很难快速找到正确内容，也很难判断生成结论依据了哪段原文。传统关键词搜索要求用户自己不断换词、打开文档和拼接信息；直接让模型回答，又可能得到看似流畅但无法追溯的结论。\n\n**可追溯的可信回答**：我把它定义为三个连续环节——先让不同文档能够被统一摄入和检索，再让回答严格基于召回内容生成，最后通过引用与评测判断答案是否可靠。当前先用 Dense Retrieval 跑通主链路，再逐步验证混合检索、Rerank 和引用溯源。核心价值不是增加一个聊天入口，而是降低用户获得可信答案、检查依据和继续行动的成本，让回答真正成为专业决策的信息入口。",
+    matchKeywords: ["rag解决", "rag项目解决", "知识库问题", "服务什么用户", "解决什么问题", "有什么价值"],
+    standardAnswer: "我的 RAG 产品面向需要从大量专业资料中查找依据的用户，核心业务问题是**可信答案难获取**：真正需要答案时，很难快速找到正确内容，也很难判断生成结论依据了哪段原文。传统关键词搜索要求用户自己不断换词、打开文档和拼接信息；直接让模型回答，又可能得到看似流畅但无法追溯的结论。\n\n**可追溯的可信回答**：我把它定义为三个连续环节——先让不同文档能够被统一摄入和检索，再让回答严格基于召回内容生成，最后通过引用与评测判断答案是否可靠。当前先用 Dense Retrieval 跑通主链路，再逐步验证混合检索、Rerank 和引用溯源。核心价值不是增加一个聊天入口，而是降低用户获得可信答案、检查依据和继续行动的成本，让回答真正成为专业决策的信息入口。",
     details: ["专业资料难以快速找到正确内容", "生成结论缺少原文依据", "摄入、检索、生成和评测链路"],
     limitations: "公开仓库证明当前设计与部分实现，不等同于所有规划能力均已运行验证。",
     claimIds: ["C3"], sourceIds: ["S1", "S3"], verification: "externally_verified", relatedProject: "rag-knowledge-base",
@@ -313,8 +315,8 @@ export const stableAnswerContent = [
   answer({
     id: "A15",
     question: "请讲一个项目挑战或失败案例。",
-    matchKeywords: ["面试核实", "追问", "遇到什么困难", "项目困难", "失败案例", "项目挑战", "挑战", "失败"],
-    standardAnswer: "RAG 项目中一个很典型的挑战，是我早期把“功能更多”误认为“产品更完整”。混合检索、Rerank、引用和自动评测看起来都值得加入，但它们同时推进后，一旦回答出现 Bad Case，我很难判断问题究竟来自文档摄入、召回排序还是生成环节。功能在增加，学习效率反而下降。\n\n**可解释、可重复的基线**：当时最重要的不是继续补功能，而是先建立一个可解释、可重复的基线。于是我把方案重新拆成验证顺序，先用 Dense Retrieval 跑通摄入—检索—生成主链路，固定基础流程；再把高级检索和评测能力拆成独立实验，每轮只改变少量变量。\n\n**单变量验证**：我不再用功能数量判断进度，而是分别检查召回内容是否相关、回答是否忠于上下文、引用能否支持结论，以及失败样本能否转成下一轮任务。这个调整没有制造一个漂亮的硬指标，但它让项目从“堆能力”转向“积累有效判断”。我由此认识到，AI 产品经理的重要工作是控制变量、管理不确定性，并让团队清楚下一步为什么值得做。",
+    matchKeywords: ["面试核实", "追问", "遇到什么困难", "项目困难", "失败案例", "项目挑战", "挑战", "失败", "最难的取舍"],
+    standardAnswer: "RAG 项目中一个很典型的挑战，是我早期把“功能更多”误认为“产品更完整”。混合检索、Rerank、引用和自动评测看起来都值得加入，但这种**功能堆叠**同时推进后，一旦回答出现 Bad Case，我很难判断问题究竟来自文档摄入、召回排序还是生成环节。功能在增加，学习效率反而下降。\n\n**可解释、可重复的基线**：当时最重要的不是继续补功能，而是先建立一个可解释、可重复的基线。于是我把方案重新拆成验证顺序，先用 Dense Retrieval 跑通摄入—检索—生成主链路，固定基础流程；再把高级检索和评测能力拆成独立实验，每轮只改变少量变量。\n\n**单变量验证**：我不再用功能数量判断进度，而是分别检查召回内容是否相关、回答是否忠于上下文、引用能否支持结论，以及失败样本能否转成下一轮任务。这个调整没有制造一个漂亮的硬指标，但它让项目从“堆能力”转向“积累有效判断”。我由此认识到，AI 产品经理的重要工作是控制变量、管理不确定性，并让团队清楚下一步为什么值得做。",
     details: ["早期把功能数量误认为完整度", "同时推进导致 Bad Case 难定位", "回到 Dense Retrieval 基线并拆分实验", "用召回、忠实度、引用和失败样本验收"],
     limitations: "这是方案取舍与复盘，不虚构线上事故或业务损失。",
     claimIds: ["C2", "C3", "C4", "C8"], sourceIds: ["S1", "S3", "S4", "S10"], relatedProject: "rag-knowledge-base",
@@ -566,6 +568,56 @@ export const stableAnswerContent = [
     responseShape: "project_arc", targetLength: { min: 340, max: 520 }, preferredStoryIds: ["ST1"],
     followUpQuestions: ["RAG 项目的引用准确率提升了多少？", "你会如何建立第一版 RAG 评测集？", "RAG 项目体现了你哪些产品方法？"],
     closingPurpose: "落到以证据、基线和 Bad Case 驱动 RAG 迭代的方法。",
+  }),
+  answer({
+    id: "A32",
+    question: "你的 RAG 项目目前取得了什么结果？",
+    matchKeywords: ["rag项目结果", "rag取得了什么结果", "取得了什么结果", "现在取得了什么结果", "当前结果"],
+    matchRequiresProjectContext: true,
+    standardAnswer: "目前 RAG 项目已经完成并可以演示的，是从专业文档摄入、切分和向量化，到 Dense Retrieval、上下文组装和回答生成的**检索生成主链路**；公开仓库可以检查当前代码和方案。\n\n这个结果证明我已经把“可信专业问答”的问题推进成一条**可运行、可评测**的产品链路，也建立了召回相关性、回答忠实度和引用支持等质量判断维度。混合检索、Rerank、完整引用和自动评测仍按独立变量继续验证。\n\n因此，我会把当前成果准确表述为主链路与质量基线已经形成，而不是生产上线、真实用户增长或商业化结果。",
+    details: ["RAG 主链路可运行并可演示", "Dense Retrieval 质量基线", "高级检索和完整引用仍在验证", "没有生产或用户增长结论"],
+    limitations: "不把公开仓库和可演示主链路描述为生产上线或真实用户效果。",
+    claimIds: ["C3"], sourceIds: ["S1", "S3"], verification: "externally_verified", relatedProject: "rag-knowledge-base",
+    evaluationGoal: "准确说明 RAG 当前已完成成果、验证价值和未完成边界。",
+    exclusivePoints: ["主链路已经实现", "形成可演示和可评测基线", "不虚构生产和用户结果"],
+    avoidRepeating: ["重新讲完整项目背景", "虚构准确率提升", "泛泛谈岗位优势"],
+    responseShape: "direct", targetLength: { min: 260, max: 390 }, preferredStoryIds: ["ST1"],
+    followUpQuestions: ["为什么先选择 Dense Retrieval？", "你如何评估 RAG 回答质量？", "下一步最值得验证什么？"],
+    closingPurpose: "区分可演示结果与市场结果。",
+  }),
+  answer({
+    id: "A33",
+    question: "DeepFlow 项目中最难的挑战是什么？",
+    matchKeywords: ["deepflow挑战", "deepflow困难", "deepflow取舍", "调整和验证", "如何调整"],
+    matchRequiresProjectContext: true,
+    standardAnswer: "DeepFlow 中最难的挑战，是在 Agent 的自主执行和过程可控之间找到平衡。复杂研究任务如果一次性交给模型，虽然看起来自动化程度很高，但计划容易跑偏，使用者也很难判断中间过程和最终结论是否可靠。\n\n我的调整是把任务拆成计划、检索、分析和报告等角色与阶段，并在研究计划、方向调整等高成本节点加入**人工确认**；同时保留任务状态、过程事件和引用，让问题能够被检查并定位到具体环节。\n\n验证时我先看从任务澄清到报告输出的最小链路能否跑通，再检查角色交接、关键人审节点和报告资产是否完整。这个取舍最终形成了**可演示 MVP**，也让我明确：Agent 产品的价值不是尽可能自动，而是在合适的地方保留人的判断，让执行可控、结果可追溯。",
+    details: ["复杂任务容易跑偏且过程难追踪", "按角色和阶段拆解", "高成本节点加入人工确认", "通过最小链路和报告资产验证"],
+    limitations: "不虚构真实用户规模、生产并发或长期稳定性数据。",
+    claimIds: ["C4"], sourceIds: ["S1", "S4"], verification: "externally_verified", relatedProject: "deepflow",
+    evaluationGoal: "用真实产品取舍说明如何调整并验证 Agent 自主性与可控性。",
+    exclusivePoints: ["自主性与可控性的矛盾", "角色拆分和人工确认", "最小链路与报告资产验证"],
+    mustInclude: ["自主执行", "人工确认", "最小链路"],
+    avoidRepeating: ["重新介绍全部 Agent 名称", "RAG 检索细节", "虚构生产事故"],
+    responseShape: "star", targetLength: { min: 300, max: 440 }, preferredStoryIds: ["ST2"],
+    followUpQuestions: ["为什么必须保留人工确认？", "Agent 之间如何交接任务？", "如果继续迭代你会先验证什么？"],
+    closingPurpose: "落到可控自主执行和可追溯结果。",
+  }),
+  answer({
+    id: "A34",
+    question: "DeepFlow 做过多少次用户测试，满意度提升了多少？",
+    matchKeywords: ["deepflow用户测试", "做过多少次用户测试", "满意度提升了多少", "deepflow满意度"],
+    matchRequiresProjectContext: true,
+    standardAnswer: "目前 DeepFlow 已形成从任务澄清到报告输出的**可演示 MVP**，但没有可以公开说明的用户测试次数，也没有满意度提升数据。我不会把内部演示、个人试用或方案验证包装成真实用户研究结果。\n\n当前能够确认的价值，是多 Agent 的计划、检索、分析和报告链路已经形成，并在高成本节点加入人工确认，让过程更可观察、结果更可追溯。下一步如果要验证用户价值，我会先选定明确的研究任务和目标用户，记录任务完成、方向纠偏、报告可用性和重复使用意愿，再基于同一口径比较。\n\n因此，这个项目现在能证明的是**工作流可控性**，还不能证明用户满意度或商业结果已经提升。",
+    details: ["DeepFlow 已形成可演示 MVP", "没有公开用户测试次数", "没有满意度提升数据", "下一步用真实任务和同一口径验证"],
+    limitations: "没有公开的用户测试次数、满意度提升、生产规模或商业结果。",
+    claimIds: ["C4"], sourceIds: ["S1", "S4"], verification: "externally_verified", relatedProject: "deepflow",
+    evaluationGoal: "直接回答 DeepFlow 用户测试与满意度证据边界，不编造数字。",
+    exclusivePoints: ["可演示 MVP", "没有用户测试次数或满意度数据", "下一步真实任务验证"],
+    mustInclude: ["DeepFlow", "没有", "用户测试"],
+    avoidRepeating: ["罗列全部 Agent 名称", "虚构用户反馈", "延伸到其他项目"],
+    responseShape: "shortcoming", targetLength: { min: 260, max: 400 }, preferredStoryIds: ["ST2"],
+    followUpQuestions: ["你会如何设计第一轮用户测试？", "DeepFlow 当前最值得验证什么？", "为什么保留人工确认？"],
+    closingPurpose: "区分工作流验证与真实用户结果。",
   }),
 ] as const;
 

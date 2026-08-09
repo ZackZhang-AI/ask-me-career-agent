@@ -144,11 +144,14 @@ export function matchStableAnswer(question: string, history: ChatMessage[] = [],
     ...(effectiveFrame.answerIntent === "project_overview" ? ["representative_project", "project_problem"] : []),
     ...(effectiveFrame.answerIntent === "experience_value" ? ["experience"] : []),
   ]);
-  if (resolved.matchedProjects.length > 1) return undefined;
   const ranked = stableAnswers
     .filter(isStableAnswerRetrievable)
     .map((item) => {
-      if (effectiveFrame.activeProject && item.relatedProject !== effectiveFrame.activeProject) return { item, score: 0, hasAnswerMatch: false };
+      if (item.matchRequiresProjectContext && !effectiveFrame.activeProject && !(item.relatedProject && resolved.matchedProjects.includes(item.relatedProject))) {
+        return { item, score: 0, hasAnswerMatch: false };
+      }
+      if (resolved.matchedProjects.length > 1 && item.relatedProject) return { item, score: 0, hasAnswerMatch: false };
+      if (effectiveFrame.activeProject && item.relatedProject && item.relatedProject !== effectiveFrame.activeProject) return { item, score: 0, hasAnswerMatch: false };
       if (item.id === "A02" && effectiveFrame.targetRole && !/^AI\s*产品经理$/i.test(effectiveFrame.targetRole)) {
         return { item, score: 0, hasAnswerMatch: false };
       }

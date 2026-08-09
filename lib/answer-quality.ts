@@ -135,6 +135,18 @@ export interface QualityGateResult {
   triggers: string[];
 }
 
+const ADVISORY_TRIGGERS = new Set([
+  "excessive_emphasis",
+  "insufficient_emphasis",
+  "long_emphasis",
+  "low_information_emphasis",
+  "weak_structure",
+]);
+
+export function hasBlockingQualityTriggers(triggers: readonly string[]) {
+  return triggers.some((trigger) => !ADVISORY_TRIGGERS.has(trigger));
+}
+
 export function validateAnswer(candidate: string, plan: AnswerPlan): QualityGateResult {
   const triggers: string[] = [];
   const clean = candidate.trim();
@@ -233,7 +245,12 @@ export function validateAnswer(candidate: string, plan: AnswerPlan): QualityGate
   }
 
   for (const sentence of clean.split(/[。！？\n]+/).map((item) => item.trim()).filter(Boolean)) {
-    if (EVENT_SIGNAL.test(sentence) && groundingScore(sentence, allowedText) < 0.3) triggers.push("unsupported_event");
+    const explicitPastClaim = /我(?:之前|曾经|曾|实际).{0,18}(?:负责|主导|参与|完成|推动|交付|上线|遇到|发现|验证)/.test(sentence);
+    if (EVENT_SIGNAL.test(sentence)
+      && groundingScore(sentence, allowedText) < 0.3
+      && (plan.questionMode !== "candidate_reasoning" || explicitPastClaim)) {
+      triggers.push("unsupported_event");
+    }
   }
 
   if (/(?:去年|前年|今年|上个月|近期)/.test(clean) && !/(?:去年|前年|今年|上个月|近期)/.test(allowedText)) {
@@ -248,7 +265,8 @@ export function validateAnswer(candidate: string, plan: AnswerPlan): QualityGate
     triggers.push("unrequested_limitation");
   }
 
-  return { passed: triggers.length === 0, triggers: [...new Set(triggers)] };
+  const uniqueTriggers = [...new Set(triggers)];
+  return { passed: !hasBlockingQualityTriggers(uniqueTriggers), triggers: uniqueTriggers };
 }
 
 export function repairInstruction(plan: AnswerPlan, triggers: string[]) {

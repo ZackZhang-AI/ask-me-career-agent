@@ -5,6 +5,7 @@ import { buildAnswerPlan, systemPrompt } from "../lib/answer.ts";
 import { validateAnswer } from "../lib/answer-quality.ts";
 import { parseAnswerEmphasis } from "../lib/answer-format.ts";
 import { matchStableAnswer, retrieveKnowledge } from "../lib/knowledge.ts";
+import { buildLocalQuestionFrame } from "../lib/question-contracts.ts";
 
 const question = "哪个项目最能代表他的 AI 产品能力？";
 const stable = matchStableAnswer(question);
@@ -88,6 +89,24 @@ test("质量门禁拒绝过度加粗和整句加粗", () => {
   const longEmphasis = plan.fallbackAnswer.replace("**可信专业问答**", "**这是一个明显超过长度限制而且不应该被整段加粗的标题文本因为它仍在继续扩展**");
   assert.equal(validateAnswer(overformatted, plan).triggers.includes("excessive_emphasis"), true);
   assert.equal(validateAnswer(longEmphasis, plan).triggers.includes("long_emphasis"), true);
+  assert.equal(validateAnswer(longEmphasis, plan).passed, true);
+});
+
+test("假设题的方法表达不被误判为未记录事件", () => {
+  const hypotheticalQuestion = "如果一个 AI 产品上线后用户反馈效果不好，你会怎么排查？";
+  const frame = buildLocalQuestionFrame(hypotheticalQuestion);
+  const hypotheticalPlan = buildAnswerPlan(
+    hypotheticalQuestion,
+    retrieveKnowledge(hypotheticalQuestion, { frame }),
+    undefined,
+    [],
+    frame,
+  );
+  const result = validateAnswer(
+    "我的处理思路是先确认问题影响的用户任务和成功标准。如果产品上线后效果不好，我会先核对数据口径与样本，再按模型、Prompt、检索、工具和交互环节分类 Bad Case，最后固定评测集做单变量复测，用结果决定下一轮优先级。",
+    hypotheticalPlan,
+  );
+  assert.equal(result.triggers.includes("unsupported_event"), false);
 });
 
 test("质量门禁拒绝只有栏目作用的加黑词语", () => {

@@ -3,7 +3,7 @@ import test from "node:test";
 import { buildAnswerPlan } from "../lib/answer.ts";
 import { validateAnswer } from "../lib/answer-quality.ts";
 import { matchStableAnswer, retrieveKnowledge } from "../lib/knowledge.ts";
-import { buildLocalQuestionFrame } from "../lib/question-contracts.ts";
+import { buildLocalQuestionFrame, findQuestionContract, mergePlannedFrame } from "../lib/question-contracts.ts";
 import type { AnswerIntent } from "../lib/types.ts";
 
 const routingCases: Array<{ question: string; intent: AnswerIntent; targetRole?: string }> = [
@@ -101,6 +101,67 @@ test("75 个未预写开放问题按提问动作稳定路由", () => {
     assert.equal(frame.answerIntent, fixture.intent, fixture.question);
     if (fixture.targetRole) assert.equal(frame.targetRole, fixture.targetRole, fixture.question);
   }
+});
+
+test("本地高置信度动作不被模型规划器覆盖", () => {
+  const challenge = buildLocalQuestionFrame("请你讲一个项目中的真实挑战或失败，并说明如何定位、调整和验证。");
+  assert.equal(challenge.answerIntent, "challenge");
+  assert.ok(challenge.confidence >= 0.82);
+
+  const merged = mergePlannedFrame(challenge, {
+    topic: "profile",
+    facet: "transfer",
+    answerIntent: "career_transition",
+    questionMode: "candidate_fact",
+    evidencePolicy: "required",
+    focusTerms: ["职业转型动机"],
+    requestedDimensions: ["选择原因"],
+    useHistory: false,
+    confidence: 0.95,
+  });
+  assert.equal(merged.answerIntent, "challenge");
+});
+
+test("包含上线字样的假设排查题优先识别为方法题", () => {
+  const frame = buildLocalQuestionFrame("如果一个 AI 产品上线后用户反馈效果不好，你会怎么排查？");
+  assert.equal(frame.answerIntent, "diagnosis");
+  assert.equal(frame.questionMode, "candidate_reasoning");
+  assert.ok(frame.confidence >= 0.82);
+});
+
+test("简历核心事实题使用精确契约且不误判为 Agent 能力", () => {
+  assert.equal(findQuestionContract("RAG 项目的混合检索和引用溯源是怎样设计的？")?.id, "rag_architecture");
+  assert.equal(findQuestionContract("他的审计工具如何完成资料归档？")?.id, "audit_archive_tool");
+  assert.equal(findQuestionContract("IT 审计日志抽查助手能做什么？")?.id, "audit_log_tool");
+  assert.equal(findQuestionContract("他的德勤校园大使经历体现了哪些业务能力？")?.id, "campus_ambassador");
+  assert.equal(buildLocalQuestionFrame("IT 审计日志抽查助手能做什么？").answerIntent, "project_overview");
+});
+
+test("项目结果与挑战追问沿用历史对象并命中对应稳定回答", () => {
+  const ragHistory = [
+    { role: "user" as const, content: "RAG 项目解决了什么问题？" },
+    { role: "assistant" as const, content: "我介绍了 RAG 项目的专业资料问答问题。" },
+  ];
+  const resultQuestion = "它现在取得了什么结果？";
+  const tradeoffQuestion = "其中最难的取舍是什么？";
+  assert.equal(matchStableAnswer(resultQuestion, ragHistory, buildLocalQuestionFrame(resultQuestion, ragHistory))?.id, "A32");
+  assert.equal(matchStableAnswer(tradeoffQuestion, ragHistory, buildLocalQuestionFrame(tradeoffQuestion, ragHistory))?.id, "A15");
+
+  const deepFlowHistory = [
+    { role: "user" as const, content: "介绍一下 DeepFlow。" },
+    { role: "assistant" as const, content: "我介绍了 DeepFlow 的 Agent 工作流。" },
+    { role: "user" as const, content: "这个项目遇到的挑战是什么？" },
+    { role: "assistant" as const, content: "核心挑战是任务可能跑偏。" },
+  ];
+  const adjustmentQuestion = "你当时如何调整和验证？";
+  assert.equal(matchStableAnswer(adjustmentQuestion, deepFlowHistory, buildLocalQuestionFrame(adjustmentQuestion, deepFlowHistory))?.id, "A33");
+});
+
+test("单项目与多项目结果题分别使用对应事实边界回答", () => {
+  const deepFlowQuestion = "DeepFlow 做过多少次用户测试，满意度提升了多少？";
+  const multiProjectQuestion = "RAG 和 DeepFlow 已经上线并服务了多少真实用户？";
+  assert.equal(matchStableAnswer(deepFlowQuestion, [], buildLocalQuestionFrame(deepFlowQuestion))?.id, "A34");
+  assert.equal(matchStableAnswer(multiProjectQuestion, [], buildLocalQuestionFrame(multiProjectQuestion))?.id, "A19");
 });
 
 test("转型与新岗位问题均生成非空、相关且事实安全的面试回答", () => {

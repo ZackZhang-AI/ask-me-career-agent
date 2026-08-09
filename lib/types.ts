@@ -240,6 +240,7 @@ export interface StableAnswer extends ContentMetadata {
   requiredClaimIds: string[];
   requiredSourceIds: string[];
   matchKeywords: string[];
+  matchRequiresProjectContext?: boolean;
   evaluationGoal: string;
   exclusivePoints: string[];
   avoidRepeating: string[];

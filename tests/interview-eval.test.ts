@@ -34,7 +34,7 @@ test("AI 面试预演覆盖 6 个模拟角色与 8 类问题", () => {
   assert.equal(releaseCases.length, 8);
   assert.equal(new Set(releaseCases.map((item) => item.question)).size, 8);
   assert.deepEqual(questionCategories.map((item) => item.name), [
-    "60 秒介绍", "岗位匹配", "代表项目", "个人贡献", "AI 编程占比", "挑战或失败", "用户与业务价值", "是否建议进入下一轮",
+    "60 秒介绍", "岗位匹配", "代表项目", "个人贡献", "AI 编程占比", "挑战或失败", "用户与业务价值", "下一轮说服力",
   ]);
 });
 

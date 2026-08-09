@@ -11,10 +11,14 @@ function normalizeModelId(modelId: string) {
   return modelId.replace(/^deepseek\//, "");
 }
 
+export function resolveDeepSeekBaseURL(value = process.env.DEEPSEEK_BASE_URL) {
+  return value?.trim() || "https://api.deepseek.com";
+}
+
 const PRIMARY_MODEL = normalizeModelId(process.env.AI_PRIMARY_MODEL ?? "deepseek-v4-flash");
 const FALLBACK_MODEL = normalizeModelId(process.env.AI_FALLBACK_MODEL ?? "deepseek-v4-pro");
 const deepSeek = createDeepSeek({
-  baseURL: process.env.DEEPSEEK_BASE_URL ?? "https://api.deepseek.com",
+  baseURL: resolveDeepSeekBaseURL(),
 });
 
 export class DeepSeekUpstreamError extends Error {
@@ -186,9 +190,8 @@ export async function generateDeepSeekAnswer(input: GenerateInput) {
 }
 
 export async function reviewDeepSeekAnswer(input: ReviewAnswerInput) {
-  let result;
-  try {
-    result = await generateText({
+  const runReview = async () => {
+    const generated = await generateText({
       model: deepSeek(FALLBACK_MODEL),
       output: Output.object({ schema: interviewReviewSchema }),
       instructions: buildReviewPrompt(input.question, input.candidate, input.plan, input.localTriggers),
@@ -198,11 +201,22 @@ export async function reviewDeepSeekAnswer(input: ReviewAnswerInput) {
       maxOutputTokens: 1_400,
       abortSignal: input.signal,
     });
+    if (!generated.output) throw new DeepSeekUpstreamError(502, "最终审校模型返回空结果");
+    return generated;
+  };
+
+  let result;
+  try {
+    result = await runReview();
   } catch (error) {
-    throw upstreamError(error, "最终审校模型服务返回异常");
+    if (!canFallbackToPro(error)) throw upstreamError(error, "最终审校模型服务返回异常");
+    try {
+      result = await runReview();
+    } catch (retryError) {
+      throw upstreamError(retryError, "最终审校模型服务返回异常");
+    }
   }
 
-  if (!result.output) throw new DeepSeekUpstreamError(502, "最终审校模型返回空结果");
   return {
     review: result.output,
     totalTokens: Number(result.usage?.totalTokens ?? 0),

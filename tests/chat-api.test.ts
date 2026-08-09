@@ -147,6 +147,28 @@ test("Agent 基础问题使用独立快速回答且不消耗模型调用", async
   assert.notEqual(identityAnswer, capabilityAnswer);
 });
 
+test("稳定回答的常见问法不会被模型规划器改写路由", async () => {
+  process.env.DEEPSEEK_API_KEY = "test-only-placeholder";
+  let calls = 0;
+  globalThis.fetch = async () => { calls += 1; return new Response(null, { status: 500 }); };
+
+  const questions = [
+    "你的项目里 AI 编程工具承担了多少工作？请说明你本人判断与 AI 辅助的边界。",
+    "你的 RAG 项目服务什么用户、解决什么问题，目前有什么价值？",
+    "为什么面试官应该让你进入下一轮？请用能力和经历说明。",
+  ];
+  for (const [index, question] of questions.entries()) {
+    const responseEvents = await events(await POST(request({
+      sessionId: `api-stable-alias-${index}`,
+      messages: [{ role: "user", content: question }],
+    })));
+    assert.equal(metaEvent(responseEvents).mode, "stable", question);
+    assert.equal(metaEvent(responseEvents).responseStatus, "completed", question);
+  }
+
+  assert.equal(calls, 0);
+});
+
 test("深层方法指代沿用上一轮 RAG 语境", async () => {
   process.env.DEEPSEEK_API_KEY = "test-only-placeholder";
   const question = "如果这套方法没有改善效果，你下一步会优先排查什么？";
@@ -160,8 +182,7 @@ test("深层方法指代沿用上一轮 RAG 语境", async () => {
   let calls = 0;
   globalThis.fetch = async () => {
     calls += 1;
-    if (calls === 1) return deepSeekStream(JSON.stringify(plannerFrame({ topic: "rag", facet: "evaluation", answerIntent: "diagnosis", questionMode: "candidate_reasoning", evidencePolicy: "supporting", focusTerms: ["Bad Case", "排查"], requestedDimensions: ["处理思路"], activeProject: "rag-knowledge-base", useHistory: true })));
-    if (calls === 2) return deepSeekStream(answer);
+    if (calls === 1) return deepSeekStream(answer);
     return deepSeekStream(JSON.stringify(reviewResult("pass")));
   };
   const responseEvents = await events(await POST(request({
@@ -169,7 +190,7 @@ test("深层方法指代沿用上一轮 RAG 语境", async () => {
     messages: [...history, { role: "user", content: question }],
   })));
 
-  assert.equal(calls, 3);
+  assert.equal(calls, 2);
   assert.equal(metaEvent(responseEvents).mode, "live");
   assert.equal(metaEvent(responseEvents).responseStatus, "completed");
   assert.equal(metaEvent(responseEvents).disposition, "scoped_answer");

@@ -2,8 +2,15 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { buildAnswerPlan, demoAnswer, systemPrompt } from "../lib/answer.ts";
 import { validateAnswer } from "../lib/answer-quality.ts";
+import { resolveDeepSeekBaseURL } from "../lib/deepseek.ts";
 import { assessQuestion, redactForLog } from "../lib/guardrails.ts";
 import { claims, getRelatedStarStories, knowledge, matchStableAnswer, resolveRetrievalQuery, retrieveKnowledge, sources } from "../lib/knowledge.ts";
+
+test("DeepSeek 地址为空时使用官方地址", () => {
+  assert.equal(resolveDeepSeekBaseURL(""), "https://api.deepseek.com");
+  assert.equal(resolveDeepSeekBaseURL("   "), "https://api.deepseek.com");
+  assert.equal(resolveDeepSeekBaseURL("https://example.com/v1"), "https://example.com/v1");
+});
 
 test("召回岗位匹配知识并保留证据边界", () => {
   const result = retrieveKnowledge("他与 AI 产品经理岗位的匹配证据是什么？");
@@ -73,8 +80,11 @@ test("招聘高频表达稳定匹配对应面试回答", () => {
   assert.equal(matchStableAnswer("你在 RAG 项目里具体做了什么？")?.id, "A05");
   assert.equal(matchStableAnswer("你是如何评测 RAG 效果的？")?.id, "A05");
   assert.equal(matchStableAnswer("AI 编程占比多少？")?.id, "A07");
+  assert.equal(matchStableAnswer("你的项目里 AI 编程工具承担了多少工作？请说明你本人判断与 AI 辅助的边界。")?.id, "A07");
+  assert.equal(matchStableAnswer("你的 RAG 项目服务什么用户、解决什么问题，目前有什么价值？")?.id, "A04");
   assert.equal(matchStableAnswer("请讲一个失败案例。")?.id, "A15");
   assert.equal(matchStableAnswer("你建议让他进入下一轮吗？")?.id, "A20");
+  assert.equal(matchStableAnswer("为什么面试官应该让你进入下一轮？请用能力和经历说明。")?.id, "A20");
 });
 
 test("只有被问到短板或边界时，回退回答才自然补充限制", () => {
@@ -210,7 +220,8 @@ test("深层指代变体继承最近项目且不误匹配固定项目介绍", ()
     const plan = buildAnswerPlan(question, items, undefined, history);
     assert.equal(plan.intent, "diagnosis", question);
     assert.match(plan.fallbackAnswer, /先查评测|再拆链路|单变量验证/, question);
-    assert.equal(validateAnswer(plan.fallbackAnswer, plan).passed, true, question);
+    const gate = validateAnswer(plan.fallbackAnswer, plan);
+    assert.equal(gate.passed, true, `${question}: ${gate.triggers.join(", ")}`);
   }
 
   const diagnosticItems = retrieveKnowledge(questions[0], { history, limit: 4 });

@@ -25,14 +25,14 @@ export const interviewRoles = [
 ] as const;
 
 export const questionCategories = [
-  { id: "sixty_second_intro", name: "60 秒介绍", question: "请用 60 秒介绍张倬玮，并说明最值得继续面试的三个差异点。", semanticGroups: [["AI 产品"], ["数据", "统计", "评测"], ["业务", "审计", "企业流程", "企业场景"]], targetLength: { min: 430, max: 600 } },
-  { id: "role_fit", name: "岗位匹配", question: "他为什么适合初级 AI 产品经理岗位？", semanticGroups: [["AI 产品"], ["评测", "数据"], ["业务", "审计", "企业"]], targetLength: { min: 360, max: 480 } },
-  { id: "representative_project", name: "代表项目", question: "哪个项目最能代表他的 AI 产品能力？请说明项目价值。", semanticGroups: [["RAG"], ["检索", "Dense Retrieval"], ["产品", "需求", "取舍"]], targetLength: { min: 390, max: 520 } },
-  { id: "personal_contribution", name: "个人贡献", question: "他在 RAG 项目中具体做了什么？请区分本人判断与 AI 辅助。", semanticGroups: [["负责", "判断", "取舍"], ["AI", "工具"], ["验收", "评测", "复核"]], targetLength: { min: 400, max: 560 } },
-  { id: "ai_coding_share", name: "AI 编程占比", question: "这些项目里 AI 编程工具承担了多少工作？请说明候选人本人判断与 AI 辅助的边界。", semanticGroups: [["AI"], ["负责", "判断"], ["工具", "编程"]], targetLength: { min: 350, max: 500 } },
-  { id: "challenge_or_failure", name: "挑战或失败", question: "请讲一个项目中的真实挑战或失败，并说明如何定位、调整和验证。", semanticGroups: [["问题", "挑战", "跑偏"], ["取舍", "调整"], ["验证", "评测", "检查"]], targetLength: { min: 400, max: 560 } },
-  { id: "user_business_value", name: "用户与业务价值", question: "这些项目服务什么用户、解决什么业务问题，目前有什么价值？", semanticGroups: [["问题", "用户"], ["产品", "方案"], ["价值", "流程", "效率"]], targetLength: { min: 320, max: 460 } },
-  { id: "next_round_recommendation", name: "是否建议进入下一轮", question: "基于当前公开信息，你是否建议安排下一轮初步面试？请给出理由，不要给录用结论。", semanticGroups: [["下一轮"], ["价值", "岗位"], ["能力", "证据"]], targetLength: { min: 320, max: 460 } },
+  { id: "sixty_second_intro", name: "60 秒介绍", question: "请你用 60 秒做自我介绍，并说明最值得继续面试的三个差异点。", semanticGroups: [["AI 产品"], ["数据", "统计", "评测"], ["业务", "审计", "企业流程", "企业场景"]], targetLength: { min: 430, max: 600 } },
+  { id: "role_fit", name: "岗位匹配", question: "你为什么适合初级 AI 产品经理岗位？", semanticGroups: [["AI 产品"], ["评测", "数据"], ["业务", "审计", "企业"]], targetLength: { min: 360, max: 480 } },
+  { id: "representative_project", name: "代表项目", question: "哪个项目最能代表你的 AI 产品能力？请说明项目价值。", semanticGroups: [["RAG"], ["检索", "Dense Retrieval"], ["产品", "需求", "取舍"]], targetLength: { min: 390, max: 520 } },
+  { id: "personal_contribution", name: "个人贡献", question: "你在 RAG 项目中具体做了什么？请区分你的判断与 AI 辅助。", semanticGroups: [["负责", "判断", "取舍"], ["AI", "工具"], ["验收", "评测", "复核"]], targetLength: { min: 400, max: 560 } },
+  { id: "ai_coding_share", name: "AI 编程占比", question: "你的项目里 AI 编程工具承担了多少工作？请说明你本人判断与 AI 辅助的边界。", semanticGroups: [["AI"], ["负责", "判断"], ["工具", "编程"]], targetLength: { min: 350, max: 500 } },
+  { id: "challenge_or_failure", name: "挑战或失败", question: "请你讲一个项目中的真实挑战或失败，并说明如何定位、调整和验证。", semanticGroups: [["问题", "挑战", "跑偏"], ["取舍", "调整"], ["验证", "评测", "检查"]], targetLength: { min: 400, max: 560 } },
+  { id: "user_business_value", name: "用户与业务价值", question: "你的 RAG 项目服务什么用户、解决什么问题，目前有什么价值？", semanticGroups: [["问题", "用户"], ["RAG", "产品", "方案"], ["价值", "流程", "效率"]], targetLength: { min: 320, max: 460 } },
+  { id: "next_round_recommendation", name: "下一轮说服力", question: "为什么面试官应该让你进入下一轮？请用能力和经历说明。", semanticGroups: [["下一轮"], ["价值", "岗位"], ["能力", "经历", "评测"]], targetLength: { min: 300, max: 460 } },
 ] as const;
 
 export const scoreDimensions = ["清晰度", "差异化", "可信度", "追问承受力", "面试转化意愿"] as const;
@@ -310,18 +310,23 @@ async function deepSeekAnswer(testCase: Pick<InterviewCase, "question" | "roleNa
   if (!assessment.allowed) return { text: assessment.reason, responseStatus: "refused", claimIds: [], sourceIds: [], answerMode: "guardrail" };
   const contract = findQuestionContract(testCase.question);
   const localFrame = contract ? frameFromContract(contract) : buildLocalQuestionFrame(testCase.question, history);
+  const localStableAnswer = matchStableAnswer(testCase.question, history, localFrame);
   let frame = localFrame;
-  if (!contract && localFrame.questionMode !== "agent_meta") {
-    const planned = await planDeepSeekQuestion({
-      question: testCase.question,
-      history,
-      signal: AbortSignal.timeout(12_000),
-      userId: "interview-evaluation",
-    });
-    frame = mergePlannedFrame(localFrame, planned.frame);
+  if (!contract && !localStableAnswer && localFrame.confidence < 0.82 && localFrame.questionMode !== "agent_meta") {
+    try {
+      const planned = await planDeepSeekQuestion({
+        question: testCase.question,
+        history,
+        signal: AbortSignal.timeout(12_000),
+        userId: "interview-evaluation",
+      });
+      frame = mergePlannedFrame(localFrame, planned.frame);
+    } catch {
+      frame = localFrame;
+    }
   }
   const items = retrieveKnowledge(testCase.question, { history, limit: 4, frame });
-  const stableAnswer = matchStableAnswer(testCase.question, history, frame);
+  const stableAnswer = localStableAnswer ?? matchStableAnswer(testCase.question, history, frame);
   const plan = buildAnswerPlan(testCase.question, items, stableAnswer, history, frame, contract);
   const claimIds = stableAnswer ? [...stableAnswer.requiredClaimIds] : [...new Set(items.flatMap((item) => item.claimIds))];
   const sourceIds = stableAnswer ? [...stableAnswer.requiredSourceIds] : [...new Set(items.flatMap((item) => item.sourceIds))];
@@ -366,8 +371,20 @@ async function deepSeekAnswer(testCase: Pick<InterviewCase, "question" | "roleNa
   return { ...base, text: reviewedText, responseStatus: "completed", answerMode: "deepseek" };
 }
 
-async function answerForCase(testCase: Pick<InterviewCase, "question" | "roleName" | "roleFocus">, mode: EvaluationMode, history: Array<{ role: "user" | "assistant"; content: string }> = []) {
-  if (mode === "deepseek") return deepSeekAnswer(testCase, history);
+async function answerForCase(testCase: Pick<InterviewCase, "question" | "roleName" | "roleFocus">, mode: EvaluationMode, history: Array<{ role: "user" | "assistant"; content: string }> = []): Promise<EvaluationAnswer> {
+  if (mode === "deepseek") {
+    try {
+      return await deepSeekAnswer(testCase, history);
+    } catch {
+      return {
+        text: serviceUnavailableMessage(),
+        responseStatus: "upstream_error",
+        claimIds: [],
+        sourceIds: [],
+        answerMode: "guardrail",
+      };
+    }
+  }
   return localAnswer(testCase.question, history);
 }
 

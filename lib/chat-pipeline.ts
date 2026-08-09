@@ -1,5 +1,5 @@
 import { buildAnswerPlan, buildContext, systemPrompt } from "./answer";
-import { validateAnswer } from "./answer-quality";
+import { hasBlockingQualityTriggers, validateAnswer } from "./answer-quality";
 import { decideAnswerability, serviceUnavailableMessage, unresolvedReferenceReason } from "./answerability";
 import {
   DeepSeekPlannerError,
@@ -104,6 +104,7 @@ export async function buildChatDelivery(input: PipelineInput): Promise<ChatDeliv
   const recentModelMessages = input.messages.slice(-10);
   const contract = findQuestionContract(input.question);
   const localFrame = buildLocalQuestionFrame(input.question, history);
+  const localStableAnswer = matchStableAnswer(input.question, history, localFrame);
   const hasUnresolvedReference = Boolean(unresolvedReferenceReason({ question: input.question, history, frame: localFrame, contract }));
   let frame = localFrame;
   let plannerUsed = false;
@@ -112,7 +113,7 @@ export async function buildChatDelivery(input: PipelineInput): Promise<ChatDeliv
   let plannerReservation = 0;
   let plannerModelPath: ModelPath | undefined;
 
-  if (!contract && !hasUnresolvedReference && localFrame.questionMode !== "agent_meta" && input.modelConfigured) {
+  if (!contract && !localStableAnswer && !hasUnresolvedReference && localFrame.confidence < 0.82 && localFrame.questionMode !== "agent_meta" && input.modelConfigured) {
     const plannerBudget = await reserveAdditionalModelCall(1_200);
     if (!plannerBudget.ok) {
       plannerFallbackReason = "planner_budget_exhausted";
@@ -146,7 +147,7 @@ export async function buildChatDelivery(input: PipelineInput): Promise<ChatDeliv
 
   input.onStage("checking_evidence");
   const items = retrieveKnowledge(input.question, { history, limit: 4, frame });
-  const stableAnswer = matchStableAnswer(input.question, history, frame);
+  const stableAnswer = localStableAnswer ?? matchStableAnswer(input.question, history, frame);
   const claimIds = stableAnswer ? [...stableAnswer.requiredClaimIds] : [...new Set(items.flatMap((item) => item.claimIds))];
   const sourceIds = stableAnswer ? [...stableAnswer.requiredSourceIds] : [...new Set(items.flatMap((item) => item.sourceIds))];
   const sources = getSources(sourceIds);
@@ -336,7 +337,7 @@ export async function buildChatDelivery(input: PipelineInput): Promise<ChatDeliv
       finalTriggers = [...finalTriggers, ...reviewed.review.failedDimensions.map((dimension) => `review:${dimension}`)];
     }
 
-    const accepted = reviewed.review.decision !== "reject" && finalTriggers.length === 0;
+    const accepted = reviewed.review.decision !== "reject" && !hasBlockingQualityTriggers(finalTriggers);
     console.info("ask-me-quality", JSON.stringify({
       contractId: plan.contractId,
       topic: plan.topic,
