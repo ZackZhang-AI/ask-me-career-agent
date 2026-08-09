@@ -62,9 +62,14 @@ function modelPathFrom(result: unknown): ModelPath {
 
 function upstreamError(error: unknown, fallbackMessage: string) {
   if (error instanceof DeepSeekUpstreamError) return error;
-  const status = APICallError.isInstance(error) && typeof error.statusCode === "number"
-    ? error.statusCode
-    : 502;
+  const statusCode = typeof error === "object" && error !== null && "statusCode" in error
+    ? (error as { statusCode?: unknown }).statusCode
+    : undefined;
+  const status = typeof statusCode === "number"
+    ? statusCode
+    : APICallError.isInstance(error) && typeof error.statusCode === "number"
+      ? error.statusCode
+      : 502;
   return new DeepSeekUpstreamError(status, fallbackMessage);
 }
 
