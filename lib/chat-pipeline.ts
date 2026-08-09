@@ -64,7 +64,7 @@ interface PipelineInput {
   messages: ChatMessage[];
   sessionId: string;
   signal: AbortSignal;
-  gatewayConfigured: boolean;
+  modelConfigured: boolean;
   estimatedTokens: number;
   initialTokenReservation: number;
   onStage: (stage: ProcessingStage) => void;
@@ -112,7 +112,7 @@ export async function buildChatDelivery(input: PipelineInput): Promise<ChatDeliv
   let plannerReservation = 0;
   let plannerModelPath: ModelPath | undefined;
 
-  if (!contract && !hasUnresolvedReference && localFrame.questionMode !== "agent_meta" && input.gatewayConfigured) {
+  if (!contract && !hasUnresolvedReference && localFrame.questionMode !== "agent_meta" && input.modelConfigured) {
     const plannerBudget = await reserveAdditionalModelCall(1_200);
     if (!plannerBudget.ok) {
       plannerFallbackReason = "planner_budget_exhausted";
@@ -261,7 +261,7 @@ export async function buildChatDelivery(input: PipelineInput): Promise<ChatDeliv
     };
   }
 
-  if (!input.gatewayConfigured) {
+  if (!input.modelConfigured) {
     return emptyDelivery({
       message: serviceUnavailableMessage(),
       disposition: "service_unavailable",

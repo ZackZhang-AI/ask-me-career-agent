@@ -48,16 +48,17 @@ function reviewResult(decision: "pass" | "rewrite" | "reject", revisedAnswer?: s
 
 function deepSeekStream(content: string, totalTokens = 100) {
   return new Response(JSON.stringify({
-    content: [{ type: "text", text: content }],
-    finishReason: { unified: "stop", raw: undefined },
-    usage: { inputTokens: { total: 20 }, outputTokens: { total: totalTokens - 20 } },
+    id: "chatcmpl-test",
+    created: 0,
+    model: "deepseek-v4-flash",
+    choices: [{ message: { role: "assistant", content }, finish_reason: "stop" }],
+    usage: { prompt_tokens: 20, completion_tokens: totalTokens - 20, total_tokens: totalTokens },
   }), { status: 200, headers: { "Content-Type": "application/json" } });
 }
 
 beforeEach(() => {
   resetLocalRateLimitsForTests();
   delete process.env.DEEPSEEK_API_KEY;
-  delete process.env.AI_GATEWAY_API_KEY;
   process.env.RATE_LIMIT_PER_MINUTE = "100";
   process.env.SESSION_QUESTION_LIMIT = "20";
   process.env.DAILY_REQUEST_LIMIT = "100";
@@ -67,7 +68,6 @@ beforeEach(() => {
 afterEach(() => {
   globalThis.fetch = originalFetch;
   delete process.env.DEEPSEEK_API_KEY;
-  delete process.env.AI_GATEWAY_API_KEY;
 });
 
 test("聊天接口拒绝非法 JSON 和超限会话", async () => {
@@ -110,7 +110,7 @@ test("安全拒答、证据不足与核心稳定回答返回标准 NDJSON 状态
 });
 
 test("Agent 基础问题使用独立快速回答且不消耗模型调用", async () => {
-  process.env.AI_GATEWAY_API_KEY = "test-only-placeholder";
+  process.env.DEEPSEEK_API_KEY = "test-only-placeholder";
   const history = [
     { role: "user" as const, content: "介绍一下你的背景。" },
     { role: "assistant" as const, content: "我介绍了教育、审计和项目经历。" },
@@ -148,7 +148,7 @@ test("Agent 基础问题使用独立快速回答且不消耗模型调用", async
 });
 
 test("深层方法指代沿用上一轮 RAG 语境", async () => {
-  process.env.AI_GATEWAY_API_KEY = "test-only-placeholder";
+  process.env.DEEPSEEK_API_KEY = "test-only-placeholder";
   const question = "如果这套方法没有改善效果，你下一步会优先排查什么？";
   const history = [
     { role: "user" as const, content: "你会如何用 Bad Case 决定 RAG 下一轮迭代优先级？" },
@@ -226,7 +226,7 @@ test("60 秒介绍返回足够完整的招聘视角回答", async () => {
 });
 
 test("模型上游过载和超时仍返回可见兜底回答", async () => {
-  process.env.AI_GATEWAY_API_KEY = "test-only-placeholder";
+  process.env.DEEPSEEK_API_KEY = "test-only-placeholder";
   const question = "请详细说明 Milvus 检索与 Rerank 的产品取舍";
 
   globalThis.fetch = async () => new Response(null, { status: 503 });
@@ -246,7 +246,7 @@ test("模型上游过载和超时仍返回可见兜底回答", async () => {
 });
 
 test("模型返回空内容时开放题不展示未经审校的本地答案", async () => {
-  process.env.AI_GATEWAY_API_KEY = "test-only-placeholder";
+  process.env.DEEPSEEK_API_KEY = "test-only-placeholder";
   globalThis.fetch = async () => deepSeekStream("");
 
   for (const [sessionId, question] of [
@@ -264,7 +264,7 @@ test("模型返回空内容时开放题不展示未经审校的本地答案", as
 });
 
 test("核心稳定回答不进入模型且始终使用事实骨架", async () => {
-  process.env.AI_GATEWAY_API_KEY = "test-only-placeholder";
+  process.env.DEEPSEEK_API_KEY = "test-only-placeholder";
   let calls = 0;
   globalThis.fetch = async () => {
     calls += 1;
@@ -285,7 +285,7 @@ test("核心稳定回答不进入模型且始终使用事实骨架", async () =>
 });
 
 test("缺少岗位上下文时优先澄清而不套用稳定答案", async () => {
-  process.env.AI_GATEWAY_API_KEY = "test-only-placeholder";
+  process.env.DEEPSEEK_API_KEY = "test-only-placeholder";
   let calls = 0;
   globalThis.fetch = async () => {
     calls += 1;
@@ -306,7 +306,7 @@ test("缺少岗位上下文时优先澄清而不套用稳定答案", async () =>
 });
 
 test("开放题由 Flash 生成并经 Pro 强制重写审校", async () => {
-  process.env.AI_GATEWAY_API_KEY = "test-only-placeholder";
+  process.env.DEEPSEEK_API_KEY = "test-only-placeholder";
   let calls = 0;
   globalThis.fetch = async () => {
     calls += 1;
@@ -332,7 +332,7 @@ test("开放题由 Flash 生成并经 Pro 强制重写审校", async () => {
 });
 
 test("开放题双模型失败时显示服务不可用而不冒充成功", async () => {
-  process.env.AI_GATEWAY_API_KEY = "test-only-placeholder";
+  process.env.DEEPSEEK_API_KEY = "test-only-placeholder";
   globalThis.fetch = async () => new Response(null, { status: 503 });
   const responseEvents = await events(await POST(request({
     sessionId: "api-open-fallback",
@@ -347,7 +347,7 @@ test("开放题双模型失败时显示服务不可用而不冒充成功", async
 });
 
 test("Pro 审校预算不足时不生成未经审校的开放题答案", async () => {
-  process.env.AI_GATEWAY_API_KEY = "test-only-placeholder";
+  process.env.DEEPSEEK_API_KEY = "test-only-placeholder";
   process.env.DAILY_REQUEST_LIMIT = "1";
   let calls = 0;
   globalThis.fetch = async () => {

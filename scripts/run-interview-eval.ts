@@ -5,7 +5,7 @@ import { pathToFileURL } from "node:url";
 import { buildAnswerPlan, buildContext, demoAnswer, systemPrompt } from "../lib/answer.ts";
 import { answerSimilarity, validateAnswer } from "../lib/answer-quality.ts";
 import { decideAnswerability, serviceUnavailableMessage } from "../lib/answerability.ts";
-import { generateDeepSeekAnswer, gatewayModelConfig, planDeepSeekQuestion, reviewDeepSeekAnswer } from "../lib/deepseek.ts";
+import { deepSeekModelConfig, generateDeepSeekAnswer, planDeepSeekQuestion, reviewDeepSeekAnswer } from "../lib/deepseek.ts";
 import { assessQuestion } from "../lib/guardrails.ts";
 import { matchStableAnswer, retrieveKnowledge } from "../lib/knowledge.ts";
 import { buildLocalQuestionFrame, findQuestionContract, frameFromContract, mergePlannedFrame, questionContracts } from "../lib/question-contracts.ts";
@@ -305,7 +305,7 @@ function localAnswer(question: string, history: Array<{ role: "user" | "assistan
   };
 }
 
-async function gatewayAnswer(testCase: Pick<InterviewCase, "question" | "roleName" | "roleFocus">, history: Array<{ role: "user" | "assistant"; content: string }> = []): Promise<EvaluationAnswer> {
+async function deepSeekAnswer(testCase: Pick<InterviewCase, "question" | "roleName" | "roleFocus">, history: Array<{ role: "user" | "assistant"; content: string }> = []): Promise<EvaluationAnswer> {
   const assessment = assessQuestion(testCase.question);
   if (!assessment.allowed) return { text: assessment.reason, responseStatus: "refused", claimIds: [], sourceIds: [], answerMode: "guardrail" };
   const contract = findQuestionContract(testCase.question);
@@ -367,7 +367,7 @@ async function gatewayAnswer(testCase: Pick<InterviewCase, "question" | "roleNam
 }
 
 async function answerForCase(testCase: Pick<InterviewCase, "question" | "roleName" | "roleFocus">, mode: EvaluationMode, history: Array<{ role: "user" | "assistant"; content: string }> = []) {
-  if (mode === "deepseek") return gatewayAnswer(testCase, history);
+  if (mode === "deepseek") return deepSeekAnswer(testCase, history);
   return localAnswer(testCase.question, history);
 }
 
@@ -525,11 +525,11 @@ function contractQualityMetrics() {
   };
 }
 
-export async function runInterviewEvaluation(options: { requestedMode?: "local" | "deepseek" | "auto"; gatewayConfigured?: boolean; generatedAt?: Date } = {}): Promise<InterviewEvaluationReport> {
+export async function runInterviewEvaluation(options: { requestedMode?: "local" | "deepseek" | "auto"; modelConfigured?: boolean; generatedAt?: Date } = {}): Promise<InterviewEvaluationReport> {
   const requestedMode = options.requestedMode ?? "local";
-  const gatewayConfigured = options.gatewayConfigured ?? Boolean(process.env.AI_GATEWAY_API_KEY || process.env.VERCEL_OIDC_TOKEN || process.env.VERCEL);
-  const effectiveMode: EvaluationMode = requestedMode === "deepseek" || (requestedMode === "auto" && gatewayConfigured) ? "deepseek" : "local";
-  if (requestedMode === "deepseek" && !gatewayConfigured) throw new Error("显式 deepseek 模式需要 AI Gateway 凭证或 Vercel OIDC；凭证不会写入报告或日志。");
+  const modelConfigured = options.modelConfigured ?? Boolean(process.env.DEEPSEEK_API_KEY);
+  const effectiveMode: EvaluationMode = requestedMode === "deepseek" || (requestedMode === "auto" && modelConfigured) ? "deepseek" : "local";
+  if (requestedMode === "deepseek" && !modelConfigured) throw new Error("显式 deepseek 模式需要 DEEPSEEK_API_KEY；凭证不会写入报告或日志。");
 
   const results: InterviewEvaluationResult[] = [];
   const evaluationCases = effectiveMode === "local" ? buildReleaseCases() : buildInterviewCases();
@@ -620,7 +620,7 @@ export async function runInterviewEvaluation(options: { requestedMode?: "local" 
       categoryCount: questionCategories.length,
       caseCount: results.length,
     },
-    execution: { requestedMode, effectiveMode, ...(effectiveMode === "deepseek" ? { model: `${gatewayModelConfig().primary} + ${gatewayModelConfig().fallback} review` } : {}) },
+    execution: { requestedMode, effectiveMode, ...(effectiveMode === "deepseek" ? { model: `${deepSeekModelConfig().primary} + ${deepSeekModelConfig().fallback} review` } : {}) },
     scoring: { scale: "0-5", dimensions: scoreDimensions, casePassThreshold: 18, recommendedRoleThreshold: 5, qualityAverageThreshold: 4.3, targetLength: "adaptive" },
     qualityGates,
     summary: { passedCases, failedCases: results.length - passedCases, passRate: Number((passedCases / results.length).toFixed(4)), averageScore: average(results.map((item) => item.scores.total)), averageByDimension, recommendedRoleCount, passedRecommendationGate, passedQualityGate, passedLaunchGate },

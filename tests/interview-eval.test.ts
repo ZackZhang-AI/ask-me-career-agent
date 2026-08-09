@@ -18,7 +18,7 @@ import {
 const generatedAt = new Date("2026-07-17T00:00:00.000Z");
 let cachedReport: Awaited<ReturnType<typeof runInterviewEvaluation>> | undefined;
 async function localReport() {
-  cachedReport ??= await runInterviewEvaluation({ requestedMode: "local", gatewayConfigured: false, generatedAt });
+  cachedReport ??= await runInterviewEvaluation({ requestedMode: "local", modelConfigured: false, generatedAt });
   return cachedReport;
 }
 
@@ -40,7 +40,7 @@ test("AI 面试预演覆盖 6 个模拟角色与 8 类问题", () => {
 
 test("本地合成报告确定且不包含 API Key", async () => {
   const first = await localReport();
-  const second = await runInterviewEvaluation({ requestedMode: "local", gatewayConfigured: false, generatedAt });
+  const second = await runInterviewEvaluation({ requestedMode: "local", modelConfigured: false, generatedAt });
   assert.deepEqual(first, second);
   assert.equal(first.schemaVersion, 4);
   assert.equal(first.execution.effectiveMode, "local");
@@ -132,8 +132,8 @@ test("上线门禁同时要求角色、质量与硬指标通过", async () => {
   assert.equal(launchExitCode(report), report.summary.passedLaunchGate ? 0 : 1);
 });
 
-test("显式 DeepSeek 模式在无 Gateway 身份时安全失败", async () => {
-  await assert.rejects(runInterviewEvaluation({ requestedMode: "deepseek", gatewayConfigured: false }), /需要 AI Gateway 凭证或 Vercel OIDC.*不会写入报告或日志/);
+test("显式 DeepSeek 模式在无 API Key 时安全失败", async () => {
+  await assert.rejects(runInterviewEvaluation({ requestedMode: "deepseek", modelConfigured: false }), /需要 DEEPSEEK_API_KEY.*不会写入报告或日志/);
 });
 
 test("报告路径强制限制在已忽略的 output 目录", () => {

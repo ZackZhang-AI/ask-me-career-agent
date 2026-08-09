@@ -2,7 +2,7 @@
 
 张倬玮的 AI Career Agent。它面向 AI 产品招聘经理和业务面试官，通过静态摘要、可追问对话、事实来源与能力边界，帮助招聘方快速获得可验证的候选人信息。
 
-在线演示：[ask-me-career-agent.vercel.app](https://ask-me-career-agent.vercel.app)。Production 使用 Vercel AI Gateway、Upstash、Neon 与 Vercel Blob；最新版简历始终通过 `/resume` 访问。
+在线演示：[ask-me-career-agent.vercel.app](https://ask-me-career-agent.vercel.app)。Production 使用 DeepSeek 官方 API、Upstash、Neon 与 Vercel Blob；最新版简历始终通过 `/resume` 访问。
 
 ## 本地运行
 
@@ -14,15 +14,15 @@ copy .env.example .env.local
 npm run dev
 ```
 
-本地可通过 `AI_GATEWAY_API_KEY` 调用模型；Vercel 部署优先使用自动刷新的 OIDC。固定问题和精确契约使用经过验证的快速回答；其他可回答的开放题由 Flash 生成并由 Pro 强制审校。Gateway 不可用时不会用低质量本地片段冒充开放题答案。
+模型通过服务端 `DEEPSEEK_API_KEY` 直连 DeepSeek 官方 API。固定问题和精确契约使用经过验证的快速回答；其他可回答的开放题由 Flash 生成并由 Pro 强制审校。模型服务不可用时不会用低质量本地片段冒充开放题答案。
 
 内容统一维护在 `content/`，启动和构建时由 Zod 校验状态、可见性以及 Claim-Source 引用完整性。8 个已确认 STAR 与 9 条 Obsidian 白名单知识参与公开检索，未审核内容仍保持隔离。
 
 ## 环境变量
 
-- `AI_GATEWAY_API_KEY`：本地或非 Vercel 运行环境的 AI Gateway 凭证；Vercel 部署可使用 OIDC。
-- `AI_PRIMARY_MODEL`：默认 `deepseek/deepseek-v4-flash`，负责问题规划和回答生成。
-- `AI_FALLBACK_MODEL`：默认 `deepseek/deepseek-v4-pro`，负责 Gateway 容灾和最终强制审校。
+- `DEEPSEEK_API_KEY`：DeepSeek 官方 API 服务端密钥，必须设置为 Sensitive。
+- `AI_PRIMARY_MODEL`：默认 `deepseek-v4-flash`，负责问题规划和回答生成。
+- `AI_FALLBACK_MODEL`：默认 `deepseek-v4-pro`，负责瞬时故障回退和最终强制审校。
 - `CHAT_DISABLED`：紧急关闭模型问答。
 - `DAILY_REQUEST_LIMIT`、`DAILY_TOKEN_LIMIT`：每日请求与 Token 预算。
 - `UPSTASH_REDIS_REST_URL`、`UPSTASH_REDIS_REST_TOKEN`：跨实例限流。
@@ -51,7 +51,7 @@ npm run eval:interview
 npm run quality:report -- --days 7
 ```
 
-本地 `eval:interview` 是确定性发布门禁；显式模型预演复用线上 Gateway、Flash 生成和 Pro 审校链路。匿名质量报告汇总回答、澄清、拒答、服务异常、Pro 审校/重写、处理阶段耗时与枚举反馈，不保存问题或回答正文。
+本地 `eval:interview` 是确定性发布门禁；显式模型预演复用线上 DeepSeek、Flash 生成和 Pro 审校链路。匿名质量报告汇总回答、澄清、拒答、服务异常、Pro 审校/重写、处理阶段耗时与枚举反馈，不保存问题或回答正文。
 
 PRD 验收与完整评测设计见 `tests/prd-evaluation-draft.md`。
 

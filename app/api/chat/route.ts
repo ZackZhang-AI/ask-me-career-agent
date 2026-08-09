@@ -197,7 +197,7 @@ export async function POST(request: NextRequest) {
     });
   }
 
-  const gatewayConfigured = Boolean(process.env.AI_GATEWAY_API_KEY || process.env.VERCEL_OIDC_TOKEN || process.env.VERCEL);
+  const modelConfigured = Boolean(process.env.DEEPSEEK_API_KEY);
   return streamResponse({
     sessionId: body.sessionId,
     startedAt,
@@ -206,7 +206,7 @@ export async function POST(request: NextRequest) {
       messages,
       sessionId: body.sessionId!,
       signal: request.signal,
-      gatewayConfigured,
+      modelConfigured,
       estimatedTokens,
       initialTokenReservation: rate.tokenReservation,
       onStage,
