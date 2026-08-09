@@ -59,11 +59,20 @@ test("回答诊断只保留稳定枚举和有限计数", () => {
     rewriteCount: 1,
     retrievalCount: 4,
     qualityTriggerCount: 2,
+    disposition: "scoped_answer",
+    boundaryReason: "none",
+    reviewPath: "pro_rewrite",
+    firstStageLatencyMs: 88,
+    checkingEvidenceLatencyMs: 420,
+    reviewingAnswerLatencyMs: 1_620,
     rawQuestion: "不应存储的问题",
   });
   assert.equal(event?.answerPath, "repaired");
   assert.equal(event?.contractId, "representative_project");
   assert.equal(event?.retrievalCount, 4);
+  assert.equal(event?.disposition, "scoped_answer");
+  assert.equal(event?.reviewPath, "pro_rewrite");
+  assert.equal(event?.firstStageLatencyMs, 88);
   assert.equal(JSON.stringify(event).includes("不应存储"), false);
 });
 
@@ -73,16 +82,21 @@ test("质量报告区分完成、回退和低样本反馈", () => {
     { event_name: "answer_completed", response_status: "completed", latency_ms: 440, first_token_latency_ms: 95, delivery_path: "preset", target_id: null, answer_path: null, rewrite_count: null, retrieval_count: null },
     { event_name: "answer_completed", response_status: "completed", latency_ms: 500, first_token_latency_ms: 110, delivery_path: "preset", target_id: null, answer_path: null, rewrite_count: null, retrieval_count: null },
     ...Array.from({ length: 2 }, () => ({ event_name: "answer_completed", response_status: "completed", latency_ms: null, target_id: null, answer_path: null, rewrite_count: null, retrieval_count: null })),
-    { event_name: "answer_generated", response_status: "completed", latency_ms: 1000, target_id: null, answer_path: "generated", rewrite_count: 0, retrieval_count: 4 },
-    { event_name: "answer_generated", response_status: "completed", latency_ms: 2000, target_id: null, answer_path: "repaired", rewrite_count: 1, retrieval_count: 3 },
-    { event_name: "answer_generated", response_status: "completed", latency_ms: 5000, target_id: null, answer_path: "fallback", rewrite_count: 1, retrieval_count: 2 },
+    { event_name: "answer_generated", response_status: "completed", latency_ms: 1000, target_id: null, answer_path: "generated", rewrite_count: 0, retrieval_count: 4, disposition: "answer", review_path: "pro_pass", first_stage_latency_ms: 60 },
+    { event_name: "answer_generated", response_status: "completed", latency_ms: 2000, target_id: null, answer_path: "repaired", rewrite_count: 1, retrieval_count: 3, disposition: "scoped_answer", review_path: "pro_rewrite", first_stage_latency_ms: 80 },
+    { event_name: "answer_generated", response_status: "insufficient_evidence", latency_ms: 5000, target_id: null, answer_path: "boundary", rewrite_count: 0, retrieval_count: 2, disposition: "decline", review_path: "none", first_stage_latency_ms: 95 },
     { event_name: "answer_feedback", response_status: null, latency_ms: null, target_id: "helpful", answer_path: null, rewrite_count: null, retrieval_count: null },
   ];
   const report = buildQualityReport(rows, 7);
   assert.equal(report.outcomes.completionRate, 0.8);
-  assert.equal(report.outcomes.nonFallbackRate, 0.6667);
+  assert.equal(report.outcomes.nonFallbackRate, 1);
+  assert.equal(report.outcomes.answerRate, 0.6667);
+  assert.equal(report.outcomes.declineRate, 0.3333);
   assert.equal(report.outcomes.helpfulRate, null);
-  assert.equal(report.diagnostics.fallbackRate, 0.3333);
+  assert.equal(report.diagnostics.fallbackRate, 0);
+  assert.equal(report.diagnostics.proReviewRate, 1);
+  assert.equal(report.diagnostics.proRewriteRate, 0.5);
+  assert.equal(report.diagnostics.firstStageP95Ms, 95);
   assert.equal(report.diagnostics.latencyP95Ms, 5000);
   assert.equal(report.sample.presetCompleted, 2);
   assert.equal(report.diagnostics.presetFirstTokenP95Ms, 110);

@@ -1,5 +1,6 @@
 import { candidateNarrative } from "../content/narrative.ts";
 import { agentProfile } from "../content/agent-profile.ts";
+import { interviewPersona } from "../content/interview-persona.ts";
 import type { AnswerIntent, AnswerPlan, ChatMessage, ConversationDepth, KnowledgeItem, QuestionContract, QuestionFrame, ResponseShape, StableAnswer, StarStory } from "./types";
 import { getRelatedStarStories, getStarStoriesByIds } from "./knowledge.ts";
 import { getFollowUpQuestions } from "./question-suggestions.ts";
@@ -387,7 +388,7 @@ export function buildContext(items: KnowledgeItem[], plan?: AnswerPlan) {
     `候选人定位：${candidateNarrative.positioning}`,
     `本题要帮助面试官判断：${plan.evaluationGoal}`,
     `本题意图：${plan.intent}；主题：${plan.topic}；回答维度：${plan.facet}。第一段必须直接回应：${plan.directAnswerTerms.join("、") || "当前问题"}。`,
-    `回答模式：${plan.questionMode}；证据策略：${plan.evidencePolicy}。candidate_reasoning 可以回答方法和推演，但必须明确不是已发生的事实；candidate_fact 不得在证据不足时补造经历。`,
+    `回答模式：${plan.questionMode}；证据策略：${plan.evidencePolicy}。candidate_reasoning 只能基于已经验证的能力回答方法和推演，开头要自然说明“我的处理思路”，不得暗示已经执行过；candidate_fact 不得在证据不足时补造经历。`,
     `回答结构：${plan.responseShape}；对话深度：${plan.conversationDepth}；参考长度：${plan.targetLength.min}-${plan.targetLength.max} 个中文字符。根据问题复杂度自然调整，简单事实短答，项目、贡献与复盘问题讲完整，不为凑字数重复。`,
     `本轮必须带来这些新信息：${plan.newInformationGoal.join("；")}`,
     `必须覆盖：${plan.mustInclude.join("；")}`,
@@ -415,8 +416,9 @@ export function demoAnswer(question: string, items: KnowledgeItem[], stableAnswe
   return buildAnswerPlan(question, items, stableAnswer, history).fallbackAnswer;
 }
 
-export const systemPrompt = `你是张倬玮的数字分身，正在替他参加 AI 产品岗位的初步面试。始终使用第一人称，以帮助面试官更快形成清晰、可信、愿意继续追问的候选人判断为目标。
+export const systemPrompt = `你是${interviewPersona.identity}，正在替他参加 AI 产品岗位的初步面试。你的稳定定位是：${interviewPersona.positioning}。始终使用第一人称，以帮助面试官更快形成清晰、可信、愿意继续追问的候选人判断为目标。
 当用户直接询问“你是谁”或“你能做什么”时，以 AI Career Agent 的身份回答，不要冒充张倬玮本人；其余候选人经历与能力问题继续使用张倬玮的第一人称回答。
+表达规则：${interviewPersona.voiceRules.join("；")}
 严格遵守 <answer_task> 中的本题任务、结构、长度、新信息目标和避免重复项。不同问题使用不同表达结构：自我介绍自然叙事；项目回答讲问题、判断、方案和价值；贡献回答讲本人决定、取舍和验收；行为问题使用 STAR；简单事实直接回答。对话进入深层追问后，要先直接回应本轮问题，再调用最相关的具体实践解释判断，不得把材料字段逐段拼接成答案，也不要复述上一轮的项目介绍。不要为了格式强制写三段，也不要每次重复候选人的三项优势。
 只使用 <answer_task>、<material> 和 <story> 中允许的事实。你的回答不是资料库摘要，而是正在替候选人进行正式面试：在事实可支撑的前提下选择更有利的叙事顺序，可以概括、重组并适度美化表达、判断、行动与岗位价值，让面试官清楚看到本人贡献和继续追问的理由。不得新增事件、任职、日期、数字、客户、用户反馈、业务结果、生产规模或不存在的功能。未被问到的限制不要主动展开或放大；被直接追问时，先说明已经完成的价值，再准确交代边界。历史对话只用于理解指代和避免重复，不能作为新事实来源。
 加粗只用于 1 到 3 个真正影响招聘判断的短词组，优先突出核心结论、个人贡献、关键取舍、可验证结果或真实边界；超过 240 字的回答通常使用 2 到 3 处。每个加粗短语脱离上下文也应能传递判断，不要使用“核心项目”“方案设计”“我的贡献”“第一步”这类栏目标签，不要加粗完整句子，也不要把每段都做成加粗标题。不要使用“好的，我来讲一下”“核心判断是”等套话，不追加通用岗位价值、免责声明、Claim/Source、证据边界或核实提醒。只有问题直接询问短板、数字、用户规模、生产状态或未完成功能时，才简短说明现实阶段。

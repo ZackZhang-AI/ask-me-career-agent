@@ -9,15 +9,16 @@ const answerIntents = ["agent_identity", "capability_scope", "introduction", "ca
 const careerTransitionPattern = /(?:为什么|为何).{0,12}(?:(?:从)?(?:财会|会计|财务|审计|统计)(?!问题)(?:背景|专业|经历)?.{0,12}(?:转向|转型|转(?!化)|选择|改做|走到|进入)|(?:转向|转型|选择|改做|走到|进入)).{0,12}(?:AI\s*产品|产品经理|产品)|(?:(?:从)(?:财会|会计|财务|审计|统计|原专业|传统行业)|(?:财会|会计|财务|审计|统计|原专业|传统行业)(?:背景|专业|经历)).{0,12}(?:转向|转型|转(?!化)|选择|改做|走到|进入).{0,8}(?:AI\s*产品|产品经理|产品)/i;
 const careerTransitionContextPattern = /(?:财会|会计|财务|审计|统计|传统行业).{0,24}(?:产品|AI).{0,14}(?:连续|迁移|选择|适合|方向|准备)|(?:为什么|为何|如何|怎么).{0,12}(?:转型|转向|选择).{0,14}(?:AI|产品)/i;
 const roleFitPattern = /匹配(?:之处|点|度|证据)?|契合(?:之处|点|度)?|适合|胜任|为什么.{0,8}(?:选择你|选你)|能为.{0,16}(?:岗位|岗|团队|业务).{0,8}(?:带来|创造)|与.{0,18}(?:岗位|岗).{0,8}(?:关系|匹配)/i;
-const resultEvidencePattern = /(?:有没有|是否|能否证明|做过|负责过|实现过|取得|形成|达到|已经|目前).{0,16}(?:商业化|变现|营收|收入|增长|用户|留存|上线|结果|成果|规模)|(?:商业化|变现|营收|收入|增长|用户|留存|上线).{0,12}(?:数据|结果|成果|规模|经验|案例|证明|做过|负责过|实现过|怎么样|如何)/i;
+const resultEvidencePattern = /(?:有没有|是否|能否证明|做过|负责过|实现过|取得|形成|达到|已经|目前).{0,16}(?:商业化|变现|营收|收入|增长|用户|留存|上线|结果|成果|规模)|(?:商业化|变现|营收|收入|增长|用户|留存|上线).{0,12}(?:数据|结果|成果|规模|经验|案例|证明|做过|负责过|实现过)|(?:商业化|变现|营收|收入|增长|用户|留存|上线)(?:情况)?(?:怎么样|如何)[？?。\s]*$/i;
 
 export function extractTargetRole(question: string) {
+  const isGenericReference = (value: string) => /^(?:(?:这个|该|上述|刚才的|前面提到的|目标)(?:岗位|职位|岗)|(?:岗位|职位|岗))$/i.test(value.trim());
   const namedRole = question.match(/((?:企业|商业分析|智能客服|AI|商业化|增长|搜索|数据|策略|平台|企业服务|B\s*端|C\s*端|广告|用户|内容|推荐|国际化|电商|支付|风控|运营|智能体|Agent)[A-Za-z0-9\u4e00-\u9fa5·+\-\s]{0,10}(?:产品经理|PM))/i)?.[1];
   if (namedRole) return namedRole.replace(/\s+/g, " ").trim();
   const contextualRole = question.match(/(?:和|与|应聘|申请|面试|目标是?|针对)\s*([^，。！？?]{2,24}?(?:产品经理|PM|工程师|设计师|运营|分析师|岗位))(?=这个岗|该岗|岗位|职位|有什么|有哪些|的匹配|匹配|契合|适合|可迁移)/i)?.[1];
-  if (contextualRole) return contextualRole.trim();
+  if (contextualRole && !isGenericReference(contextualRole)) return contextualRole.trim();
   const broadRole = question.match(/(?:适合|胜任|匹配)(?:做|从事)?\s*(?!什么|哪些|哪种|哪类)([^，。！？?]{2,20}(?:产品|岗位|方向))/i)?.[1];
-  return broadRole?.trim();
+  return broadRole && !isGenericReference(broadRole) ? broadRole.trim() : undefined;
 }
 
 export function inferAnswerIntent(question: string, topic: QuestionTopic = "unknown", facet: QuestionFacet = "overview"): AnswerIntent {
@@ -29,7 +30,7 @@ export function inferAnswerIntent(question: string, topic: QuestionTopic = "unkn
   if (/AI\s*(?:编程|写|生成)|代码.*AI|AI.*占比|用了多少\s*AI/i.test(question)) return "ai_collaboration";
   if (/个人贡献|你做了什么|你负责|具体做了|你的工作|主导/i.test(question)) return "contribution";
   if (/挑战|困难|失败|取舍|踩坑|复盘|怎么推进|如何推进/i.test(question)) return "challenge";
-  if (/^(?:如果|假设|当)/.test(question) && /(?:怎么办|怎么处理|如何处理|如何决策)/.test(question)) return "diagnosis";
+  if (/^(?:如果|假设|当)/.test(question) && /(?:怎么办|怎么|如何|怎样)/.test(question)) return "diagnosis";
   if (/没有改善|没改善|没有效果|没效果|优先排查|先排查|先.{0,3}看什么|定位问题|(?:如何|怎么).{0,4}定位|为什么没有/i.test(question)) return "diagnosis";
   if (/隐私|机密|企业数据|数据边界/i.test(question)) return "privacy";
   if (/短板|不足|弱点|限制|能力缺口/i.test(question) || facet === "boundary") return "limitation";
@@ -48,6 +49,7 @@ export function inferAnswerIntent(question: string, topic: QuestionTopic = "unkn
 
 function questionModeFor(question: string, intent: AnswerIntent): QuestionMode {
   if (["agent_identity", "capability_scope", "privacy"].includes(intent)) return "agent_meta";
+  if (["introduction", "career_transition", "role_fit", "representative_project", "project_overview", "project_problem", "contribution", "result", "experience", "education", "credentials"].includes(intent)) return "candidate_fact";
   if (/^(?:如果|假设|当|遇到假设|你会如何|你怎么看|如何处理|怎么处理)/.test(question)) return "candidate_reasoning";
   return "candidate_fact";
 }
@@ -490,10 +492,15 @@ export function buildLocalQuestionFrame(question: string, history: { role: "user
   const topic = initialIntent === "career_transition" ? "profile" : initialIntent === "role_fit" ? "role_fit" : detectedTopic;
   const facet = initialIntent === "career_transition" ? "transfer" : initialIntent === "role_fit" ? "fit" : initialIntent === "result" ? "result" : detectedFacet;
   const answerIntent = inferAnswerIntent(question, topic, facet);
-  const targetRole = answerIntent === "role_fit" ? extractTargetRole(question) : undefined;
+  const targetRole = answerIntent === "role_fit"
+    ? extractTargetRole(question) ?? [...history].reverse()
+      .filter((message) => message.role === "user")
+      .map((message) => extractTargetRole(message.content))
+      .find(Boolean)
+    : undefined;
   const questionMode = questionModeFor(question, answerIntent);
   const reference = /这个|该项目|其中|它|上述|这套|这种|这些|那些|那次|当时|刚才|前面/.test(question);
-  const historyProject = [...history].reverse().find((message) => /百度|baidu|ai\s*coding|evaluator\s*agent|rag|deepflow|ask\s*me/i.test(message.content))?.content.match(/百度|baidu|ai\s*coding|evaluator\s*agent|rag|deepflow|ask\s*me/i)?.[0]?.toLowerCase();
+  const historyProject = [...history].reverse().find((message) => message.role === "user" && /百度|baidu|ai\s*coding|evaluator\s*agent|rag|deepflow|ask\s*me/i.test(message.content))?.content.match(/百度|baidu|ai\s*coding|evaluator\s*agent|rag|deepflow|ask\s*me/i)?.[0]?.toLowerCase();
   const inferredTopic = topic === "unknown" && reference
     ? (historyProject === "rag" ? "rag" : historyProject === "deepflow" ? "deepflow" : historyProject?.includes("ask") ? "ask_me" : historyProject ? "baidu" : "unknown")
     : topic;

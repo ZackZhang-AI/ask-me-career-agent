@@ -1,4 +1,5 @@
 import type {
+  AnswerDisposition,
   AnswerCitation,
   ChatMessage,
   KnowledgeItem,
@@ -12,8 +13,9 @@ export const MAX_LOCAL_CONVERSATIONS = 10;
 export interface ConversationMessage extends ChatMessage {
   sources?: Source[];
   items?: KnowledgeItem[];
-  mode?: "live" | "stable" | "demo" | "guardrail";
+  mode?: "live" | "stable" | "demo" | "guardrail" | "boundary";
   responseStatus?: ResponseStatus;
+  disposition?: AnswerDisposition;
   modelPath?: "flash" | "pro" | "local_fallback";
   degraded?: boolean;
   claimIds?: string[];
@@ -99,10 +101,13 @@ function normalizeMessage(value: unknown): ConversationMessage | null {
     role: value.role,
     content: value.content.slice(0, 8_000),
   };
-  if (["live", "stable", "demo", "guardrail"].includes(String(value.mode))) {
+  if (["live", "stable", "demo", "guardrail", "boundary"].includes(String(value.mode))) {
     message.mode = value.mode as ConversationMessage["mode"];
   }
   if (typeof value.responseStatus === "string") message.responseStatus = value.responseStatus as ResponseStatus;
+  if (["answer", "scoped_answer", "clarify", "decline", "service_unavailable"].includes(String(value.disposition))) {
+    message.disposition = value.disposition as AnswerDisposition;
+  }
   if (["flash", "pro", "local_fallback"].includes(String(value.modelPath))) message.modelPath = value.modelPath as ConversationMessage["modelPath"];
   if (typeof value.degraded === "boolean") message.degraded = value.degraded;
   if (typeof value.deliveryPath === "string") message.deliveryPath = value.deliveryPath as "preset" | "api";

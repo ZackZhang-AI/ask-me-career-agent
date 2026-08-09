@@ -2,7 +2,19 @@ export type Verification = "externally_verified" | "self_attested" | "unverified
 export type ProjectStatus = "completed" | "in_progress" | "planned" | "archived";
 export type Visibility = "public" | "private";
 export type ContentStatus = "active" | "draft" | "archived";
-export type ResponseStatus = "completed" | "insufficient_evidence" | "refused" | "rate_limited" | "budget_exhausted" | "upstream_error";
+export type ResponseStatus = "completed" | "needs_clarification" | "insufficient_evidence" | "refused" | "rate_limited" | "budget_exhausted" | "upstream_error";
+export type AnswerDisposition = "answer" | "scoped_answer" | "clarify" | "decline" | "service_unavailable";
+export type BoundaryReason =
+  | "none"
+  | "ambiguous_role"
+  | "ambiguous_project"
+  | "missing_personal_evidence"
+  | "outside_supported_scope"
+  | "unsafe_request"
+  | "quality_review_failed"
+  | "upstream_unavailable";
+export type ProcessingStage = "understanding" | "checking_evidence" | "reviewing_answer";
+export type ReviewPath = "none" | "pro_pass" | "pro_rewrite" | "pro_reject";
 export type EvidenceBasis = "confirmed_fact" | "source_view" | "user_statement" | "inference";
 export type ResponseShape = "narrative" | "direct" | "fit_mapping" | "project_arc" | "contribution" | "star" | "shortcoming" | "recommendation";
 export type ConversationDepth = "overview" | "follow_up" | "deep_dive";
@@ -253,6 +265,7 @@ export interface PresetAnswerPacket {
   content: string;
   mode: "stable";
   responseStatus: "completed";
+  disposition: "answer";
   claimIds: string[];
   sourceIds: string[];
   citations: AnswerCitation[];

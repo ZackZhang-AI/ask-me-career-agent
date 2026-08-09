@@ -40,6 +40,7 @@ export function buildHomepagePresetAnswers(): PresetAnswerPacket[] {
       content: plan.fallbackAnswer,
       mode: "stable",
       responseStatus: "completed",
+      disposition: "answer",
       claimIds,
       sourceIds,
       citations,

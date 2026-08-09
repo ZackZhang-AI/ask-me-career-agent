@@ -179,6 +179,9 @@ export function validateAnswer(candidate: string, plan: AnswerPlan): QualityGate
   if (plan.questionMode === "candidate_reasoning" && /(?:我曾经|我负责过|我已经上线|真实用户增长|客户营收)/.test(clean)) {
     triggers.push("reasoning_presented_as_fact");
   }
+  if (plan.questionMode === "candidate_reasoning" && !/(?:我的处理思路|我会先|我会从|如果.{0,18}我会|面对.{0,18}我会)/.test(firstParagraph)) {
+    triggers.push("missing_reasoning_scope");
+  }
   if (plan.intent === "role_fit" && !plan.contractId) {
     const fitDimensions = [
       /业务|流程|用户|场景/,

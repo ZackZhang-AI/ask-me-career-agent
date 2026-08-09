@@ -12,6 +12,13 @@ test("回答首字出现前保留可感知的加载状态", () => {
   assert.match(chatSource, /正在检索相关经历与项目证据/);
   assert.match(chatSource, /正在组织正式面试回答/);
   assert.match(chatSource, /正在核验事实与表达/);
+  assert.match(chatSource, /正在理解这道面试问题/);
+  assert.match(chatSource, /正在核对相关经历与事实/);
+  assert.match(chatSource, /正在进行最终面试质量审校/);
+  assert.match(chatSource, /event\.type === "stage"/);
+  assert.match(chatSource, /event\.disposition === "clarify"/);
+  assert.match(chatSource, /shouldFocusAfterCompletion = true/);
+  assert.match(chatSource, /requestAnimationFrame\(\(\) => requestAnimationFrame\(\(\) => inputRef\.current\?\.focus/);
   assert.match(globalStyles, /@keyframes thinking-wave/);
   assert.match(globalStyles, /\.message\.assistant\.streaming/);
   assert.match(chatSource, /if \(!answer\.trim\(\)\) throw new Error\("没有收到有效回答，请重试。"\)/);

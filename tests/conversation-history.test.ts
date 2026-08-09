@@ -46,3 +46,18 @@ test("损坏的本地数据不会阻断页面，重命名保留其他会话", ()
   assert.equal(renamed[0]?.title, "新标题");
   assert.equal(renamed[0]?.messages[0]?.content, "原问题");
 });
+
+test("澄清、拒答与审校通过状态可安全保存在本机历史", () => {
+  const parsed = parseConversationHistory(JSON.stringify([{
+    id: "boundary",
+    title: "岗位澄清",
+    updatedAt: "2026-08-09T00:00:00.000Z",
+    messages: [
+      { role: "user", content: "我和这个岗位匹配吗？" },
+      { role: "assistant", content: "请补充具体 JD。", responseStatus: "needs_clarification", disposition: "clarify", mode: "boundary" },
+    ],
+  }]));
+  assert.equal(parsed[0]?.messages[1]?.disposition, "clarify");
+  assert.equal(parsed[0]?.messages[1]?.responseStatus, "needs_clarification");
+  assert.equal(parsed[0]?.messages[1]?.mode, "boundary");
+});

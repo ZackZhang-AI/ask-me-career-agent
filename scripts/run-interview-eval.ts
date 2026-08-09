@@ -3,10 +3,12 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { buildAnswerPlan, buildContext, demoAnswer, systemPrompt } from "../lib/answer.ts";
-import { answerSimilarity, repairInstruction, validateAnswer } from "../lib/answer-quality.ts";
+import { answerSimilarity, validateAnswer } from "../lib/answer-quality.ts";
+import { decideAnswerability, serviceUnavailableMessage } from "../lib/answerability.ts";
+import { generateDeepSeekAnswer, gatewayModelConfig, planDeepSeekQuestion, reviewDeepSeekAnswer } from "../lib/deepseek.ts";
 import { assessQuestion } from "../lib/guardrails.ts";
 import { matchStableAnswer, retrieveKnowledge } from "../lib/knowledge.ts";
-import { buildLocalQuestionFrame, findQuestionContract, frameFromContract, questionContracts } from "../lib/question-contracts.ts";
+import { buildLocalQuestionFrame, findQuestionContract, frameFromContract, mergePlannedFrame, questionContracts } from "../lib/question-contracts.ts";
 import { getFollowUpQuestions, recommendationQuestionCandidates } from "../lib/question-suggestions.ts";
 import type { ResponseStatus } from "../lib/types.ts";
 import { coreCases, hallucinationCases, type EvaluationCase } from "../tests/evals/cases.ts";
@@ -303,51 +305,69 @@ function localAnswer(question: string, history: Array<{ role: "user" | "assistan
   };
 }
 
-async function deepSeekAnswer(testCase: Pick<InterviewCase, "question" | "roleName" | "roleFocus">, apiKey: string, history: Array<{ role: "user" | "assistant"; content: string }> = []): Promise<EvaluationAnswer> {
-  const fallback = localAnswer(testCase.question, history);
-  if (fallback.responseStatus !== "completed") return fallback;
+async function gatewayAnswer(testCase: Pick<InterviewCase, "question" | "roleName" | "roleFocus">, history: Array<{ role: "user" | "assistant"; content: string }> = []): Promise<EvaluationAnswer> {
+  const assessment = assessQuestion(testCase.question);
+  if (!assessment.allowed) return { text: assessment.reason, responseStatus: "refused", claimIds: [], sourceIds: [], answerMode: "guardrail" };
   const contract = findQuestionContract(testCase.question);
-  const frame = contract ? frameFromContract(contract) : buildLocalQuestionFrame(testCase.question, history);
+  const localFrame = contract ? frameFromContract(contract) : buildLocalQuestionFrame(testCase.question, history);
+  let frame = localFrame;
+  if (!contract && localFrame.questionMode !== "agent_meta") {
+    const planned = await planDeepSeekQuestion({
+      question: testCase.question,
+      history,
+      signal: AbortSignal.timeout(12_000),
+      userId: "interview-evaluation",
+    });
+    frame = mergePlannedFrame(localFrame, planned.frame);
+  }
   const items = retrieveKnowledge(testCase.question, { history, limit: 4, frame });
   const stableAnswer = matchStableAnswer(testCase.question, history, frame);
   const plan = buildAnswerPlan(testCase.question, items, stableAnswer, history, frame, contract);
-  const model = process.env.DEEPSEEK_MODEL ?? "deepseek-v4-flash";
+  const claimIds = stableAnswer ? [...stableAnswer.requiredClaimIds] : [...new Set(items.flatMap((item) => item.claimIds))];
+  const sourceIds = stableAnswer ? [...stableAnswer.requiredSourceIds] : [...new Set(items.flatMap((item) => item.sourceIds))];
+  const decision = decideAnswerability({ question: testCase.question, history, frame, plan, items, claimIds, sourceIds, stableAnswer, contract });
+  const base = { claimIds, sourceIds, storyIds: plan.relatedStoryId ? [plan.relatedStoryId] : [] };
+
+  if (!decision.shouldGenerate) {
+    if (decision.disposition === "answer") {
+      const gate = validateAnswer(plan.fallbackAnswer, plan);
+      return gate.passed
+        ? { ...base, text: plan.fallbackAnswer, responseStatus: "completed", answerMode: stableAnswer || contract ? "stable" : "retrieval" }
+        : { ...base, text: serviceUnavailableMessage(), responseStatus: "upstream_error", answerMode: "guardrail" };
+    }
+    return { ...base, text: decision.message ?? serviceUnavailableMessage(), responseStatus: decision.responseStatus, answerMode: "guardrail" };
+  }
+
   const context = `这是合成面试预演。模拟角色：${testCase.roleName}；关注点：${testCase.roleFocus}。只能依据以下回答计划和公开事实作答：\n${buildContext(items, plan)}`;
-  const generate = async (extraInstruction?: string) => {
-    const response = await fetch(`${process.env.DEEPSEEK_BASE_URL ?? "https://api.deepseek.com"}/chat/completions`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify({
-        model,
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "system", content: context },
-          ...(extraInstruction ? [{ role: "system" as const, content: extraInstruction }] : []),
-          ...history,
-          { role: "user", content: testCase.question },
-        ],
-        thinking: { type: "disabled" },
-        stream: false,
-        max_tokens: 1_100,
-      }),
-      signal: AbortSignal.timeout(45_000),
-    });
-    if (!response.ok) throw new Error(`DeepSeek 请求失败（HTTP ${response.status}），未输出任何密钥。`);
-    const payload = await response.json() as { choices?: Array<{ message?: { content?: string } }> };
-    const text = payload.choices?.[0]?.message?.content?.trim();
-    if (!text) throw new Error("DeepSeek 返回空回答。");
-    return text;
-  };
-  const first = await generate();
-  const firstGate = validateAnswer(first, plan);
-  if (firstGate.passed) return { ...fallback, text: first, answerMode: "deepseek", storyIds: plan.relatedStoryId ? [plan.relatedStoryId] : [] };
-  const repaired = await generate(repairInstruction(plan, firstGate.triggers));
-  const repairedGate = validateAnswer(repaired, plan);
-  return { ...fallback, text: repairedGate.passed ? repaired : plan.fallbackAnswer, answerMode: repairedGate.passed ? "deepseek" : fallback.answerMode };
+  const first = await generateDeepSeekAnswer({
+    messages: [
+      { role: "system", content: systemPrompt },
+      { role: "system", content: context },
+      ...history,
+      { role: "user", content: testCase.question },
+    ],
+    signal: AbortSignal.timeout(45_000),
+    userId: "interview-evaluation",
+  });
+  const firstGate = validateAnswer(first.text, plan);
+  const reviewed = await reviewDeepSeekAnswer({
+    question: testCase.question,
+    candidate: first.text,
+    plan,
+    localTriggers: firstGate.triggers,
+    signal: AbortSignal.timeout(45_000),
+    userId: "interview-evaluation",
+  });
+  const reviewedText = reviewed.review.decision === "rewrite" ? reviewed.review.revisedAnswer?.trim() : first.text;
+  const reviewedGate = reviewedText ? validateAnswer(reviewedText, plan) : undefined;
+  if (reviewed.review.decision === "reject" || !reviewedText || !reviewedGate?.passed) {
+    return { ...base, text: serviceUnavailableMessage(), responseStatus: "upstream_error", answerMode: "guardrail" };
+  }
+  return { ...base, text: reviewedText, responseStatus: "completed", answerMode: "deepseek" };
 }
 
-async function answerForCase(testCase: Pick<InterviewCase, "question" | "roleName" | "roleFocus">, mode: EvaluationMode, apiKey?: string, history: Array<{ role: "user" | "assistant"; content: string }> = []) {
-  if (mode === "deepseek") return deepSeekAnswer(testCase, apiKey!, history);
+async function answerForCase(testCase: Pick<InterviewCase, "question" | "roleName" | "roleFocus">, mode: EvaluationMode, history: Array<{ role: "user" | "assistant"; content: string }> = []) {
+  if (mode === "deepseek") return gatewayAnswer(testCase, history);
   return localAnswer(testCase.question, history);
 }
 
@@ -381,14 +401,14 @@ const multiTurnFixtures = [
   },
 ] as const;
 
-async function runMultiTurn(mode: EvaluationMode, apiKey?: string): Promise<MultiTurnResult[]> {
+async function runMultiTurn(mode: EvaluationMode): Promise<MultiTurnResult[]> {
   const results: MultiTurnResult[] = [];
   for (const fixture of multiTurnFixtures) {
     const history: Array<{ role: "user" | "assistant"; content: string }> = [];
     const turns: MultiTurnResult["turns"] = [];
     for (let index = 0; index < fixture.questions.length; index += 1) {
       const question = fixture.questions[index];
-      const answer = await answerForCase({ question, roleName: "AI 产品面试官", roleFocus: "多轮追问和项目细节" }, mode, apiKey, history);
+      const answer = await answerForCase({ question, roleName: "AI 产品面试官", roleFocus: "多轮追问和项目细节" }, mode, history);
       const quality = evaluateAnswerQuality(answer.text, { requiredSemanticGroups: [[...fixture.required[index]]], expectedStructure: index === 0 ? "interview" : "direct", forbiddenFacts: [], forbiddenPatterns: [], boundaryExpected: /短板|不足|结果|规模|状态/.test(question) });
       turns.push({ question, answer, quality });
       history.push({ role: "user", content: question }, { role: "assistant", content: answer.text });
@@ -505,16 +525,16 @@ function contractQualityMetrics() {
   };
 }
 
-export async function runInterviewEvaluation(options: { requestedMode?: "local" | "deepseek" | "auto"; apiKey?: string; generatedAt?: Date } = {}): Promise<InterviewEvaluationReport> {
+export async function runInterviewEvaluation(options: { requestedMode?: "local" | "deepseek" | "auto"; gatewayConfigured?: boolean; generatedAt?: Date } = {}): Promise<InterviewEvaluationReport> {
   const requestedMode = options.requestedMode ?? "local";
-  const apiKey = options.apiKey ?? process.env.DEEPSEEK_API_KEY;
-  const effectiveMode: EvaluationMode = requestedMode === "deepseek" || (requestedMode === "auto" && apiKey) ? "deepseek" : "local";
-  if (requestedMode === "deepseek" && !apiKey) throw new Error("显式 deepseek 模式需要服务端 API 密钥；密钥不会写入报告或日志。");
+  const gatewayConfigured = options.gatewayConfigured ?? Boolean(process.env.AI_GATEWAY_API_KEY || process.env.VERCEL_OIDC_TOKEN || process.env.VERCEL);
+  const effectiveMode: EvaluationMode = requestedMode === "deepseek" || (requestedMode === "auto" && gatewayConfigured) ? "deepseek" : "local";
+  if (requestedMode === "deepseek" && !gatewayConfigured) throw new Error("显式 deepseek 模式需要 AI Gateway 凭证或 Vercel OIDC；凭证不会写入报告或日志。");
 
   const results: InterviewEvaluationResult[] = [];
   const evaluationCases = effectiveMode === "local" ? buildReleaseCases() : buildInterviewCases();
   for (const testCase of evaluationCases) {
-    const answer = await answerForCase(testCase, effectiveMode, apiKey);
+    const answer = await answerForCase(testCase, effectiveMode);
     const quality = evaluateAnswerQuality(answer.text, { requiredSemanticGroups: testCase.semanticGroups.map((group) => [...group]), forbiddenFacts: [], forbiddenPatterns: testCase.forbiddenPatterns, expectedStructure: "interview", targetLength: testCase.targetLength, boundaryExpected: testCase.boundaryExpected });
     const scores = scoreAnswer(testCase, answer, quality);
     results.push({ ...testCase, syntheticSimulation: true, answer, quality, scores, passed: quality.hardFactsPassed && quality.contentCoverage === 1 && scores.total >= 18 && scores.可信度 >= 4 });
@@ -522,15 +542,15 @@ export async function runInterviewEvaluation(options: { requestedMode?: "local" 
 
   const coreResults = [] as InterviewEvaluationReport["coreResults"];
   for (const fixture of coreCases) {
-    const answer = await answerForCase({ question: fixture.question, roleName: "AI 产品面试官", roleFocus: "核心事实和岗位表达" }, effectiveMode, apiKey);
+    const answer = await answerForCase({ question: fixture.question, roleName: "AI 产品面试官", roleFocus: "核心事实和岗位表达" }, effectiveMode);
     const quality = evaluateAnswerQuality(answer.text, fixture);
     const metadataCovered = fixture.requiredClaimIds.every((id) => answer.claimIds.includes(id)) && fixture.requiredSourceIds.every((id) => answer.sourceIds.includes(id));
     coreResults.push({ id: fixture.id, answer, quality, passed: metadataCovered && quality.contentCoverage === 1 && quality.hardFactsPassed });
   }
-  const multiTurnResults = await runMultiTurn(effectiveMode, apiKey);
+  const multiTurnResults = await runMultiTurn(effectiveMode);
   const hallucinationResults = [] as InterviewEvaluationReport["hallucinationResults"];
   for (const fixture of hallucinationCases) {
-    const answer = await answerForCase({ question: fixture.question, roleName: "事实核查面试官", roleFocus: "数字、结果与完成状态" }, effectiveMode, apiKey);
+    const answer = await answerForCase({ question: fixture.question, roleName: "事实核查面试官", roleFocus: "数字、结果与完成状态" }, effectiveMode);
     const quality = evaluateAnswerQuality(answer.text, fixture);
     hallucinationResults.push({ id: fixture.id, answer, quality, passed: quality.hardFactsPassed && quality.contentCoverage === 1 });
   }
@@ -600,7 +620,7 @@ export async function runInterviewEvaluation(options: { requestedMode?: "local" 
       categoryCount: questionCategories.length,
       caseCount: results.length,
     },
-    execution: { requestedMode, effectiveMode, ...(effectiveMode === "deepseek" ? { model: process.env.DEEPSEEK_MODEL ?? "deepseek-v4-flash" } : {}) },
+    execution: { requestedMode, effectiveMode, ...(effectiveMode === "deepseek" ? { model: `${gatewayModelConfig().primary} + ${gatewayModelConfig().fallback} review` } : {}) },
     scoring: { scale: "0-5", dimensions: scoreDimensions, casePassThreshold: 18, recommendedRoleThreshold: 5, qualityAverageThreshold: 4.3, targetLength: "adaptive" },
     qualityGates,
     summary: { passedCases, failedCases: results.length - passedCases, passRate: Number((passedCases / results.length).toFixed(4)), averageScore: average(results.map((item) => item.scores.total)), averageByDimension, recommendedRoleCount, passedRecommendationGate, passedQualityGate, passedLaunchGate },

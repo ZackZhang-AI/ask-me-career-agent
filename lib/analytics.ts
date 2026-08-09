@@ -19,11 +19,14 @@ export const ANALYTICS_EVENTS = [
 export type AnalyticsEventName = (typeof ANALYTICS_EVENTS)[number];
 
 const EVENT_NAMES = new Set<string>(ANALYTICS_EVENTS);
-const RESPONSE_STATUSES = new Set(["completed", "insufficient_evidence", "refused", "rate_limited", "budget_exhausted", "upstream_error"]);
+const RESPONSE_STATUSES = new Set(["completed", "needs_clarification", "insufficient_evidence", "refused", "rate_limited", "budget_exhausted", "upstream_error"]);
 const QUESTION_CATEGORIES = new Set(["profile", "fit", "project", "experience", "skills", "gaps", "security", "other"]);
 const TARGET_TYPES = new Set(["source", "project", "resume", "email", "phone", "github", "suggestion", "feedback"]);
-const ANSWER_MODES = new Set(["live", "stable", "demo", "guardrail"]);
-const ANSWER_PATHS = new Set(["generated", "repaired", "fallback", "stable", "demo", "guardrail"]);
+const ANSWER_MODES = new Set(["live", "stable", "demo", "guardrail", "boundary"]);
+const ANSWER_PATHS = new Set(["generated", "repaired", "fallback", "stable", "demo", "guardrail", "boundary", "service_unavailable"]);
+const ANSWER_DISPOSITIONS = new Set(["answer", "scoped_answer", "clarify", "decline", "service_unavailable"]);
+const BOUNDARY_REASONS = new Set(["none", "ambiguous_role", "ambiguous_project", "missing_personal_evidence", "outside_supported_scope", "unsafe_request", "quality_review_failed", "upstream_unavailable"]);
+const REVIEW_PATHS = new Set(["none", "pro_pass", "pro_rewrite", "pro_reject"]);
 const QUESTION_TOPICS = new Set(["profile", "role_fit", "rag", "deepflow", "ask_me", "local_tools", "audit", "statistics", "skills", "enterprise_ai", "agent", "unknown"]);
 const QUESTION_FACETS = new Set(["overview", "problem", "method", "contribution", "architecture", "collaboration", "evaluation", "transfer", "example", "result", "boundary", "fit"]);
 const DELIVERY_PATHS = new Set(["preset", "api"]);
@@ -51,6 +54,12 @@ export interface AnalyticsEventInput {
   rewriteCount?: number;
   retrievalCount?: number;
   qualityTriggerCount?: number;
+  disposition?: string;
+  boundaryReason?: string;
+  reviewPath?: string;
+  firstStageLatencyMs?: number;
+  checkingEvidenceLatencyMs?: number;
+  reviewingAnswerLatencyMs?: number;
 }
 
 export interface SanitizedAnalyticsEvent {
@@ -73,6 +82,12 @@ export interface SanitizedAnalyticsEvent {
   rewriteCount: number | null;
   retrievalCount: number | null;
   qualityTriggerCount: number | null;
+  disposition: string | null;
+  boundaryReason: string | null;
+  reviewPath: string | null;
+  firstStageLatencyMs: number | null;
+  checkingEvidenceLatencyMs: number | null;
+  reviewingAnswerLatencyMs: number | null;
 }
 
 interface NeonQuery {
@@ -155,6 +170,12 @@ export function sanitizeAnalyticsEvent(value: unknown): SanitizedAnalyticsEvent 
     rewriteCount: safeCount(input.rewriteCount, 2),
     retrievalCount: safeCount(input.retrievalCount, 20),
     qualityTriggerCount: safeCount(input.qualityTriggerCount, 50),
+    disposition: typeof input.disposition === "string" && ANSWER_DISPOSITIONS.has(input.disposition) ? input.disposition : null,
+    boundaryReason: typeof input.boundaryReason === "string" && BOUNDARY_REASONS.has(input.boundaryReason) ? input.boundaryReason : null,
+    reviewPath: typeof input.reviewPath === "string" && REVIEW_PATHS.has(input.reviewPath) ? input.reviewPath : null,
+    firstStageLatencyMs: safeCount(input.firstStageLatencyMs, 300_000),
+    checkingEvidenceLatencyMs: safeCount(input.checkingEvidenceLatencyMs, 300_000),
+    reviewingAnswerLatencyMs: safeCount(input.reviewingAnswerLatencyMs, 300_000),
   };
 }
 
@@ -197,6 +218,12 @@ async function ensureSchema(sql: NeonQuery): Promise<void> {
           rewrite_count INTEGER,
           retrieval_count INTEGER,
           quality_trigger_count INTEGER,
+          disposition TEXT,
+          boundary_reason TEXT,
+          review_path TEXT,
+          first_stage_latency_ms INTEGER,
+          checking_evidence_latency_ms INTEGER,
+          reviewing_answer_latency_ms INTEGER,
           occurred_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         )
       `;
@@ -210,6 +237,12 @@ async function ensureSchema(sql: NeonQuery): Promise<void> {
       await sql`ALTER TABLE ask_me_events ADD COLUMN IF NOT EXISTS quality_trigger_count INTEGER`;
       await sql`ALTER TABLE ask_me_events ADD COLUMN IF NOT EXISTS first_token_latency_ms INTEGER`;
       await sql`ALTER TABLE ask_me_events ADD COLUMN IF NOT EXISTS delivery_path TEXT`;
+      await sql`ALTER TABLE ask_me_events ADD COLUMN IF NOT EXISTS disposition TEXT`;
+      await sql`ALTER TABLE ask_me_events ADD COLUMN IF NOT EXISTS boundary_reason TEXT`;
+      await sql`ALTER TABLE ask_me_events ADD COLUMN IF NOT EXISTS review_path TEXT`;
+      await sql`ALTER TABLE ask_me_events ADD COLUMN IF NOT EXISTS first_stage_latency_ms INTEGER`;
+      await sql`ALTER TABLE ask_me_events ADD COLUMN IF NOT EXISTS checking_evidence_latency_ms INTEGER`;
+      await sql`ALTER TABLE ask_me_events ADD COLUMN IF NOT EXISTS reviewing_answer_latency_ms INTEGER`;
       await sql`CREATE INDEX IF NOT EXISTS ask_me_events_occurred_at_idx ON ask_me_events (occurred_at)`;
       await sql`CREATE INDEX IF NOT EXISTS ask_me_events_funnel_idx ON ask_me_events (event_name, occurred_at)`;
     })().catch((error) => {
@@ -232,10 +265,12 @@ export async function persistEvent(value: unknown): Promise<boolean> {
         event_name, session_hash, response_status, claim_ids, source_ids,
         latency_ms, first_token_latency_ms, delivery_path, question_category, target_type, target_id
         , contract_id, topic, facet, answer_mode, answer_path, rewrite_count, retrieval_count, quality_trigger_count
+        , disposition, boundary_reason, review_path, first_stage_latency_ms, checking_evidence_latency_ms, reviewing_answer_latency_ms
       ) VALUES (
         ${event.event}, ${event.sessionHash}, ${event.responseStatus}, ${event.claimIds}, ${event.sourceIds},
         ${event.latencyMs}, ${event.firstTokenLatencyMs}, ${event.deliveryPath}, ${event.questionCategory}, ${event.targetType}, ${event.targetId}
         , ${event.contractId}, ${event.topic}, ${event.facet}, ${event.answerMode}, ${event.answerPath}, ${event.rewriteCount}, ${event.retrievalCount}, ${event.qualityTriggerCount}
+        , ${event.disposition}, ${event.boundaryReason}, ${event.reviewPath}, ${event.firstStageLatencyMs}, ${event.checkingEvidenceLatencyMs}, ${event.reviewingAnswerLatencyMs}
       )
     `;
     return true;
@@ -259,15 +294,19 @@ interface QualityEventRow {
   answer_path: string | null;
   rewrite_count: number | null;
   retrieval_count: number | null;
+  disposition?: string | null;
+  boundary_reason?: string | null;
+  review_path?: string | null;
+  first_stage_latency_ms?: number | null;
 }
 
 export interface QualityReport {
   days: number;
   sample: { questions: number; clientCompleted: number; presetCompleted: number; generated: number; feedback: number };
-  outcomes: { completionRate: number | null; nonFallbackRate: number | null; insufficientEvidenceRate: number | null; helpfulRate: number | null };
-  diagnostics: { repairRate: number | null; fallbackRate: number | null; averageRetrievalCount: number | null; latencyP50Ms: number | null; latencyP95Ms: number | null; firstTokenP50Ms: number | null; firstTokenP95Ms: number | null; presetFirstTokenP95Ms: number | null };
+  outcomes: { completionRate: number | null; nonFallbackRate: number | null; insufficientEvidenceRate: number | null; answerRate: number | null; clarifyRate: number | null; declineRate: number | null; serviceUnavailableRate: number | null; helpfulRate: number | null };
+  diagnostics: { repairRate: number | null; fallbackRate: number | null; proReviewRate: number | null; proRewriteRate: number | null; averageRetrievalCount: number | null; latencyP50Ms: number | null; latencyP95Ms: number | null; firstTokenP50Ms: number | null; firstTokenP95Ms: number | null; firstStageP95Ms: number | null; presetFirstTokenP95Ms: number | null };
   feedbackReasons: Record<string, number>;
-  targets: { completionRate: number; nonFallbackRate: number; minimumFeedbackSample: number; presetFirstTokenP95Ms: number };
+  targets: { completionRate: number; nonFallbackRate: number; minimumFeedbackSample: number; firstStageP95Ms: number; presetFirstTokenP95Ms: number };
 }
 
 function rate(numerator: number, denominator: number) {
@@ -292,6 +331,9 @@ export function buildQualityReport(rows: QualityEventRow[], days: number): Quali
   const firstTokenLatencies = rows.flatMap((row) => row.event_name === "answer_completed" && typeof row.first_token_latency_ms === "number" ? [row.first_token_latency_ms] : []);
   const presetFirstTokenLatencies = presetCompletedRows.flatMap((row) => typeof row.first_token_latency_ms === "number" ? [row.first_token_latency_ms] : []);
   const retrievalCounts = generatedRows.flatMap((row) => typeof row.retrieval_count === "number" ? [row.retrieval_count] : []);
+  const firstStageLatencies = generatedRows.flatMap((row) => typeof row.first_stage_latency_ms === "number" ? [row.first_stage_latency_ms] : []);
+  const dispositions = generatedRows.filter((row) => row.disposition);
+  const reviewedRows = generatedRows.filter((row) => row.review_path && row.review_path !== "none");
   return {
     days,
     sample: { questions, clientCompleted, presetCompleted: presetCompletedRows.length, generated: generatedRows.length, feedback: feedbackRows.length },
@@ -299,20 +341,27 @@ export function buildQualityReport(rows: QualityEventRow[], days: number): Quali
       completionRate: rate(clientCompleted, questions),
       nonFallbackRate: rate(modelRows.filter((row) => row.answer_path !== "fallback").length, modelRows.length),
       insufficientEvidenceRate: rate(generatedRows.filter((row) => row.response_status === "insufficient_evidence").length, generatedRows.length),
+      answerRate: rate(dispositions.filter((row) => row.disposition === "answer" || row.disposition === "scoped_answer").length, dispositions.length),
+      clarifyRate: rate(dispositions.filter((row) => row.disposition === "clarify").length, dispositions.length),
+      declineRate: rate(dispositions.filter((row) => row.disposition === "decline").length, dispositions.length),
+      serviceUnavailableRate: rate(dispositions.filter((row) => row.disposition === "service_unavailable").length, dispositions.length),
       helpfulRate: feedbackRows.length >= 30 ? rate(feedbackReasons.helpful, feedbackRows.length) : null,
     },
     diagnostics: {
       repairRate: rate(modelRows.filter((row) => row.answer_path === "repaired").length, modelRows.length),
       fallbackRate: rate(modelRows.filter((row) => row.answer_path === "fallback").length, modelRows.length),
+      proReviewRate: rate(reviewedRows.length, generatedRows.filter((row) => row.answer_path === "generated" || row.answer_path === "repaired" || row.answer_path === "service_unavailable").length),
+      proRewriteRate: rate(reviewedRows.filter((row) => row.review_path === "pro_rewrite").length, reviewedRows.length),
       averageRetrievalCount: retrievalCounts.length ? Number((retrievalCounts.reduce((sum, value) => sum + value, 0) / retrievalCounts.length).toFixed(2)) : null,
       latencyP50Ms: percentile(latencies, 0.5),
       latencyP95Ms: percentile(latencies, 0.95),
       firstTokenP50Ms: percentile(firstTokenLatencies, 0.5),
       firstTokenP95Ms: percentile(firstTokenLatencies, 0.95),
+      firstStageP95Ms: percentile(firstStageLatencies, 0.95),
       presetFirstTokenP95Ms: percentile(presetFirstTokenLatencies, 0.95),
     },
     feedbackReasons,
-    targets: { completionRate: 0.95, nonFallbackRate: 0.85, minimumFeedbackSample: 30, presetFirstTokenP95Ms: 200 },
+    targets: { completionRate: 0.95, nonFallbackRate: 0.85, minimumFeedbackSample: 30, firstStageP95Ms: 100, presetFirstTokenP95Ms: 200 },
   };
 }
 
@@ -322,7 +371,7 @@ export async function getQualityReport(days = 7): Promise<QualityReport | null> 
   const safeDays = Math.max(1, Math.min(Math.floor(days), 30));
   await ensureSchema(sql);
   const rows = await sql`
-    SELECT event_name, response_status, latency_ms, first_token_latency_ms, delivery_path, target_id, answer_path, rewrite_count, retrieval_count
+    SELECT event_name, response_status, latency_ms, first_token_latency_ms, delivery_path, target_id, answer_path, rewrite_count, retrieval_count, disposition, boundary_reason, review_path, first_stage_latency_ms
     FROM ask_me_events
     WHERE occurred_at >= NOW() - (${safeDays} * INTERVAL '1 day')
     ORDER BY occurred_at ASC

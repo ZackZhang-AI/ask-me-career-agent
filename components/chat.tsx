@@ -71,6 +71,7 @@ function track(event: string, sessionId: string, detail = "", metadata: Partial<
       sessionId,
       detail,
       responseStatus: metadata.responseStatus,
+      disposition: metadata.disposition,
       claimIds: metadata.claimIds,
       sourceIds: metadata.sourceIds,
       latencyMs: metadata.latencyMs,
@@ -101,6 +102,7 @@ export function Chat({ presetAnswers }: ChatProps) {
   const conversationEpochRef = useRef(0);
   const chatScrollRef = useRef<HTMLDivElement | null>(null);
   const messageEndRef = useRef<HTMLDivElement | null>(null);
+  const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const shouldFollowRef = useRef(true);
   const handledCommandRef = useRef(0);
   const { command, persistConversation } = useConversationControl();
@@ -156,6 +158,7 @@ export function Chat({ presetAnswers }: ChatProps) {
 
     const abort = new AbortController();
     abortRef.current = abort;
+    let shouldFocusAfterCompletion = false;
     try {
       const preset = !retry && currentMessages.length === 0
         ? presetAnswers.find((answer) => answer.question === clean)
@@ -168,6 +171,7 @@ export function Chat({ presetAnswers }: ChatProps) {
         let answer = chunks[0] ?? preset.content;
         const streamingMetadata: Partial<ConversationMessage> = {
           mode: preset.mode,
+          disposition: preset.disposition,
           claimIds: preset.claimIds,
           sourceIds: preset.sourceIds,
           contractId: preset.contractId,
@@ -185,6 +189,7 @@ export function Chat({ presetAnswers }: ChatProps) {
           ...streamingMetadata,
           sources: preset.sources,
           responseStatus: preset.responseStatus,
+          disposition: preset.disposition,
           citations: preset.citations,
           followUpQuestions: preset.followUpQuestions,
           latencyMs: Math.round(performance.now() - startedAt),
@@ -223,6 +228,7 @@ export function Chat({ presetAnswers }: ChatProps) {
         items?: ConversationMessage["items"];
         mode?: ConversationMessage["mode"];
         responseStatus?: ConversationMessage["responseStatus"];
+        disposition?: ConversationMessage["disposition"];
         modelPath?: ConversationMessage["modelPath"];
         degraded?: boolean;
         claimIds?: string[];
@@ -230,6 +236,7 @@ export function Chat({ presetAnswers }: ChatProps) {
         citations?: ConversationMessage["citations"];
         followUpQuestions?: string[];
         latencyMs?: number;
+        stage?: "understanding" | "checking_evidence" | "reviewing_answer";
         message?: string;
       }) => {
         if (event.type === "meta") metadata = {
@@ -237,6 +244,7 @@ export function Chat({ presetAnswers }: ChatProps) {
           items: event.items,
           mode: event.mode,
           responseStatus: event.responseStatus,
+          disposition: event.disposition,
           modelPath: event.modelPath,
           degraded: event.degraded,
           claimIds: event.claimIds,
@@ -244,6 +252,14 @@ export function Chat({ presetAnswers }: ChatProps) {
           citations: event.citations,
           followUpQuestions: event.followUpQuestions,
         };
+        if (event.type === "stage") {
+          clearThinkingTimers();
+          setThinkingLabel({
+            understanding: "正在理解这道面试问题",
+            checking_evidence: "正在核对相关经历与事实",
+            reviewing_answer: "正在进行最终面试质量审校",
+          }[event.stage ?? "understanding"]);
+        }
         if (event.type === "delta") {
           if (!answer) metadata = {
             ...metadata,
@@ -254,7 +270,8 @@ export function Chat({ presetAnswers }: ChatProps) {
         }
         if (event.type === "done") {
           receivedDone = true;
-          metadata = { ...metadata, responseStatus: event.responseStatus, latencyMs: event.latencyMs, modelPath: event.modelPath, degraded: event.degraded };
+          metadata = { ...metadata, responseStatus: event.responseStatus, disposition: event.disposition, latencyMs: event.latencyMs, modelPath: event.modelPath, degraded: event.degraded };
+          if (event.disposition === "clarify") shouldFocusAfterCompletion = true;
         }
         if (event.type === "error") throw new Error(event.message ?? "问答服务返回异常。");
       };
@@ -302,6 +319,9 @@ export function Chat({ presetAnswers }: ChatProps) {
         clearThinkingTimers();
         setLoading(false);
         abortRef.current = null;
+        if (shouldFocusAfterCompletion) {
+          requestAnimationFrame(() => requestAnimationFrame(() => inputRef.current?.focus()));
+        }
       }
     }
   }, [clearThinkingTimers, loading, messages, persistConversation, presetAnswers]);
@@ -661,6 +681,7 @@ export function Chat({ presetAnswers }: ChatProps) {
         <form className="composer" onSubmit={submit}>
           <label className="sr-only" htmlFor="question">向 Ask Me 提问</label>
           <textarea
+            ref={inputRef}
             id="question"
             value={input}
             onChange={(event) => setInput(event.target.value)}
