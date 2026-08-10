@@ -1,5 +1,5 @@
 import { createDeepSeek, type DeepSeekLanguageModelChatOptions } from "@ai-sdk/deepseek";
-import { APICallError, generateText, Output, type ModelMessage } from "ai";
+import { APICallError, generateText, Output, streamText, type ModelMessage } from "ai";
 import type { ChatMessage } from "./types";
 import { plannedQuestionFrameSchema } from "./question-contracts";
 import { buildReviewPrompt, interviewReviewSchema } from "./interview-review";
@@ -39,6 +39,13 @@ interface GenerateInput {
   messages: Array<ChatMessage | { role: "system"; content: string }>;
   signal: AbortSignal;
   userId?: string;
+}
+
+export interface DeepSeekStream {
+  textStream: AsyncIterable<string>;
+  fullStream: AsyncIterable<{ type: string; [key: string]: unknown }>;
+  usage: PromiseLike<{ totalTokens?: number }>;
+  modelPath: ModelPath;
 }
 
 interface PlanQuestionInput {
@@ -186,6 +193,26 @@ export async function generateDeepSeekAnswer(input: GenerateInput) {
     text: result.text.trim(),
     totalTokens: Number(result.usage?.totalTokens ?? 0),
     modelPath: modelPathFor(modelId),
+  };
+}
+
+export function streamDeepSeekAnswer(input: GenerateInput, modelPath: ModelPath = "flash"): DeepSeekStream {
+  const modelId = modelPath === "pro" ? FALLBACK_MODEL : PRIMARY_MODEL;
+  const result = streamText({
+    model: deepSeek(modelId),
+    ...toModelPrompt(input.messages),
+    providerOptions: deepSeekProviderOptions("fast"),
+    temperature: 0.45,
+    maxOutputTokens: 1_100,
+    maxRetries: 0,
+    onError: () => undefined,
+    abortSignal: input.signal,
+  });
+  return {
+    textStream: result.textStream,
+    fullStream: result.fullStream as AsyncIterable<{ type: string; [key: string]: unknown }>,
+    usage: result.usage,
+    modelPath,
   };
 }
 

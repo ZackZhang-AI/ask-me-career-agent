@@ -22,7 +22,7 @@ async function events(response: Response) {
 }
 
 function metaEvent(responseEvents: Array<Record<string, unknown>>) {
-  const meta = responseEvents.find((event) => event.type === "meta");
+  const meta = responseEvents.filter((event) => event.type === "meta").at(-1);
   assert.ok(meta);
   return meta;
 }
@@ -54,6 +54,25 @@ function deepSeekStream(content: string, totalTokens = 100) {
     choices: [{ message: { role: "assistant", content }, finish_reason: "stop" }],
     usage: { prompt_tokens: 20, completion_tokens: totalTokens - 20, total_tokens: totalTokens },
   }), { status: 200, headers: { "Content-Type": "application/json" } });
+}
+
+function deepSeekSse(content: string) {
+  const chunks = content.match(/.{1,24}/gu) ?? [content];
+  const body = chunks.map((chunk) => `data: ${JSON.stringify({ choices: [{ delta: { content: chunk } }] })}\n\n`).join("") + "data: [DONE]\n\n";
+  return new Response(body, { status: 200, headers: { "Content-Type": "text/event-stream" } });
+}
+
+function interruptedDeepSeekSse(firstSentence: string) {
+  const encoder = new TextEncoder();
+  const body = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      controller.enqueue(encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: firstSentence } }] })}\n\n`));
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      controller.enqueue(encoder.encode("data: {not-json}\n\n"));
+      controller.close();
+    },
+  });
+  return new Response(body, { status: 200, headers: { "Content-Type": "text/event-stream" } });
 }
 
 beforeEach(() => {
@@ -182,7 +201,7 @@ test("深层方法指代沿用上一轮 RAG 语境", async () => {
   let calls = 0;
   globalThis.fetch = async () => {
     calls += 1;
-    if (calls === 1) return deepSeekStream(answer);
+    if (calls === 1) return deepSeekSse(answer);
     return deepSeekStream(JSON.stringify(reviewResult("pass")));
   };
   const responseEvents = await events(await POST(request({
@@ -190,13 +209,74 @@ test("深层方法指代沿用上一轮 RAG 语境", async () => {
     messages: [...history, { role: "user", content: question }],
   })));
 
-  assert.equal(calls, 2);
+  assert.equal(calls, 1);
   assert.equal(metaEvent(responseEvents).mode, "live");
   assert.equal(metaEvent(responseEvents).responseStatus, "completed");
   assert.equal(metaEvent(responseEvents).disposition, "scoped_answer");
   assert.equal((metaEvent(responseEvents).claimIds as string[]).includes("C3"), true);
   assert.equal((metaEvent(responseEvents).sourceIds as string[]).includes("S3"), true);
   assert.equal(responseEvents.at(-1).responseStatus, "completed");
+});
+
+test("面试相关开放题在首段安全后真实流式输出", async () => {
+  process.env.DEEPSEEK_API_KEY = "test-only-placeholder";
+  const question = "你之前的经历都对你求职 AI 有什么帮助？";
+  const frame = buildLocalQuestionFrame(question);
+  const items = retrieveKnowledge(question, { history: [], limit: 4, frame });
+  const answer = buildAnswerPlan(question, items, undefined, [], frame).fallbackAnswer;
+  let calls = 0;
+  globalThis.fetch = async () => { calls += 1; return deepSeekSse(answer); };
+
+  const responseEvents = await events(await POST(request({
+    sessionId: "api-realtime-experience-value",
+    messages: [{ role: "user", content: question }],
+  })));
+  const metas = responseEvents.filter((event) => event.type === "meta");
+  const deltas = responseEvents.filter((event) => event.type === "delta");
+  const doneIndex = responseEvents.findIndex((event) => event.type === "done");
+  assert.equal(calls, 1);
+  assert.equal(metas[0]?.phase, "initial");
+  assert.equal(metas.at(-1)?.deliveryMode, "realtime_stream");
+  assert.ok(responseEvents.some((event) => event.type === "stage" && event.stage === "writing_answer"));
+  assert.ok(deltas.length >= 2);
+  assert.ok(responseEvents.findIndex((event) => event.type === "delta") < doneIndex);
+  assert.equal(responseEvents.at(-1)?.responseStatus, "completed");
+});
+
+test("Flash 首包失败时切换 Pro 后继续真实流式输出", async () => {
+  process.env.DEEPSEEK_API_KEY = "test-only-placeholder";
+  const question = "为什么要转型 AI 产品？";
+  const frame = buildLocalQuestionFrame(question);
+  const items = retrieveKnowledge(question, { history: [], limit: 4, frame });
+  const answer = buildAnswerPlan(question, items, undefined, [], frame).fallbackAnswer;
+  let calls = 0;
+  globalThis.fetch = async () => {
+    calls += 1;
+    return calls === 1 ? new Response(null, { status: 503 }) : deepSeekSse(answer);
+  };
+
+  const responseEvents = await events(await POST(request({
+    sessionId: "api-realtime-pro-fallback",
+    messages: [{ role: "user", content: question }],
+  })));
+  assert.equal(calls, 2);
+  assert.equal(responseEvents.at(-1)?.modelPath, "pro");
+  assert.equal(responseEvents.at(-1)?.responseStatus, "completed");
+  assert.ok(responseEvents.some((event) => event.type === "delta" && String(event.content).trim()));
+});
+
+test("实时流在已输出安全片段后中断时撤销半成品并提供重试标记", async () => {
+  process.env.DEEPSEEK_API_KEY = "test-only-placeholder";
+  globalThis.fetch = async () => interruptedDeepSeekSse("基于我的经历，我会先明确问题和目标，再结合公开项目说明处理思路。 ");
+  const responseEvents = await events(await POST(request({
+    sessionId: "api-realtime-interrupted",
+    messages: [{ role: "user", content: "如果面试中遇到陌生业务，你会怎么处理？" }],
+  })));
+  const error = responseEvents.find((event) => event.type === "error");
+  assert.ok(error);
+  assert.equal(error.retryable, true);
+  assert.equal(error.discardPartial, true);
+  assert.equal(responseEvents.some((event) => event.type === "done"), false);
 });
 
 test("每轮回答都返回三个未问过的推荐问题", async () => {
@@ -277,7 +357,7 @@ test("模型返回空内容时开放题不展示未经审校的本地答案", as
     resetLocalRateLimitsForTests();
     const responseEvents = await events(await POST(request({ sessionId, messages: [{ role: "user", content: question }] })));
     const answer = responseEvents.filter((event) => event.type === "delta").map((event) => event.content).join("");
-    assert.match(answer, /当前回答服务暂时不可用/);
+    assert.match(answer, /抱歉，这次回答没有成功生成/);
     assert.equal(responseEvents.at(-1)?.type, "done");
     assert.equal(responseEvents.at(-1)?.responseStatus, "upstream_error");
     assert.equal(responseEvents.at(-1)?.disposition, "service_unavailable");
@@ -326,14 +406,13 @@ test("缺少岗位上下文时优先澄清而不套用稳定答案", async () =>
   assert.equal(responseEvents.at(-1).responseStatus, "needs_clarification");
 });
 
-test("开放题由 Flash 生成并经 Pro 强制重写审校", async () => {
+test("事实敏感开放题由 Flash 生成并经 Pro 强制审校", async () => {
   process.env.DEEPSEEK_API_KEY = "test-only-placeholder";
   let calls = 0;
   globalThis.fetch = async () => {
     calls += 1;
-    if (calls === 1) return deepSeekStream(JSON.stringify(plannerFrame({ topic: "profile", facet: "transfer", answerIntent: "career_transition", questionMode: "candidate_fact", evidencePolicy: "required", focusTerms: ["转型动机", "经历连续性"], requestedDimensions: ["选择原因", "能力迁移"] })));
-    if (calls === 2) return deepSeekStream("我只是觉得 AI 产品更有前景。", 60);
-    const question = "为什么财会转产品？";
+    if (calls === 1) return deepSeekStream("我在百度实习中参与模型评测、问题分类和评测材料整理，具体贡献会以公开项目范围为准。", 100);
+    const question = "你在百度实习中具体负责了哪些工作？";
     const frame = buildLocalQuestionFrame(question);
     const items = retrieveKnowledge(question, { history: [], limit: 4, frame });
     const revised = buildAnswerPlan(question, items, undefined, [], frame).fallbackAnswer;
@@ -342,14 +421,14 @@ test("开放题由 Flash 生成并经 Pro 强制重写审校", async () => {
 
   const responseEvents = await events(await POST(request({
     sessionId: "api-pro-repair",
-    messages: [{ role: "user", content: "为什么财会转产品？" }],
+    messages: [{ role: "user", content: "你在百度实习中具体负责了哪些工作？" }],
   })));
   const answer = responseEvents.filter((event) => event.type === "delta").map((event) => event.content).join("");
-  assert.equal(calls, 3);
+  assert.equal(calls, 2);
   assert.equal(responseEvents.at(-1)?.modelPath, "pro");
   assert.equal(responseEvents.at(-1)?.degraded, false);
-  assert.match(answer, /财会|审计/);
-  assert.match(answer, /逐步|连续|迁移/);
+  assert.match(answer, /百度|评测/);
+  assert.match(answer, /工作主线|贡献|负责/);
 });
 
 test("开放题双模型失败时显示服务不可用而不冒充成功", async () => {
@@ -360,7 +439,7 @@ test("开放题双模型失败时显示服务不可用而不冒充成功", async
     messages: [{ role: "user", content: "为什么要转型 AI 产品？" }],
   })));
   const answer = responseEvents.filter((event) => event.type === "delta").map((event) => event.content).join("");
-  assert.match(answer, /当前回答服务暂时不可用/);
+  assert.match(answer, /抱歉，这次回答没有成功生成/);
   assert.equal(responseEvents.at(-1)?.modelPath, "local_fallback");
   assert.equal(responseEvents.at(-1)?.degraded, false);
   assert.equal(responseEvents.at(-1)?.responseStatus, "upstream_error");
@@ -377,12 +456,12 @@ test("Pro 审校预算不足时不生成未经审校的开放题答案", async (
   };
   const responseEvents = await events(await POST(request({
     sessionId: "api-repair-budget",
-    messages: [{ role: "user", content: "为什么财会转产品？" }],
+    messages: [{ role: "user", content: "你在百度实习中具体负责了哪些工作？" }],
   })));
   const answer = responseEvents.filter((event) => event.type === "delta").map((event) => event.content).join("");
   assert.equal(calls, 0);
   assert.equal(metaEvent(responseEvents).mode, "boundary");
   assert.equal(metaEvent(responseEvents).disposition, "service_unavailable");
-  assert.match(answer, /当前回答服务暂时不可用/);
+  assert.match(answer, /抱歉，这次回答没有成功生成/);
   assert.doesNotMatch(answer, /工程团队|客户交付|积极反馈/);
 });

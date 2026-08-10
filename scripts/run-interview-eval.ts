@@ -373,17 +373,16 @@ async function deepSeekAnswer(testCase: Pick<InterviewCase, "question" | "roleNa
 
 async function answerForCase(testCase: Pick<InterviewCase, "question" | "roleName" | "roleFocus">, mode: EvaluationMode, history: Array<{ role: "user" | "assistant"; content: string }> = []): Promise<EvaluationAnswer> {
   if (mode === "deepseek") {
-    try {
-      return await deepSeekAnswer(testCase, history);
-    } catch {
-      return {
-        text: serviceUnavailableMessage(),
-        responseStatus: "upstream_error",
-        claimIds: [],
-        sourceIds: [],
-        answerMode: "guardrail",
-      };
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        const result = await deepSeekAnswer(testCase, history);
+        if (result.responseStatus !== "upstream_error" || attempt === 2) return result;
+      } catch {
+        if (attempt === 2) break;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 300 * (attempt + 1)));
     }
+    return { text: serviceUnavailableMessage(), responseStatus: "upstream_error", claimIds: [], sourceIds: [], answerMode: "guardrail" };
   }
   return localAnswer(testCase.question, history);
 }

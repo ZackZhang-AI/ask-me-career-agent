@@ -10,11 +10,13 @@ export type BoundaryReason =
   | "ambiguous_project"
   | "missing_personal_evidence"
   | "outside_supported_scope"
+  | "unrelated_to_interview"
   | "unsafe_request"
   | "quality_review_failed"
   | "upstream_unavailable";
-export type ProcessingStage = "understanding" | "checking_evidence" | "reviewing_answer";
+export type ProcessingStage = "understanding" | "checking_evidence" | "writing_answer" | "reviewing_answer";
 export type ReviewPath = "none" | "pro_pass" | "pro_rewrite" | "pro_reject";
+export type DeliveryMode = "local_reveal" | "realtime_stream" | "reviewed_buffer";
 export type EvidenceBasis = "confirmed_fact" | "source_view" | "user_statement" | "inference";
 export type ResponseShape = "narrative" | "direct" | "fit_mapping" | "project_arc" | "contribution" | "star" | "shortcoming" | "recommendation";
 export type ConversationDepth = "overview" | "follow_up" | "deep_dive";

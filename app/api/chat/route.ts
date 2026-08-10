@@ -1,12 +1,13 @@
 import { NextRequest } from "next/server";
 import { buildAnswerCitations } from "@/lib/answer-citations";
 import { persistEvent } from "@/lib/analytics";
-import { buildChatDelivery, type ChatDelivery } from "@/lib/chat-pipeline";
+import { buildChatDelivery, type ChatDelivery, type ChatStreamMetadata } from "@/lib/chat-pipeline";
 import { presetRevealChunks } from "@/lib/chat-session";
 import { assessQuestion } from "@/lib/guardrails";
 import { getClaims, serializeKnowledgeItems } from "@/lib/knowledge";
 import { getFollowUpQuestions } from "@/lib/question-suggestions";
 import { checkRequestLimits, extractClientIp, recordTokenUsage } from "@/lib/rate-limit";
+import { serviceUnavailableMessage } from "@/lib/answerability";
 import type { ChatMessage, ProcessingStage, ResponseStatus } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -34,10 +35,11 @@ async function emitDelivery(
   delivery: ChatDelivery,
   input: { sessionId: string; startedAt: number; stageLatencies: Partial<Record<ProcessingStage, number>> },
 ) {
-  const answer = delivery.answer.trim() || "当前回答服务暂时不可用，请稍后重新生成。";
+  const answer = delivery.answer.trim() || serviceUnavailableMessage();
   const citations = buildAnswerCitations(answer, delivery.claims ?? getClaims(delivery.claimIds));
   controller.enqueue(line({
     type: "meta",
+    phase: delivery.streamed ? "final" : "initial",
     mode: delivery.mode,
     responseStatus: delivery.responseStatus,
     disposition: delivery.disposition,
@@ -49,11 +51,14 @@ async function emitDelivery(
     followUpQuestions: delivery.followUpQuestions,
     modelPath: delivery.modelPath,
     degraded: delivery.degraded,
+    deliveryMode: delivery.deliveryMode,
     ...(delivery.claims ? { claims: delivery.claims } : {}),
   }));
-  for (const chunk of presetRevealChunks(answer)) {
-    controller.enqueue(line({ type: "delta", content: chunk }));
-    await new Promise((resolve) => setTimeout(resolve, 16));
+  if (!delivery.streamed) {
+    for (const chunk of presetRevealChunks(answer)) {
+      controller.enqueue(line({ type: "delta", content: chunk }));
+      await new Promise((resolve) => setTimeout(resolve, 16));
+    }
   }
   await recordTokenUsage({ actualTokens: delivery.actualTokens, tokenReservation: delivery.tokenReservation });
   const latencyMs = Date.now() - input.startedAt;
@@ -64,6 +69,7 @@ async function emitDelivery(
     latencyMs,
     modelPath: delivery.modelPath,
     degraded: delivery.degraded,
+    deliveryMode: delivery.deliveryMode,
   }));
   controller.close();
   await persistEvent({
@@ -89,13 +95,19 @@ async function emitDelivery(
     firstStageLatencyMs: input.stageLatencies.understanding,
     checkingEvidenceLatencyMs: input.stageLatencies.checking_evidence,
     reviewingAnswerLatencyMs: input.stageLatencies.reviewing_answer,
+    firstTokenLatencyMs: delivery.diagnostic.firstChunkLatencyMs,
+    deliveryMode: delivery.deliveryMode,
   });
 }
 
 function streamResponse(input: {
   sessionId: string;
   startedAt: number;
-  task: (onStage: (stage: ProcessingStage) => void) => Promise<ChatDelivery>;
+  task: (callbacks: {
+    onStage: (stage: ProcessingStage) => void;
+    onPrepared: (metadata: ChatStreamMetadata) => void;
+    onDelta: (chunk: string) => void;
+  }) => Promise<ChatDelivery>;
 }) {
   return new Response(new ReadableStream<Uint8Array>({
     async start(controller) {
@@ -106,21 +118,38 @@ function streamResponse(input: {
         stageLatencies[stage] = latencyMs;
         controller.enqueue(line({ type: "stage", stage, latencyMs }));
       };
+      const onPrepared = (metadata: ChatStreamMetadata) => {
+        controller.enqueue(line({ type: "meta", phase: "initial", ...metadata }));
+      };
+      const onDelta = (chunk: string) => {
+        controller.enqueue(line({ type: "delta", content: chunk }));
+      };
       onStage("understanding");
       try {
-        const delivery = await input.task(onStage);
+        const delivery = await input.task({ onStage, onPrepared, onDelta });
         console.info("ask-me-stage-latency", JSON.stringify({
           understandingMs: stageLatencies.understanding,
           checkingEvidenceMs: stageLatencies.checking_evidence,
+          writingAnswerMs: stageLatencies.writing_answer,
           reviewingAnswerMs: stageLatencies.reviewing_answer,
         }));
         await emitDelivery(controller, delivery, { sessionId: input.sessionId, startedAt: input.startedAt, stageLatencies });
       } catch (error) {
+        if (error instanceof Error && error.name === "StreamInterruptedError") {
+          console.warn("ask-me-stream-interrupted", JSON.stringify({
+            stage: "writing_answer",
+            discardPartial: true,
+            retryable: true,
+            reason: error.message.slice(0, 120),
+          }));
+        }
         controller.enqueue(line({
           type: "error",
           message: error instanceof Error && error.name === "AbortError"
             ? "回答已停止。"
-            : "当前回答服务暂时不可用，请稍后重新生成。",
+            : serviceUnavailableMessage(),
+          retryable: true,
+          discardPartial: true,
         }));
         controller.close();
       }
@@ -192,7 +221,10 @@ export async function POST(request: NextRequest) {
           boundaryReason: "unsafe_request",
           reviewPath: "none",
           plannerUsed: false,
+          deliveryMode: "local_reveal",
         },
+        deliveryMode: "local_reveal",
+        streamed: false,
       }),
     });
   }
@@ -201,7 +233,7 @@ export async function POST(request: NextRequest) {
   return streamResponse({
     sessionId: body.sessionId,
     startedAt,
-    task: (onStage) => buildChatDelivery({
+    task: ({ onStage, onPrepared, onDelta }) => buildChatDelivery({
       question: assessment.question,
       messages,
       sessionId: body.sessionId!,
@@ -210,6 +242,9 @@ export async function POST(request: NextRequest) {
       estimatedTokens,
       initialTokenReservation: rate.tokenReservation,
       onStage,
+      onPrepared,
+      onDelta,
+      startedAt,
     }),
   });
 }

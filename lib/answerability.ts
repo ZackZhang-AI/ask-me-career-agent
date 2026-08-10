@@ -37,6 +37,8 @@ const ambiguousProjectPattern = /(?:这个|该|上述|刚才的|前面提到的)
 const roleNamePattern = /[A-Za-z0-9\u4e00-\u9fa5]{2,24}(?:产品经理|岗位|职位|PM)/i;
 const projectNamePattern = /百度|AI\s*Coding|Evaluator\s*Agent|RAG|DeepFlow|Ask\s*Me|Thirty-Minute Brain|审计/i;
 const unsupportedPersonalFactPattern = /千万|百万(?:营收|收入|(?:付费)?用户)|亿元?|营收|正式(?:研发)?团队|带领.{0,8}团队|带过.{0,8}人|独立训练|千亿参数|自动驾驶|支付牌照|政治人物/;
+const scopedInterviewReasoningPattern = /(?:你怎么看|如何看待|你会如何|如果|假设|面对|遇到|为什么|为何|如何|怎么).{0,24}(?:岗位|工作|团队|压力|冲突|学习|加班|职业|选择|产品|AI|业务|协作|沟通|优先级|功能|取舍|方案|需求|资源|保留|面试)/i;
+const interviewScopePattern = /面试|岗位|工作|团队|压力|冲突|学习|加班|职业|选择|产品|AI|业务|协作|沟通|项目|经历|能力|求职|功能|取舍|方案|需求|资源|保留/i;
 
 function historyContains(history: ChatMessage[], pattern: RegExp) {
   return history.slice(-8).some((message) => message.role === "user" && pattern.test(message.content));
@@ -80,7 +82,7 @@ function clarify(reason: "ambiguous_role" | "ambiguous_project", capabilityIds: 
   };
 }
 
-function decline(reason: "missing_personal_evidence" | "outside_supported_scope", capabilityIds: string[]): AnswerabilityDecision {
+function decline(reason: "missing_personal_evidence" | "outside_supported_scope" | "unrelated_to_interview", capabilityIds: string[]): AnswerabilityDecision {
   return {
     disposition: "decline",
     boundaryReason: reason,
@@ -89,7 +91,9 @@ function decline(reason: "missing_personal_evidence" | "outside_supported_scope"
     capabilityIds,
     message: reason === "missing_personal_evidence"
       ? "这部分我没有可以准确说明的真实经历，我不希望用推测替代事实。如果您希望评估相近能力，我可以结合已经公开的项目和实践继续回答。"
-      : "这个问题超出了我目前能够可靠说明的能力范围，我不想用通用答案代替真实判断。您可以继续了解我的 AI 产品、模型评测、数据分析或企业流程实践。",
+      : reason === "unrelated_to_interview"
+        ? "抱歉，这个问题和当前面试中评估候选人的经历与能力关联不强，我不希望用泛泛的内容代替有效回答。如果您愿意，可以继续了解我的 AI 产品、项目实践或岗位匹配。"
+        : "这个问题超出了我目前能够可靠说明的能力范围，我不想用通用答案代替真实判断。您可以继续了解我的 AI 产品、模型评测、数据分析或企业流程实践。",
   };
 }
 
@@ -125,7 +129,7 @@ export function decideAnswerability(input: AnswerabilityInput): AnswerabilityDec
   }
 
   if (input.frame.questionMode === "candidate_reasoning") {
-    if (!capabilities.length) return decline("outside_supported_scope", capabilityIds);
+    if (!capabilities.length && !scopedInterviewReasoningPattern.test(input.question)) return decline("outside_supported_scope", capabilityIds);
     return {
       disposition: "scoped_answer",
       boundaryReason: "none",
@@ -146,6 +150,9 @@ export function decideAnswerability(input: AnswerabilityInput): AnswerabilityDec
   }
 
   const hasEvidence = input.items.length > 0 && input.claimIds.length > 0 && input.sourceIds.length > 0;
+  if (!hasEvidence && input.frame.topic === "unknown" && input.plan.intent === "general" && !interviewScopePattern.test(input.question)) {
+    return decline("unrelated_to_interview", capabilityIds);
+  }
   if (!hasEvidence && (input.frame.evidencePolicy === "required" || input.frame.topic === "unknown" || input.plan.intent === "general")) {
     return decline("missing_personal_evidence", capabilityIds);
   }
@@ -163,5 +170,5 @@ export function decideAnswerability(input: AnswerabilityInput): AnswerabilityDec
 }
 
 export function serviceUnavailableMessage() {
-  return "当前回答服务暂时不可用。为了避免给出不准确的内容，我没有展示这次回答，请稍后重新生成。";
+  return "抱歉，这次回答没有成功生成。为了避免展示不完整或不准确的内容，我先没有保留它。你可以点击“重新回答”再试一次。";
 }

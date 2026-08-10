@@ -92,6 +92,12 @@ const routingCases: Array<{ question: string; intent: AnswerIntent; targetRole?:
   { question: "你不能回答开放问题吗？", intent: "capability_scope" },
   { question: "你能回答哪些开放题？", intent: "capability_scope" },
   { question: "这个 Agent 能不能回答没有标准答案的问题？", intent: "capability_scope" },
+  { question: "你有什么作用？", intent: "capability_scope" },
+  { question: "你可以干什么？", intent: "capability_scope" },
+  { question: "你之前的经历都对你求职 AI 有什么帮助？", intent: "experience_value" },
+  { question: "你过往经历对做产品有什么帮助？", intent: "experience_value" },
+  { question: "如果面试官问到陌生业务，你会怎么快速理解？", intent: "diagnosis" },
+  { question: "你平时如何面对压力和不确定性？", intent: "general" },
 ];
 
 test("75 个未预写开放问题按提问动作稳定路由", () => {

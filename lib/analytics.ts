@@ -25,8 +25,9 @@ const TARGET_TYPES = new Set(["source", "project", "resume", "email", "phone", "
 const ANSWER_MODES = new Set(["live", "stable", "demo", "guardrail", "boundary"]);
 const ANSWER_PATHS = new Set(["generated", "repaired", "fallback", "stable", "demo", "guardrail", "boundary", "service_unavailable"]);
 const ANSWER_DISPOSITIONS = new Set(["answer", "scoped_answer", "clarify", "decline", "service_unavailable"]);
-const BOUNDARY_REASONS = new Set(["none", "ambiguous_role", "ambiguous_project", "missing_personal_evidence", "outside_supported_scope", "unsafe_request", "quality_review_failed", "upstream_unavailable"]);
+const BOUNDARY_REASONS = new Set(["none", "ambiguous_role", "ambiguous_project", "missing_personal_evidence", "outside_supported_scope", "unrelated_to_interview", "unsafe_request", "quality_review_failed", "upstream_unavailable"]);
 const REVIEW_PATHS = new Set(["none", "pro_pass", "pro_rewrite", "pro_reject"]);
+const DELIVERY_MODES = new Set(["local_reveal", "realtime_stream", "reviewed_buffer"]);
 const QUESTION_TOPICS = new Set(["profile", "role_fit", "rag", "deepflow", "ask_me", "local_tools", "audit", "statistics", "skills", "enterprise_ai", "agent", "unknown"]);
 const QUESTION_FACETS = new Set(["overview", "problem", "method", "contribution", "architecture", "collaboration", "evaluation", "transfer", "example", "result", "boundary", "fit"]);
 const DELIVERY_PATHS = new Set(["preset", "api"]);
@@ -60,6 +61,7 @@ export interface AnalyticsEventInput {
   firstStageLatencyMs?: number;
   checkingEvidenceLatencyMs?: number;
   reviewingAnswerLatencyMs?: number;
+  deliveryMode?: string;
 }
 
 export interface SanitizedAnalyticsEvent {
@@ -88,6 +90,7 @@ export interface SanitizedAnalyticsEvent {
   firstStageLatencyMs: number | null;
   checkingEvidenceLatencyMs: number | null;
   reviewingAnswerLatencyMs: number | null;
+  deliveryMode: string | null;
 }
 
 interface NeonQuery {
@@ -176,6 +179,7 @@ export function sanitizeAnalyticsEvent(value: unknown): SanitizedAnalyticsEvent 
     firstStageLatencyMs: safeCount(input.firstStageLatencyMs, 300_000),
     checkingEvidenceLatencyMs: safeCount(input.checkingEvidenceLatencyMs, 300_000),
     reviewingAnswerLatencyMs: safeCount(input.reviewingAnswerLatencyMs, 300_000),
+    deliveryMode: typeof input.deliveryMode === "string" && DELIVERY_MODES.has(input.deliveryMode) ? input.deliveryMode : null,
   };
 }
 
@@ -224,6 +228,7 @@ async function ensureSchema(sql: NeonQuery): Promise<void> {
           first_stage_latency_ms INTEGER,
           checking_evidence_latency_ms INTEGER,
           reviewing_answer_latency_ms INTEGER,
+          delivery_mode TEXT,
           occurred_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         )
       `;
@@ -243,6 +248,7 @@ async function ensureSchema(sql: NeonQuery): Promise<void> {
       await sql`ALTER TABLE ask_me_events ADD COLUMN IF NOT EXISTS first_stage_latency_ms INTEGER`;
       await sql`ALTER TABLE ask_me_events ADD COLUMN IF NOT EXISTS checking_evidence_latency_ms INTEGER`;
       await sql`ALTER TABLE ask_me_events ADD COLUMN IF NOT EXISTS reviewing_answer_latency_ms INTEGER`;
+      await sql`ALTER TABLE ask_me_events ADD COLUMN IF NOT EXISTS delivery_mode TEXT`;
       await sql`CREATE INDEX IF NOT EXISTS ask_me_events_occurred_at_idx ON ask_me_events (occurred_at)`;
       await sql`CREATE INDEX IF NOT EXISTS ask_me_events_funnel_idx ON ask_me_events (event_name, occurred_at)`;
     })().catch((error) => {
@@ -265,12 +271,12 @@ export async function persistEvent(value: unknown): Promise<boolean> {
         event_name, session_hash, response_status, claim_ids, source_ids,
         latency_ms, first_token_latency_ms, delivery_path, question_category, target_type, target_id
         , contract_id, topic, facet, answer_mode, answer_path, rewrite_count, retrieval_count, quality_trigger_count
-        , disposition, boundary_reason, review_path, first_stage_latency_ms, checking_evidence_latency_ms, reviewing_answer_latency_ms
+        , disposition, boundary_reason, review_path, first_stage_latency_ms, checking_evidence_latency_ms, reviewing_answer_latency_ms, delivery_mode
       ) VALUES (
         ${event.event}, ${event.sessionHash}, ${event.responseStatus}, ${event.claimIds}, ${event.sourceIds},
         ${event.latencyMs}, ${event.firstTokenLatencyMs}, ${event.deliveryPath}, ${event.questionCategory}, ${event.targetType}, ${event.targetId}
         , ${event.contractId}, ${event.topic}, ${event.facet}, ${event.answerMode}, ${event.answerPath}, ${event.rewriteCount}, ${event.retrievalCount}, ${event.qualityTriggerCount}
-        , ${event.disposition}, ${event.boundaryReason}, ${event.reviewPath}, ${event.firstStageLatencyMs}, ${event.checkingEvidenceLatencyMs}, ${event.reviewingAnswerLatencyMs}
+        , ${event.disposition}, ${event.boundaryReason}, ${event.reviewPath}, ${event.firstStageLatencyMs}, ${event.checkingEvidenceLatencyMs}, ${event.reviewingAnswerLatencyMs}, ${event.deliveryMode}
       )
     `;
     return true;

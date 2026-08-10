@@ -23,12 +23,13 @@ export function extractTargetRole(question: string) {
 
 export function inferAnswerIntent(question: string, topic: QuestionTopic = "unknown", facet: QuestionFacet = "overview"): AnswerIntent {
   if (/^(?:(?:你|您)?(?:是谁|叫什么(?:名字)?|是什么(?:身份|助手|Agent|角色)?|的身份是什么)|(?:请)?(?:介绍|说明)(?:一下)?你的身份)[？?。.！!\s]*$/i.test(question)) return "agent_identity";
-  if (/^(?:(?:你|您)(?:能|可以)(?:做|回答|介绍|帮我)(?:些什么|什么|哪些(?:问题|内容|开放题)?)?|能问你什么|可以问什么|功能范围|能力范围|你不能回答开放(?:问题|题目|题)?(?:吗)?|你能回答开放(?:问题|题目|题)?(?:吗)?|.*(?:Agent|助手).{0,8}(?:能不能|可以不可以|能否)?回答.{0,12}(?:开放|标准答案|问题))[？?。.！!\s]*$/i.test(question)) return "capability_scope";
+  if (/^(?:(?:你|您)(?:能|可以)(?:做|回答|介绍|帮我)(?:些什么|什么|哪些(?:问题|内容|开放题)?)?|你有什么(?:作用|用处|功能)|你是做什么的|你能干什么|你可以干什么|能问你什么|可以问什么|功能范围|能力范围|你不能回答开放(?:问题|题目|题)?(?:吗)?|你能回答(?:开放|没有标准答案的)?(?:问题|题目|题)?(?:吗)?|.*(?:Agent|助手).{0,8}(?:能不能|可以不可以|能否)?回答.{0,12}(?:开放|标准答案|问题))[？?。.！!\s]*$/i.test(question)) return "capability_scope";
   if (careerTransitionPattern.test(question) || careerTransitionContextPattern.test(question)) return "career_transition";
   if (roleFitPattern.test(question)) return "role_fit";
   if (/AI\s*(?:编程|写|生成)|代码.*AI|AI.*占比|用了多少\s*AI/i.test(question)) return "ai_collaboration";
   if (/挑战|困难|失败|取舍|踩坑|复盘|怎么推进|如何推进/i.test(question)) return "challenge";
   if (/^(?:如果|假设|当)/.test(question) && /(?:怎么办|怎么|如何|怎样)/.test(question)) return "diagnosis";
+  if (/(?:如何|怎么|怎样).{0,12}(?:证明|验证).{0,12}(?:可信|可靠|质量)/i.test(question)) return "diagnosis";
   if (resultEvidencePattern.test(question)) return "result";
   if (/个人贡献|你做了什么|你负责|具体做了|你的工作|主导/i.test(question)) return "contribution";
   if (/没有改善|没改善|没有效果|没效果|优先排查|先排查|先.{0,3}看什么|定位问题|(?:如何|怎么).{0,4}定位|为什么没有/i.test(question)) return "diagnosis";
@@ -38,7 +39,7 @@ export function inferAnswerIntent(question: string, topic: QuestionTopic = "unkn
   if (/代表项目|最能代表|最有价值的项目/i.test(question)) return "representative_project";
   if (/自我介绍|介绍一下自己|60\s*秒/i.test(question)) return "introduction";
   if (/(?:项目|系统|工具|助手).{0,10}(?:能做什么|做什么|有什么功能|如何工作)/i.test(question)) return "project_overview";
-  if (/(?:统计|数据分析|审计|财会|财务).{0,14}(?:迁移|帮助|带来|形成).{0,12}(?:AI|产品|决策|能力)/i.test(question)) return "experience_value";
+  if (/(?:统计|数据分析|审计|财会|财务|之前的?经历|过往经历).{0,24}(?:(?:迁移|帮助|带来|形成|求职).{0,16}(?:AI|产品|决策|能力)|(?:AI|产品).{0,12}(?:帮助|价值|作用|迁移))/i.test(question)) return "experience_value";
   if (/技术能力|技术栈|会什么|数据分析|(?:AI\s*)?评测|如何评估|有哪些实践/i.test(question) || facet === "evaluation") return "skills";
   if (/企业级?\s*AI|企业\s*AI|企业场景|业务问题.{0,8}(?:转化|转成|变成).{0,8}(?:AI|产品)|(?:AI|产品)方案|项目经历.{0,12}(?:价值|帮助|迁移)|(?:从)?(?:财会|会计|财务|审计|统计).{0,14}(?:积累|迁移|帮助|带来|形成).{0,12}(?:产品|能力|需求|决策)/i.test(question)) return "experience_value";
   if (facet === "contribution") return "contribution";
@@ -50,8 +51,12 @@ export function inferAnswerIntent(question: string, topic: QuestionTopic = "unkn
 
 function questionModeFor(question: string, intent: AnswerIntent): QuestionMode {
   if (["agent_identity", "capability_scope", "privacy"].includes(intent)) return "agent_meta";
+  // These intents already have a grounded candidate-facing answer shape. They
+  // may still use realtime delivery, but should remain an ordinary answer
+  // rather than being labelled as a hypothetical/scoped response.
+  if (["skills", "experience_value", "ai_collaboration"].includes(intent)) return "candidate_fact";
   if (["introduction", "career_transition", "role_fit", "representative_project", "project_overview", "project_problem", "contribution", "result", "experience", "education", "credentials"].includes(intent)) return "candidate_fact";
-  if (/^(?:如果|假设|当|遇到假设|你会如何|你怎么看|如何处理|怎么处理)/.test(question)) return "candidate_reasoning";
+  if (/^(?:如果|假设|当|遇到假设|你会如何|你怎么看|如何看待|面对|遇到|如何处理|怎么处理|如何|怎么|你(?:平时|通常)?如何|你(?:平时|通常)?怎样|你会怎么)/.test(question)) return "candidate_reasoning";
   return "candidate_fact";
 }
 
@@ -474,7 +479,7 @@ function forbiddenFor(topic: QuestionTopic) {
 export function buildLocalQuestionFrame(question: string, history: { role: "user" | "assistant"; content: string }[] = []): QuestionFrame {
   const contract = findQuestionContract(question);
   if (contract) return frameFromContract(contract);
-  if (/^(?:你是谁|你叫什么|你的身份是什么|你能做什么|你可以做什么|你不能回答开放(?:问题|题目)?(?:吗)?|你能回答开放(?:问题|题目)?(?:吗)?)[？?。.！!\s]*$/i.test(question)) {
+  if (/^(?:你是谁|你叫什么|你的身份是什么|你能做什么|你可以做什么|你有什么(?:作用|用处|功能)|你是做什么的|你能干什么|你可以干什么|你不能回答开放(?:问题|题目)?(?:吗)?|你能回答开放(?:问题|题目)?(?:吗)?)[？?。.！!\s]*$/i.test(question)) {
     return {
       topic: "profile",
       facet: "overview",
@@ -518,8 +523,8 @@ export function buildLocalQuestionFrame(question: string, history: { role: "user
   const detectedTopic = topicPatterns.find(([, pattern]) => pattern.test(question))?.[0] ?? "unknown";
   const detectedFacet = facetPatterns.find(([, pattern]) => pattern.test(question))?.[0] ?? "overview";
   const initialIntent = inferAnswerIntent(question, detectedTopic, detectedFacet);
-  const topic = initialIntent === "career_transition" ? "profile" : initialIntent === "role_fit" ? "role_fit" : detectedTopic;
-  const facet = initialIntent === "career_transition" ? "transfer" : initialIntent === "role_fit" ? "fit" : initialIntent === "result" ? "result" : detectedFacet;
+  const topic = ["career_transition", "experience_value"].includes(initialIntent) ? "profile" : initialIntent === "role_fit" ? "role_fit" : detectedTopic;
+  const facet = ["career_transition", "experience_value"].includes(initialIntent) ? "transfer" : initialIntent === "role_fit" ? "fit" : initialIntent === "result" ? "result" : detectedFacet;
   const answerIntent = inferAnswerIntent(question, topic, facet);
   const targetRole = answerIntent === "role_fit"
     ? extractTargetRole(question) ?? [...history].reverse()
@@ -534,12 +539,13 @@ export function buildLocalQuestionFrame(question: string, history: { role: "user
     ? (historyProject === "rag" ? "rag" : historyProject === "deepflow" ? "deepflow" : historyProject?.includes("ask") ? "ask_me" : historyProject ? "baidu" : "unknown")
     : topic;
   const explicitTopic = inferredTopic !== "unknown";
-  const hasMethodContext = /AI|产品|模型|RAG|DeepFlow|Agent|检索|评测|数据|用户|指标|需求|项目|功能|失败|复盘|取舍|协作|团队/i.test(question);
+  const hasMethodContext = /AI|产品|模型|RAG|DeepFlow|Agent|检索|评测|数据|用户|指标|需求|项目|功能|失败|复盘|取舍|协作|团队|岗位|工作|压力|冲突|学习|加班|职业|选择/i.test(question);
   const hasExplicitProjectOverviewAction = answerIntent === "project_overview"
     && /(?:项目|系统|工具|助手).{0,10}(?:能做什么|做什么|有什么功能|如何工作)/i.test(question);
   const hasStrongLocalIntent = !["general", "project_overview", "challenge", "diagnosis"].includes(answerIntent)
     || hasExplicitProjectOverviewAction
     || (["challenge", "diagnosis"].includes(answerIntent) && hasMethodContext);
+  const interviewReasoning = /(?:你怎么看|如何看待|你会如何|如果|假设|面对|遇到|为什么|为何|如何|怎么).{0,20}(?:岗位|工作|团队|压力|冲突|学习|加班|职业|选择|产品|AI|业务|协作|沟通|优先级)/i.test(question);
   return {
     topic: inferredTopic,
     facet,
@@ -551,8 +557,8 @@ export function buildLocalQuestionFrame(question: string, history: { role: "user
     requestedDimensions: [facet === "overview" ? "直接回答当前问题" : `${facet}相关判断`, "具体实践", "验证或落地方式"],
     activeProject: inferredTopic === "baidu" ? "baidu-ai-coding-evaluation" : inferredTopic === "rag" ? "rag-knowledge-base" : inferredTopic === "deepflow" || inferredTopic === "agent" ? "deepflow" : inferredTopic === "ask_me" ? "ask-me" : undefined,
     useHistory: reference,
-    confidence: ["career_transition", "role_fit"].includes(answerIntent) ? 0.92 : hasStrongLocalIntent ? 0.88 : explicitTopic && facet !== "overview" ? 0.86 : explicitTopic ? 0.72 : facet !== "overview" ? 0.58 : 0.35,
-    requiredKnowledgeIds: answerIntent === "career_transition" ? ["K2", "K3", "K9", "K22"] : topicKnowledge[inferredTopic],
+    confidence: ["career_transition", "role_fit"].includes(answerIntent) ? 0.92 : interviewReasoning ? 0.86 : hasStrongLocalIntent ? 0.88 : explicitTopic && facet !== "overview" ? 0.86 : explicitTopic ? 0.72 : facet !== "overview" ? 0.58 : 0.35,
+    requiredKnowledgeIds: ["career_transition", "experience_value"].includes(answerIntent) ? ["K1", "K2", "K3", "K9", "K22"] : topicKnowledge[inferredTopic],
     allowedStoryIds: facet === "example" ? (inferredTopic === "baidu" ? ["ST9"] : inferredTopic === "audit" ? ["ST4", "ST6"] : inferredTopic === "rag" ? ["ST1"] : inferredTopic === "deepflow" || inferredTopic === "agent" ? ["ST2"] : []) : [],
     forbiddenTopics: forbiddenFor(inferredTopic),
     responseShape: answerIntent === "career_transition" ? "narrative" : responseShapeFor(facet),
@@ -566,8 +572,8 @@ export function mergePlannedFrame(local: QuestionFrame, planned: z.infer<typeof 
   const keepLocalIntent = local.confidence >= 0.82 && local.answerIntent !== "general";
   const answerIntent = keepLocalIntent ? local.answerIntent : planned.answerIntent;
   const plannedTopic = planned.topic === "unknown" ? local.topic : planned.topic;
-  const topic = answerIntent === "career_transition" ? "profile" : answerIntent === "role_fit" ? "role_fit" : plannedTopic;
-  const facet = answerIntent === "career_transition" ? "transfer" : answerIntent === "role_fit" ? "fit" : planned.facet;
+  const topic = ["career_transition", "experience_value"].includes(answerIntent) ? "profile" : answerIntent === "role_fit" ? "role_fit" : plannedTopic;
+  const facet = ["career_transition", "experience_value"].includes(answerIntent) ? "transfer" : answerIntent === "role_fit" ? "fit" : planned.facet;
   const targetRole = local.targetRole ?? planned.targetRole;
   const questionMode = keepLocalIntent ? local.questionMode : planned.questionMode;
   return {
@@ -583,7 +589,7 @@ export function mergePlannedFrame(local: QuestionFrame, planned: z.infer<typeof 
     activeProject: planned.activeProject ?? (topic === "baidu" ? "baidu-ai-coding-evaluation" : topic === "rag" ? "rag-knowledge-base" : topic === "deepflow" || topic === "agent" ? "deepflow" : undefined),
     useHistory: planned.useHistory,
     confidence: planned.confidence,
-    requiredKnowledgeIds: answerIntent === "career_transition" ? ["K2", "K3", "K9", "K22"] : topicKnowledge[topic],
+    requiredKnowledgeIds: ["career_transition", "experience_value"].includes(answerIntent) ? ["K1", "K2", "K3", "K9", "K22"] : topicKnowledge[topic],
     allowedStoryIds: facet === "example" || facet === "transfer"
       ? (topic === "baidu" ? ["ST9"] : topic === "audit" ? ["ST4", "ST6"] : topic === "rag" ? ["ST1"] : topic === "deepflow" || topic === "agent" ? ["ST2"] : [])
       : [],

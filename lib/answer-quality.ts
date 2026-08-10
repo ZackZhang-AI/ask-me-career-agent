@@ -72,6 +72,12 @@ function containsAllowedPhrase(phrase: string, allowedText: string) {
   return allowedText.includes(phrase);
 }
 
+function containsAllowedOrganization(phrase: string, allowedText: string) {
+  if (containsAllowedPhrase(phrase, allowedText)) return true;
+  const bare = phrase.replace(/^(?:我是|来自|就读于|毕业于|曾在|目前在)/, "");
+  return bare !== phrase && containsAllowedPhrase(bare, allowedText);
+}
+
 function normalizedGroundingText(value: string) {
   return value
     .toLowerCase()
@@ -150,6 +156,8 @@ export function hasBlockingQualityTriggers(triggers: readonly string[]) {
 export function validateAnswer(candidate: string, plan: AnswerPlan): QualityGateResult {
   const triggers: string[] = [];
   const clean = candidate.trim();
+  const enforceGenericOrganizationGate = plan.questionMode !== "candidate_reasoning"
+    || ["project_arc", "contribution", "star"].includes(plan.responseShape);
   const allowedText = [
     ...plan.allowedFacts,
     ...plan.allowedOrganizations,
@@ -191,7 +199,7 @@ export function validateAnswer(candidate: string, plan: AnswerPlan): QualityGate
   if (plan.questionMode === "candidate_reasoning" && /(?:我曾经|我负责过|我已经上线|真实用户增长|客户营收)/.test(clean)) {
     triggers.push("reasoning_presented_as_fact");
   }
-  if (plan.questionMode === "candidate_reasoning" && !/(?:我的处理思路|我会先|我会从|如果.{0,18}我会|面对.{0,18}我会)/.test(firstParagraph)) {
+  if (plan.questionMode === "candidate_reasoning" && !plan.contractId && !/(?:我的处理思路|我的做法|我会|我理解|我通常|我倾向|如果.{0,18}我会|面对.{0,18}我会)/.test(firstParagraph)) {
     triggers.push("missing_reasoning_scope");
   }
   if (plan.intent === "role_fit" && !plan.contractId) {
@@ -211,12 +219,19 @@ export function validateAnswer(candidate: string, plan: AnswerPlan): QualityGate
     if (!/(?:更适合|更擅长|愿意|选择|因为|符合|一致)/.test(clean)) triggers.push("missing_transition_motivation");
   }
 
-  plan.mustInclude.forEach((required, index) => {
-    if (!semanticallyCovered(required, clean)) triggers.push(`missing_required:${index + 1}`);
-  });
+  const enforceRequiredSemantics = Boolean(plan.contractId)
+    || plan.evidencePolicy === "required"
+    || plan.questionMode !== "candidate_reasoning";
+  if (enforceRequiredSemantics) {
+    plan.mustInclude.forEach((required, index) => {
+      if (!semanticallyCovered(required, clean)) triggers.push(`missing_required:${index + 1}`);
+    });
+  }
 
   for (const phrase of BOILERPLATE) {
-    if (clean.includes(phrase)) triggers.push(`boilerplate:${phrase}`);
+    if (clean.includes(phrase) && !(phrase === "核心判断是" && plan.questionMode === "candidate_reasoning")) {
+      triggers.push(`boilerplate:${phrase}`);
+    }
   }
 
   for (const phrase of RAW_FIELD_PHRASES) {
@@ -233,22 +248,29 @@ export function validateAnswer(candidate: string, plan: AnswerPlan): QualityGate
   }
 
   for (const phrase of RISKY_CLAIMS) {
-    if (clean.includes(phrase) && !containsAllowedPhrase(phrase, allowedText)) triggers.push(`unsupported_claim:${phrase}`);
+    if (clean.includes(phrase)
+      && !(phrase === "满意度" && plan.questionMode === "candidate_reasoning")
+      && !containsAllowedPhrase(phrase, allowedText)) triggers.push(`unsupported_claim:${phrase}`);
   }
 
   for (const organization of KNOWN_ORGANIZATIONS) {
-    if (clean.includes(organization) && !containsAllowedPhrase(organization, allowedText)) triggers.push(`unsupported_organization:${organization}`);
+    if (clean.includes(organization) && !containsAllowedOrganization(organization, allowedText)) triggers.push(`unsupported_organization:${organization}`);
   }
 
-  for (const organization of clean.match(ORGANIZATION_PATTERN) ?? []) {
-    if (!containsAllowedPhrase(organization, allowedText)) triggers.push("unsupported_organization");
+  if (enforceGenericOrganizationGate) {
+    for (const organization of clean.match(ORGANIZATION_PATTERN) ?? []) {
+      if (!containsAllowedOrganization(organization, allowedText)) triggers.push("unsupported_organization");
+    }
   }
 
   for (const sentence of clean.split(/[。！？\n]+/).map((item) => item.trim()).filter(Boolean)) {
-    const explicitPastClaim = /我(?:之前|曾经|曾|实际).{0,18}(?:负责|主导|参与|完成|推动|交付|上线|遇到|发现|验证)/.test(sentence);
+    const explicitPastClaim = /我(?:之前|曾经|曾|实际|以前|过去)[^。！？\n]{0,12}(?:负责|主导|参与|完成|推动|交付|上线|遇到|发现|验证)|我[^。！？\n]{0,8}(?:负责过|主导过|参与过|做过|遇到过|发现过|验证过)/.test(sentence);
     if (EVENT_SIGNAL.test(sentence)
       && groundingScore(sentence, allowedText) < 0.3
-      && (plan.questionMode !== "candidate_reasoning" || explicitPastClaim)) {
+      // Supporting-evidence answers are allowed to synthesize the supplied
+      // facts in natural language. High-risk fact answers still require an
+      // explicitly grounded past-event sentence.
+      && explicitPastClaim) {
       triggers.push("unsupported_event");
     }
   }
@@ -265,6 +287,64 @@ export function validateAnswer(candidate: string, plan: AnswerPlan): QualityGate
     triggers.push("unrequested_limitation");
   }
 
+  const uniqueTriggers = [...new Set(triggers)];
+  return { passed: !hasBlockingQualityTriggers(uniqueTriggers), triggers: uniqueTriggers };
+}
+
+/**
+ * Incremental hard-fact gate used before a streamed fragment becomes visible.
+ * It intentionally skips whole-answer structure and length checks; those run
+ * once the model finishes so short fragments are not rejected prematurely.
+ */
+export function validateAnswerFragment(candidate: string, plan: AnswerPlan, sentenceComplete = false): QualityGateResult {
+  const triggers: string[] = [];
+  const enforceGenericOrganizationGate = plan.questionMode !== "candidate_reasoning"
+    || ["project_arc", "contribution", "star"].includes(plan.responseShape);
+  const allowedText = [
+    ...plan.allowedFacts,
+    ...plan.allowedOrganizations,
+    ...plan.allowedProjectStatuses,
+    plan.limitations ?? "",
+  ].join("\n");
+  const allowedNumbers = normalizedNumbers(allowedText);
+  const firstParagraph = candidate.split(/\n\s*\n/)[0] ?? candidate;
+
+  if (plan.directAnswerTerms.length && sentenceComplete && !plan.directAnswerTerms.some((term) => firstParagraph.toLowerCase().includes(term.toLowerCase()))) {
+    triggers.push("indirect_opening");
+  }
+  for (const phrase of RISKY_CLAIMS) {
+    if (candidate.includes(phrase)
+      && !(phrase === "满意度" && plan.questionMode === "candidate_reasoning")
+      && !containsAllowedPhrase(phrase, allowedText)) triggers.push(`unsupported_claim:${phrase}`);
+  }
+  for (const organization of KNOWN_ORGANIZATIONS) {
+    if (candidate.includes(organization) && !containsAllowedOrganization(organization, allowedText)) triggers.push(`unsupported_organization:${organization}`);
+  }
+  if (enforceGenericOrganizationGate) {
+    for (const organization of candidate.match(ORGANIZATION_PATTERN) ?? []) {
+      if (!containsAllowedOrganization(organization, allowedText)) triggers.push("unsupported_organization");
+    }
+  }
+  for (const number of normalizedNumbers(candidate)) {
+    if (!allowedNumbers.has(number)) triggers.push("unsupported_number");
+  }
+  for (const topic of plan.forbiddenTopics) {
+    const leaked = (TOPIC_TERMS[topic] ?? []).find((term) => candidate.toLowerCase().includes(term.toLowerCase()));
+    if (leaked) triggers.push(`forbidden_topic:${topic}`);
+  }
+  for (const detail of plan.forbiddenDetails) {
+    if (detail && candidate.includes(detail)) triggers.push(`forbidden:${detail}`);
+  }
+  if (sentenceComplete) {
+    for (const sentence of candidate.split(/[。！？\n]+/).map((item) => item.trim()).filter(Boolean)) {
+      const explicitPastClaim = /我(?:之前|曾经|曾|实际|以前|过去)[^。！？\n]{0,12}(?:负责|主导|参与|完成|推动|交付|上线|遇到|发现|验证)|我[^。！？\n]{0,8}(?:负责过|主导过|参与过|做过|遇到过|发现过|验证过)/.test(sentence);
+      if (EVENT_SIGNAL.test(sentence)
+        && groundingScore(sentence, allowedText) < 0.3
+        && explicitPastClaim) {
+        triggers.push("unsupported_event");
+      }
+    }
+  }
   const uniqueTriggers = [...new Set(triggers)];
   return { passed: !hasBlockingQualityTriggers(uniqueTriggers), triggers: uniqueTriggers };
 }

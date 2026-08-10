@@ -1,5 +1,5 @@
 import { buildAnswerPlan, buildContext, systemPrompt } from "./answer";
-import { hasBlockingQualityTriggers, validateAnswer } from "./answer-quality";
+import { hasBlockingQualityTriggers, validateAnswer, validateAnswerFragment } from "./answer-quality";
 import { decideAnswerability, serviceUnavailableMessage, unresolvedReferenceReason } from "./answerability";
 import {
   DeepSeekPlannerError,
@@ -7,23 +7,42 @@ import {
   generateDeepSeekAnswer,
   planDeepSeekQuestion,
   reviewDeepSeekAnswer,
+  streamDeepSeekAnswer,
   type ModelPath,
 } from "./deepseek";
 import { getClaims, getSources, matchStableAnswer, resolveRetrievalQuery, retrieveKnowledge } from "./knowledge";
 import { getFollowUpQuestions } from "./question-suggestions";
 import { buildLocalQuestionFrame, findQuestionContract, mergePlannedFrame } from "./question-contracts";
 import { reserveAdditionalModelCall } from "./rate-limit";
+import { takeStreamUnits } from "./stream-answer";
 import type {
   AnswerDisposition,
+  AnswerPlan,
   BoundaryReason,
   ChatMessage,
+  DeliveryMode,
   ProcessingStage,
+  QuestionFrame,
   ResponseStatus,
   ReviewPath,
 } from "./types";
 
 export type AnswerMode = "stable" | "demo" | "guardrail" | "live" | "boundary";
 export type AnswerPath = "generated" | "repaired" | "fallback" | "stable" | "demo" | "guardrail" | "boundary" | "service_unavailable";
+
+export interface ChatStreamMetadata {
+  mode: AnswerMode;
+  disposition: AnswerDisposition;
+  claimIds: string[];
+  sourceIds: string[];
+  sources: ReturnType<typeof getSources>;
+  items: ReturnType<typeof retrieveKnowledge>;
+  claims?: ReturnType<typeof getClaims>;
+  followUpQuestions: string[];
+  modelPath: ModelPath | "local_fallback";
+  degraded: boolean;
+  deliveryMode: DeliveryMode;
+}
 
 export interface ChatDelivery {
   answer: string;
@@ -41,6 +60,8 @@ export interface ChatDelivery {
   actualTokens: number;
   modelPath: ModelPath | "local_fallback";
   degraded: boolean;
+  deliveryMode: DeliveryMode;
+  streamed: boolean;
   diagnostic: {
     contractId?: string;
     topic: string;
@@ -56,6 +77,9 @@ export interface ChatDelivery {
     plannerUsed: boolean;
     plannerModelPath?: ModelPath;
     plannerFallbackReason?: string;
+    deliveryMode?: DeliveryMode;
+    firstChunkLatencyMs?: number;
+    streamFailureStage?: string;
   };
 }
 
@@ -68,6 +92,9 @@ interface PipelineInput {
   estimatedTokens: number;
   initialTokenReservation: number;
   onStage: (stage: ProcessingStage) => void;
+  onPrepared?: (metadata: ChatStreamMetadata) => void;
+  onDelta?: (chunk: string) => Promise<void> | void;
+  startedAt?: number;
 }
 
 function emptyDelivery(input: {
@@ -79,6 +106,7 @@ function emptyDelivery(input: {
   tokenReservation: number;
   actualTokens: number;
   diagnostic: ChatDelivery["diagnostic"];
+  deliveryMode?: DeliveryMode;
 }): ChatDelivery {
   return {
     answer: input.message,
@@ -95,8 +123,140 @@ function emptyDelivery(input: {
     actualTokens: input.actualTokens,
     modelPath: "local_fallback",
     degraded: false,
+    deliveryMode: input.deliveryMode ?? "local_reveal",
+    streamed: false,
     diagnostic: input.diagnostic,
   };
+}
+
+class StreamInterruptedError extends Error {
+  constructor(public readonly stage: "writing_answer" | "checking_evidence", message = "流式回答未完整生成") {
+    super(message);
+    this.name = "StreamInterruptedError";
+  }
+}
+
+const reviewedIntents = new Set([
+  "result",
+  "contribution",
+  "experience",
+  "education",
+  "credentials",
+  "project_overview",
+  "project_problem",
+  "ai_collaboration",
+]);
+
+function chooseDeliveryMode(input: {
+  frame: QuestionFrame;
+  plan: AnswerPlan;
+  decision: { shouldGenerate: boolean; disposition: AnswerDisposition };
+  stableAnswer?: unknown;
+  contract?: unknown;
+  hasEvidence: boolean;
+  canStream: boolean;
+}) : DeliveryMode {
+  if (input.stableAnswer || input.contract || input.frame.questionMode === "agent_meta" || !input.decision.shouldGenerate) return "local_reveal";
+  if (!input.canStream || reviewedIntents.has(input.plan.intent)) return "reviewed_buffer";
+  if (input.frame.evidencePolicy === "required" && !input.hasEvidence) return "reviewed_buffer";
+  if (input.frame.questionMode === "candidate_reasoning") return "realtime_stream";
+  if (["career_transition", "experience_value", "role_fit", "skills", "challenge", "diagnosis", "limitation", "hiring_recommendation"].includes(input.plan.intent)) return "realtime_stream";
+  return "reviewed_buffer";
+}
+
+interface StreamAnswerInput {
+  messages: Array<ChatMessage | { role: "system"; content: string }>;
+  signal: AbortSignal;
+  plan: AnswerPlan;
+  userId: string;
+  startedAt: number;
+  onDelta: (chunk: string) => Promise<void> | void;
+}
+
+async function streamAnswer(input: StreamAnswerInput) {
+  for (const modelPath of ["flash", "pro"] as const) {
+    let visible = false;
+    let answer = "";
+    let pending = "";
+    let held = "";
+    let firstChunkLatencyMs: number | undefined;
+    try {
+      const generated = streamDeepSeekAnswer({ messages: input.messages, signal: input.signal, userId: input.userId }, modelPath);
+      let streamFinished = false;
+      for await (const part of generated.fullStream) {
+        if (part.type === "error") {
+          if (visible) throw new StreamInterruptedError("writing_answer", "stream_protocol_error");
+          throw new Error("stream_protocol_error");
+        }
+        if (part.type === "finish") {
+          streamFinished = true;
+          continue;
+        }
+        if (part.type !== "text-delta") continue;
+        const rawChunk = typeof part.text === "string" ? part.text : "";
+        pending += rawChunk;
+        const extracted = takeStreamUnits(pending);
+        pending = extracted.rest;
+        for (const unit of extracted.units) {
+          if (!visible && !unit.sentenceComplete) {
+            held += unit.text;
+            continue;
+          }
+          const chunk = `${held}${unit.text}`;
+          held = "";
+          const candidate = `${answer}${chunk}`;
+          const gate = validateAnswerFragment(candidate, input.plan, unit.sentenceComplete);
+          if (!gate.passed) {
+            if (visible) throw new StreamInterruptedError("writing_answer", gate.triggers.join("；"));
+            throw new Error(`stream_quality:${gate.triggers.join(",")}`);
+          }
+          answer = candidate;
+          if (!visible) {
+            visible = true;
+            firstChunkLatencyMs = Date.now() - input.startedAt;
+          }
+          await input.onDelta(chunk);
+        }
+      }
+      if (!streamFinished) {
+        if (visible) throw new StreamInterruptedError("writing_answer", "stream_incomplete");
+        throw new Error("stream_incomplete");
+      }
+
+      const finalUnits = takeStreamUnits(`${held}${pending}`, true).units;
+      for (const unit of finalUnits) {
+        const candidate = `${answer}${unit.text}`;
+        const gate = validateAnswerFragment(candidate, input.plan, true);
+        if (!gate.passed) {
+          if (visible) throw new StreamInterruptedError("writing_answer", gate.triggers.join("；"));
+          throw new Error(`stream_quality:${gate.triggers.join(",")}`);
+        }
+        answer = candidate;
+        if (!visible) {
+          visible = true;
+          firstChunkLatencyMs = Date.now() - input.startedAt;
+        }
+        await input.onDelta(unit.text);
+      }
+      if (!answer.trim()) throw new Error("stream_empty");
+      const finalGate = validateAnswer(answer, input.plan);
+      if (!finalGate.passed) {
+        if (visible) throw new StreamInterruptedError("writing_answer", finalGate.triggers.join("；"));
+        throw new Error(`stream_quality:${finalGate.triggers.join(",")}`);
+      }
+      const usage = await generated.usage;
+      return {
+        answer,
+        totalTokens: Number(usage.totalTokens ?? 0),
+        modelPath,
+        firstChunkLatencyMs: firstChunkLatencyMs ?? Date.now() - input.startedAt,
+      };
+    } catch (error) {
+      if (error instanceof StreamInterruptedError || (error instanceof Error && error.name === "AbortError")) throw error;
+      if (visible || modelPath === "pro") throw error;
+    }
+  }
+  throw new Error("stream_unavailable");
 }
 
 export async function buildChatDelivery(input: PipelineInput): Promise<ChatDelivery> {
@@ -155,6 +315,7 @@ export async function buildChatDelivery(input: PipelineInput): Promise<ChatDeliv
   const followUpQuestions = plan.followUpQuestions.length
     ? plan.followUpQuestions
     : getFollowUpQuestions(input.question, input.messages.filter((message) => message.role === "user").map((message) => message.content));
+  const hasEvidence = items.length > 0 && claimIds.length > 0 && sourceIds.length > 0;
   const decision = decideAnswerability({
     question: input.question,
     history,
@@ -167,6 +328,15 @@ export async function buildChatDelivery(input: PipelineInput): Promise<ChatDeliv
     contract,
   });
   const retrievalTrace = resolveRetrievalQuery(input.question, history);
+  const deliveryMode = chooseDeliveryMode({
+    frame,
+    plan,
+    decision,
+    stableAnswer,
+    contract,
+    hasEvidence,
+    canStream: Boolean(input.onPrepared && input.onDelta),
+  });
   const diagnosticBase = {
     contractId: plan.contractId,
     topic: plan.topic,
@@ -181,6 +351,7 @@ export async function buildChatDelivery(input: PipelineInput): Promise<ChatDeliv
     plannerUsed,
     plannerModelPath,
     plannerFallbackReason,
+    deliveryMode,
   };
 
   console.info("ask-me-retrieval", JSON.stringify({
@@ -254,6 +425,8 @@ export async function buildChatDelivery(input: PipelineInput): Promise<ChatDeliv
       actualTokens: plannerTokens,
       modelPath: "local_fallback",
       degraded: false,
+      deliveryMode: "local_reveal",
+      streamed: false,
       diagnostic: {
         ...diagnosticBase,
         answerPath: stableAnswer || contract ? "stable" : "demo",
@@ -275,6 +448,93 @@ export async function buildChatDelivery(input: PipelineInput): Promise<ChatDeliv
     });
   }
 
+  const contextMessage = `以下是本轮回答计划和公开事实，只能据此回答：\n${buildContext(items, plan)}`;
+  if (deliveryMode === "realtime_stream") {
+    input.onStage("writing_answer");
+    input.onPrepared?.({
+      mode: "live",
+      disposition: decision.disposition,
+      claimIds,
+      sourceIds,
+      sources,
+      items,
+      claims: getClaims(claimIds),
+      followUpQuestions,
+      modelPath: "flash",
+      degraded: false,
+      deliveryMode,
+    });
+    try {
+      const streamed = await streamAnswer({
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "system", content: contextMessage },
+          ...recentModelMessages,
+        ],
+        signal: input.signal,
+        plan,
+        userId: input.sessionId,
+        startedAt: input.startedAt ?? Date.now(),
+        onDelta: input.onDelta!,
+      });
+      console.info("ask-me-stream", JSON.stringify({
+        topic: plan.topic,
+        answerIntent: plan.intent,
+        deliveryMode,
+        modelPath: streamed.modelPath,
+        firstChunkLatencyMs: streamed.firstChunkLatencyMs,
+        actualTokens: streamed.totalTokens,
+      }));
+      return {
+        answer: streamed.answer,
+        mode: "live",
+        responseStatus: "completed",
+        disposition: decision.disposition,
+        boundaryReason: "none",
+        claimIds,
+        sourceIds,
+        sources,
+        items,
+        claims: getClaims(claimIds),
+        followUpQuestions,
+        tokenReservation: baseReservation,
+        actualTokens: streamed.totalTokens,
+        modelPath: streamed.modelPath,
+        degraded: false,
+        deliveryMode,
+        streamed: true,
+        diagnostic: {
+          ...diagnosticBase,
+          answerPath: "generated",
+          qualityTriggerCount: 0,
+          modelPath: streamed.modelPath,
+          deliveryMode,
+          firstChunkLatencyMs: streamed.firstChunkLatencyMs,
+        },
+      };
+    } catch (error) {
+      if (error instanceof StreamInterruptedError || (error instanceof Error && error.name === "AbortError")) throw error;
+      console.warn("ask-me-stream-unavailable", JSON.stringify({
+        answerIntent: plan.intent,
+        topic: plan.topic,
+        deliveryMode,
+        boundaryReason: "upstream_unavailable",
+        reason: error instanceof DeepSeekUpstreamError ? `upstream_${error.status}` : error instanceof Error ? error.message.slice(0, 120) : "unknown",
+      }));
+      return emptyDelivery({
+        message: serviceUnavailableMessage(),
+        disposition: "service_unavailable",
+        responseStatus: "upstream_error",
+        boundaryReason: "upstream_unavailable",
+        followUpQuestions,
+        tokenReservation: baseReservation,
+        actualTokens: 0,
+        deliveryMode: "local_reveal",
+        diagnostic: { ...diagnosticBase, answerPath: "service_unavailable", boundaryReason: "upstream_unavailable", deliveryMode: "local_reveal" },
+      });
+    }
+  }
+
   const reviewBudget = await reserveAdditionalModelCall(input.estimatedTokens);
   if (!reviewBudget.ok) {
     return emptyDelivery({
@@ -293,7 +553,6 @@ export async function buildChatDelivery(input: PipelineInput): Promise<ChatDeliv
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 45_000);
   input.signal.addEventListener("abort", () => controller.abort(), { once: true });
-  const contextMessage = `以下是本轮回答计划和公开事实，只能据此回答：\n${buildContext(items, plan)}`;
   let totalTokens = plannerTokens;
 
   try {
@@ -392,6 +651,8 @@ export async function buildChatDelivery(input: PipelineInput): Promise<ChatDeliv
       actualTokens: totalTokens,
       modelPath: answerModelPath,
       degraded: false,
+      deliveryMode: "reviewed_buffer",
+      streamed: false,
       diagnostic: {
         ...diagnosticBase,
         answerPath,
@@ -408,7 +669,7 @@ export async function buildChatDelivery(input: PipelineInput): Promise<ChatDeliv
       topic: plan.topic,
       plannerModelPath,
       boundaryReason: "upstream_unavailable",
-      reason: error instanceof DeepSeekUpstreamError ? `upstream_${error.status}` : error instanceof Error ? error.name : "unknown",
+      reason: error instanceof DeepSeekUpstreamError ? `upstream_${error.status}` : error instanceof Error ? error.message.slice(0, 120) : "unknown",
     }));
     return emptyDelivery({
       message: serviceUnavailableMessage(),

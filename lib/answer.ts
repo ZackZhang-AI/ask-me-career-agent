@@ -26,13 +26,13 @@ const projectStatusLabels = { completed: "已完成", in_progress: "正在持续
 
 const intentPatterns: Array<[AnswerIntent, RegExp]> = [
   ["agent_identity", /^(?:(?:你|您)?(?:是谁|叫什么(?:名字)?|是什么(?:身份|助手|Agent|角色)?|的身份是什么)|(?:请)?(?:介绍|说明)(?:一下)?你的身份)[？?。.！!\s]*$/i],
-  ["capability_scope", /^(?:(?:你|您)(?:能|可以)(?:做|回答|介绍|帮我)(?:些什么|什么|哪些(?:问题|内容)?)?|能问你什么|可以问什么|功能范围|能力范围)[？?。.！!\s]*$/],
+  ["capability_scope", /^(?:(?:你|您)(?:能|可以)(?:做|回答|介绍|帮我)(?:些什么|什么|哪些(?:问题|内容)?)?|你有什么(?:作用|用处|功能)|你是做什么的|你能干什么|你可以干什么|能问你什么|可以问什么|功能范围|能力范围|你能回答(?:开放|没有标准答案的)?(?:问题|题目|题)?(?:吗)?)[？?。.！!\s]*$/],
   ["ai_collaboration", /AI\s*(?:编程|写|生成)|代码.*AI|AI.*占比|用了多少\s*AI/i],
   ["contribution", /个人贡献|你做了什么|你负责|具体做了|你的工作|主导/],
   ["challenge", /挑战|困难|失败|取舍|踩坑|复盘|怎么推进|如何推进/],
   ["diagnosis", /没有改善|没改善|没有效果|没效果|优先排查|先排查|先.{0,3}看什么|定位问题|(?:如何|怎么).{0,4}定位|为什么没有/],
   ["privacy", /隐私|机密|企业数据|数据边界/],
-  ["experience_value", /企业级?\s*AI|企业\s*AI|企业场景|业务问题.{0,8}(?:转化|转成|变成).{0,8}(?:AI|产品)|(?:AI|产品)方案/i],
+  ["experience_value", /企业级?\s*AI|企业\s*AI|企业场景|业务问题.{0,8}(?:转化|转成|变成).{0,8}(?:AI|产品)|(?:AI|产品)方案|(?:之前的?经历|过往经历).{0,20}(?:(?:求职|帮助).{0,12}(?:AI|产品)|(?:AI|产品).{0,12}(?:帮助|价值|作用|迁移))/i],
   ["skills", /技术能力|技术栈|会什么|数据分析|(?:AI\s*)?评测|如何评估|有哪些实践/i],
   ["result", /结果|量化(?:结果|效果)|效果数据|用户规模|增长|留存|上线|生产状态|完成(?:了吗|情况)/],
   ["limitation", /短板|不足|弱点|限制|能力缺口/],
@@ -132,6 +132,7 @@ function storyUsed(story: StarStory, historyText: string) {
 
 function firstPersonFact(fact: string) {
   return fact.trim()
+    .replace(/公开职责描述涉及/g, "经历包括")
     .replace(/^候选人(?=负责|完成|提供|整理|主动)/, "我")
     .replace(/候选人/g, "我")
     .replace(/^该项目/, "这个项目")
@@ -236,6 +237,11 @@ function openThesis(question: string, intent: AnswerIntent, items: KnowledgeItem
     return "可以。我能围绕张倬玮的经历、项目、能力和岗位匹配回答开放问题，也能按正式面试口吻组织动机、方法、取舍和复盘。对于没有公开事实的假设题，我会明确说明这是处理思路，不把推演说成已经发生的经历。";
   }
   if (intent === "career_transition") return candidateNarrative.careerTransition.thesis;
+  if (intent === "experience_value") {
+    if (/企业/.test(question)) return "我理解企业级 AI 的重点不是展示模型能力，而是让它进入真实流程后仍然有价值、可控并且能够持续验证。";
+    if (/方法|如何|怎么/.test(question)) return "我通常先把业务问题拆成用户任务、流程阻力和验收标准，再决定规则、模型与人工确认分别承担什么。";
+    return "我之前的统计、审计和 AI 项目经历，帮助我把数据判断、企业流程理解和产品落地连接起来，这也是我选择 AI 产品方向的基础。";
+  }
   if (intent === "role_fit" && frame?.targetRole) return `我和${frame.targetRole}的匹配，主要体现在业务理解、数据判断和产品落地能够形成闭环。`;
   if (intent === "diagnosis") {
     return "如果同一组 Bad Case 没有改善，我会先验证测量是否可信，再定位链路哪里失真，而不是立刻换模型或继续堆功能。";
@@ -243,12 +249,6 @@ function openThesis(question: string, intent: AnswerIntent, items: KnowledgeItem
   if (intent === "challenge" && story) return `我遇到的核心挑战是：${story.situation}`;
   if (intent === "skills" && /数据|评测|指标|分析/.test(question)) {
     return "我会把数据分析和 AI 评测放在同一条产品迭代链路里：先定义效果，再定位问题，最后用失败样本决定下一轮动作。";
-  }
-  if (intent === "experience_value" && /企业/.test(question)) {
-    return "我理解企业级 AI 的重点不是展示模型能力，而是让它进入真实流程后仍然有价值、可控并且能够持续验证。";
-  }
-  if (intent === "experience_value") {
-    return "我通常先把业务问题拆成用户任务、流程阻力和验收标准，再决定规则、模型与人工确认分别承担什么。";
   }
   if (frame?.questionMode === "candidate_reasoning") {
     return "面对这类开放问题，我会先明确目标和约束，再拆解关键假设，用小范围验证和可复盘的指标推动下一步，而不是直接给出脱离场景的结论。";
@@ -300,7 +300,7 @@ export function buildAnswerPlan(
   const curatedOpenAnswer = intent === "career_transition"
     ? careerTransitionAnswer()
     : intent === "role_fit" ? roleFitAnswer(frame.targetRole) : undefined;
-  const allowedFacts = unique([...(skeleton?.allowedFacts ?? []), contract?.thesis, ...(contract?.requiredPoints ?? []), contract?.fallbackAnswer, curatedOpenAnswer, ...itemFacts, ...storyFacts]);
+  const allowedFacts = unique([...(skeleton?.allowedFacts ?? []), contract?.thesis, ...(contract?.requiredPoints ?? []), contract?.fallbackAnswer, curatedOpenAnswer, ...items.map((item) => item.title), ...itemFacts, ...storyFacts]);
   const projectItems = [...new Map(items.filter((item) => item.relatedProject).map((item) => [item.relatedProject, item])).values()];
   const multiProjectResult = intent === "result" && projectItems.length > 1
     ? `目前公开材料能确认 ${projectItems.slice(0, 3).map((item) => item.title).join("、")} 的核心流程或可演示成果，但还没有形成可以公开说明的真实用户规模、增长或生产数据。`
@@ -343,7 +343,7 @@ export function buildAnswerPlan(
     questionMode: frame.questionMode,
     evidencePolicy: frame.evidencePolicy,
     directAnswerTerms: contract?.directAnswerTerms
-      ?? (intent === "career_transition" ? ["转", "产品"] : intent === "role_fit" ? [frame.targetRole ?? "岗位", "匹配"] : []),
+      ?? (intent === "career_transition" ? ["转", "产品"] : intent === "experience_value" ? ["经历", "AI", "产品"] : intent === "role_fit" ? [frame.targetRole ?? "岗位", "匹配"] : []),
     forbiddenTopics: frame.forbiddenTopics,
     intent,
     thesis,

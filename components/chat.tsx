@@ -159,6 +159,7 @@ export function Chat({ presetAnswers }: ChatProps) {
     const abort = new AbortController();
     abortRef.current = abort;
     let shouldFocusAfterCompletion = false;
+    let discardPartial = false;
     try {
       const preset = !retry && currentMessages.length === 0
         ? presetAnswers.find((answer) => answer.question === clean)
@@ -230,22 +231,27 @@ export function Chat({ presetAnswers }: ChatProps) {
         responseStatus?: ConversationMessage["responseStatus"];
         disposition?: ConversationMessage["disposition"];
         modelPath?: ConversationMessage["modelPath"];
+        deliveryMode?: ConversationMessage["deliveryMode"];
         degraded?: boolean;
         claimIds?: string[];
         sourceIds?: string[];
         citations?: ConversationMessage["citations"];
         followUpQuestions?: string[];
         latencyMs?: number;
-        stage?: "understanding" | "checking_evidence" | "reviewing_answer";
+        stage?: "understanding" | "checking_evidence" | "writing_answer" | "reviewing_answer";
         message?: string;
+        retryable?: boolean;
+        discardPartial?: boolean;
       }) => {
         if (event.type === "meta") metadata = {
+          ...metadata,
           sources: event.sources,
           items: event.items,
           mode: event.mode,
           responseStatus: event.responseStatus,
           disposition: event.disposition,
           modelPath: event.modelPath,
+          deliveryMode: event.deliveryMode,
           degraded: event.degraded,
           claimIds: event.claimIds,
           sourceIds: event.sourceIds,
@@ -257,6 +263,7 @@ export function Chat({ presetAnswers }: ChatProps) {
           setThinkingLabel({
             understanding: "正在理解这道面试问题",
             checking_evidence: "正在核对相关经历与事实",
+            writing_answer: "正在组织面试回答",
             reviewing_answer: "正在进行最终面试质量审校",
           }[event.stage ?? "understanding"]);
         }
@@ -270,10 +277,13 @@ export function Chat({ presetAnswers }: ChatProps) {
         }
         if (event.type === "done") {
           receivedDone = true;
-          metadata = { ...metadata, responseStatus: event.responseStatus, disposition: event.disposition, latencyMs: event.latencyMs, modelPath: event.modelPath, degraded: event.degraded };
+          metadata = { ...metadata, responseStatus: event.responseStatus, disposition: event.disposition, latencyMs: event.latencyMs, modelPath: event.modelPath, deliveryMode: event.deliveryMode, degraded: event.degraded };
           if (event.disposition === "clarify") shouldFocusAfterCompletion = true;
         }
-        if (event.type === "error") throw new Error(event.message ?? "问答服务返回异常。");
+        if (event.type === "error") {
+          discardPartial = event.discardPartial === true;
+          throw new Error(event.message ?? "问答服务返回异常。");
+        }
       };
       while (true) {
         const { done, value } = await reader.read();
@@ -306,11 +316,12 @@ export function Chat({ presetAnswers }: ChatProps) {
         setError("回答未完整生成，已按你的操作停止。");
       } else {
         const message = caught instanceof Error ? caught.message : "出现未知错误，请重试。";
-        setError(`回答未完整生成。${message}`);
+        setError(message.startsWith("抱歉") ? message : `回答未完整生成。${message}`);
         track("chat_error", sessionId, message);
       }
       setMessages((current) => {
-        const completed = current.filter((message) => message.content);
+        const withoutPartial = discardPartial ? current.slice(0, -1) : current;
+        const completed = withoutPartial.filter((message) => message.content);
         persistConversation(completed);
         return completed;
       });

@@ -59,7 +59,8 @@ test("长尾问题通过本地 Frame 限定主题，未知题保留规划入口"
   assert.equal(routed.confidence >= 0.8, true);
 
   const unknown = buildLocalQuestionFrame("如果资源突然减半，你会怎么排优先级？");
-  assert.equal(unknown.confidence < 0.8, true);
+  assert.equal(unknown.confidence >= 0.8, true);
+  assert.equal(unknown.questionMode, "candidate_reasoning");
   assert.equal(unknown.routeSource, "local");
 });
 
