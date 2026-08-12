@@ -27,21 +27,6 @@ function metaEvent(responseEvents: Array<Record<string, unknown>>) {
   return meta;
 }
 
-function plannerFrame(overrides: Record<string, unknown> = {}) {
-  return {
-    topic: "profile",
-    facet: "overview",
-    answerIntent: "general",
-    questionMode: "candidate_fact",
-    evidencePolicy: "supporting",
-    focusTerms: ["当前问题"],
-    requestedDimensions: ["直接回答"],
-    useHistory: false,
-    confidence: 0.9,
-    ...overrides,
-  };
-}
-
 function reviewResult(decision: "pass" | "rewrite" | "reject", revisedAnswer?: string) {
   return { decision, ...(revisedAnswer ? { revisedAnswer } : {}), failedDimensions: decision === "reject" ? ["relevance"] : [] };
 }
@@ -241,6 +226,60 @@ test("面试相关开放题在首段安全后真实流式输出", async () => {
   assert.ok(deltas.length >= 2);
   assert.ok(responseEvents.findIndex((event) => event.type === "delta") < doneIndex);
   assert.equal(responseEvents.at(-1)?.responseStatus, "completed");
+});
+
+test("专业价值精确契约保留 DeepSeek 实时生成而非本地固定答案", async () => {
+  process.env.DEEPSEEK_API_KEY = "test-only-placeholder";
+  const question = "你的专业对你做 AI 产品有什么帮助？";
+  const frame = buildLocalQuestionFrame(question);
+  const items = retrieveKnowledge(question, { history: [], limit: 4, frame });
+  const answer = buildAnswerPlan(question, items, undefined, [], frame).fallbackAnswer;
+  let calls = 0;
+  globalThis.fetch = async () => { calls += 1; return deepSeekSse(answer); };
+
+  const responseEvents = await events(await POST(request({
+    sessionId: "api-realtime-profession-value",
+    messages: [{ role: "user", content: question }],
+  })));
+
+  assert.equal(calls, 1);
+  assert.equal(metaEvent(responseEvents).deliveryMode, "realtime_stream");
+  assert.ok(responseEvents.some((event) => event.type === "delta"));
+  assert.equal(responseEvents.at(-1)?.type, "done");
+  assert.equal(responseEvents.at(-1)?.responseStatus, "completed");
+});
+
+test("实时流全文只有语义结构警告时保留正文并正常完成", async () => {
+  process.env.DEEPSEEK_API_KEY = "test-only-placeholder";
+  const answer = "我的专业是应用统计学，它让我习惯用数据和实验支撑 AI 产品判断。我会先建立基线，再控制变量，通过指标和 Bad Case 定位问题，最后结合业务流程和风险确定下一步。";
+  globalThis.fetch = async () => deepSeekSse(answer);
+
+  const responseEvents = await events(await POST(request({
+    sessionId: "api-semantic-warning-completes",
+    messages: [{ role: "user", content: "你的专业对你做 AI 产品有什么帮助？" }],
+  })));
+
+  assert.ok(responseEvents.some((event) => event.type === "delta"));
+  assert.equal(responseEvents.some((event) => event.type === "error"), false);
+  assert.equal(responseEvents.at(-1)?.type, "done");
+  assert.equal(responseEvents.at(-1)?.responseStatus, "completed");
+});
+
+test("实时流后半段出现虚构数字时仍撤回并标记硬安全失败", async () => {
+  process.env.DEEPSEEK_API_KEY = "test-only-placeholder";
+  const answer = "我的专业是应用统计学，它让我习惯用数据和实验支撑 AI 产品判断。我会先建立基线并观察 Bad Case，曾经还把产品准确率提升了 88%。";
+  globalThis.fetch = async () => deepSeekSse(answer);
+
+  const responseEvents = await events(await POST(request({
+    sessionId: "api-hard-safety-discard",
+    messages: [{ role: "user", content: "你的专业对你做 AI 产品有什么帮助？" }],
+  })));
+  const error = responseEvents.find((event) => event.type === "error");
+  assert.ok(responseEvents.some((event) => event.type === "delta"));
+  assert.ok(error);
+  assert.equal(error.discardPartial, true);
+  assert.equal(error.failureType, "hard_safety");
+  assert.equal(responseEvents.some((event) => event.type === "done"), false);
 });
 
 test("Flash 首包失败时切换 Pro 后继续真实流式输出", async () => {

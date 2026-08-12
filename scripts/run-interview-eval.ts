@@ -320,7 +320,7 @@ async function deepSeekAnswer(testCase: Pick<InterviewCase, "question" | "roleNa
         signal: AbortSignal.timeout(12_000),
         userId: "interview-evaluation",
       });
-      frame = mergePlannedFrame(localFrame, planned.frame);
+      frame = mergePlannedFrame(localFrame, planned.frame, testCase.question);
     } catch {
       frame = localFrame;
     }

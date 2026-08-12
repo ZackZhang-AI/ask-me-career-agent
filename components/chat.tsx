@@ -28,7 +28,7 @@ import {
   questionGroups,
   type QuestionGroupId,
 } from "@/lib/question-suggestions";
-import type { PresetAnswerPacket } from "@/lib/types";
+import type { PresetAnswerPacket, StreamFailureType } from "@/lib/types";
 
 interface ChatProps {
   presetAnswers: PresetAnswerPacket[];
@@ -242,6 +242,7 @@ export function Chat({ presetAnswers }: ChatProps) {
         message?: string;
         retryable?: boolean;
         discardPartial?: boolean;
+        failureType?: StreamFailureType;
       }) => {
         if (event.type === "meta") metadata = {
           ...metadata,
@@ -281,7 +282,8 @@ export function Chat({ presetAnswers }: ChatProps) {
           if (event.disposition === "clarify") shouldFocusAfterCompletion = true;
         }
         if (event.type === "error") {
-          discardPartial = event.discardPartial === true;
+          discardPartial = event.discardPartial === true
+            && (event.failureType === "hard_safety" || event.failureType === "transport_interrupted");
           throw new Error(event.message ?? "问答服务返回异常。");
         }
       };

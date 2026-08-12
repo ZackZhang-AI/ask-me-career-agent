@@ -96,6 +96,9 @@ const routingCases: Array<{ question: string; intent: AnswerIntent; targetRole?:
   { question: "你可以干什么？", intent: "capability_scope" },
   { question: "你之前的经历都对你求职 AI 有什么帮助？", intent: "experience_value" },
   { question: "你过往经历对做产品有什么帮助？", intent: "experience_value" },
+  { question: "你的专业对你做 AI 产品有什么帮助", intent: "experience_value" },
+  { question: "应用统计学专业对 AI 产品有什么价值", intent: "experience_value" },
+  { question: "你所学专业如何支持产品判断", intent: "experience_value" },
   { question: "如果面试官问到陌生业务，你会怎么快速理解？", intent: "diagnosis" },
   { question: "你平时如何面对压力和不确定性？", intent: "general" },
 ];
@@ -126,6 +129,32 @@ test("本地高置信度动作不被模型规划器覆盖", () => {
     confidence: 0.95,
   });
   assert.equal(merged.answerIntent, "challenge");
+});
+
+test("没有转型动作的问题不会被模型规划器覆盖为职业转型", () => {
+  const question = "你的专业对你做 AI 产品有什么帮助";
+  const local = buildLocalQuestionFrame(question);
+  const merged = mergePlannedFrame(local, {
+    topic: "profile",
+    facet: "transfer",
+    answerIntent: "career_transition",
+    questionMode: "candidate_fact",
+    evidencePolicy: "required",
+    focusTerms: ["转型动机"],
+    requestedDimensions: ["选择原因"],
+    useHistory: false,
+    confidence: 0.96,
+  }, question);
+
+  assert.equal(local.answerIntent, "experience_value");
+  assert.equal(merged.answerIntent, "experience_value");
+  assert.equal(merged.intentResolution?.conflictReason, "missing_career_transition_signature");
+});
+
+test("明确出现转向动作时仍保持职业转型意图", () => {
+  for (const question of ["统计专业为什么转向 AI 产品", "为什么不继续做审计而选择产品"]) {
+    assert.equal(buildLocalQuestionFrame(question).answerIntent, "career_transition", question);
+  }
 });
 
 test("包含上线字样的假设排查题优先识别为方法题", () => {

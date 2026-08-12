@@ -1,5 +1,5 @@
 import { buildAnswerPlan, buildContext, systemPrompt } from "./answer";
-import { hasBlockingQualityTriggers, validateAnswer, validateAnswerFragment } from "./answer-quality";
+import { hasBlockingQualityTriggers, splitQualityTriggers, validateAnswer, validateAnswerFragment } from "./answer-quality";
 import { decideAnswerability, serviceUnavailableMessage, unresolvedReferenceReason } from "./answerability";
 import {
   DeepSeekPlannerError,
@@ -25,6 +25,7 @@ import type {
   QuestionFrame,
   ResponseStatus,
   ReviewPath,
+  StreamFailureType,
 } from "./types";
 
 export type AnswerMode = "stable" | "demo" | "guardrail" | "live" | "boundary";
@@ -80,6 +81,12 @@ export interface ChatDelivery {
     deliveryMode?: DeliveryMode;
     firstChunkLatencyMs?: number;
     streamFailureStage?: string;
+    streamFailureType?: StreamFailureType;
+    semanticWarningCount?: number;
+    localIntent?: string;
+    plannedIntent?: string;
+    resolvedIntent?: string;
+    intentConflictReason?: string;
   };
 }
 
@@ -129,8 +136,12 @@ function emptyDelivery(input: {
   };
 }
 
-class StreamInterruptedError extends Error {
-  constructor(public readonly stage: "writing_answer" | "checking_evidence", message = "流式回答未完整生成") {
+export class StreamInterruptedError extends Error {
+  constructor(
+    public readonly stage: "writing_answer" | "checking_evidence",
+    public readonly failureType: Exclude<StreamFailureType, "semantic_warning" | "service_unavailable">,
+    message = "流式回答未完整生成",
+  ) {
     super(message);
     this.name = "StreamInterruptedError";
   }
@@ -156,7 +167,8 @@ function chooseDeliveryMode(input: {
   hasEvidence: boolean;
   canStream: boolean;
 }) : DeliveryMode {
-  if (input.stableAnswer || input.contract || input.frame.questionMode === "agent_meta" || !input.decision.shouldGenerate) return "local_reveal";
+  const localContract = input.contract && (input.contract as { generationMode?: string }).generationMode !== "realtime";
+  if (input.stableAnswer || localContract || input.frame.questionMode === "agent_meta" || !input.decision.shouldGenerate) return "local_reveal";
   if (!input.canStream || reviewedIntents.has(input.plan.intent)) return "reviewed_buffer";
   if (input.frame.evidencePolicy === "required" && !input.hasEvidence) return "reviewed_buffer";
   if (input.frame.questionMode === "candidate_reasoning") return "realtime_stream";
@@ -185,7 +197,7 @@ async function streamAnswer(input: StreamAnswerInput) {
       let streamFinished = false;
       for await (const part of generated.fullStream) {
         if (part.type === "error") {
-          if (visible) throw new StreamInterruptedError("writing_answer", "stream_protocol_error");
+          if (visible) throw new StreamInterruptedError("writing_answer", "transport_interrupted", "stream_protocol_error");
           throw new Error("stream_protocol_error");
         }
         if (part.type === "finish") {
@@ -206,9 +218,10 @@ async function streamAnswer(input: StreamAnswerInput) {
           held = "";
           const candidate = `${answer}${chunk}`;
           const gate = validateAnswerFragment(candidate, input.plan, unit.sentenceComplete);
-          if (!gate.passed) {
-            if (visible) throw new StreamInterruptedError("writing_answer", gate.triggers.join("；"));
-            throw new Error(`stream_quality:${gate.triggers.join(",")}`);
+          const { hardSafety } = splitQualityTriggers(gate.triggers);
+          if (hardSafety.length) {
+            if (visible) throw new StreamInterruptedError("writing_answer", "hard_safety", hardSafety.join("；"));
+            throw new Error(`stream_safety:${hardSafety.join(",")}`);
           }
           answer = candidate;
           if (!visible) {
@@ -219,7 +232,7 @@ async function streamAnswer(input: StreamAnswerInput) {
         }
       }
       if (!streamFinished) {
-        if (visible) throw new StreamInterruptedError("writing_answer", "stream_incomplete");
+        if (visible) throw new StreamInterruptedError("writing_answer", "transport_interrupted", "stream_incomplete");
         throw new Error("stream_incomplete");
       }
 
@@ -227,9 +240,10 @@ async function streamAnswer(input: StreamAnswerInput) {
       for (const unit of finalUnits) {
         const candidate = `${answer}${unit.text}`;
         const gate = validateAnswerFragment(candidate, input.plan, true);
-        if (!gate.passed) {
-          if (visible) throw new StreamInterruptedError("writing_answer", gate.triggers.join("；"));
-          throw new Error(`stream_quality:${gate.triggers.join(",")}`);
+        const { hardSafety } = splitQualityTriggers(gate.triggers);
+        if (hardSafety.length) {
+          if (visible) throw new StreamInterruptedError("writing_answer", "hard_safety", hardSafety.join("；"));
+          throw new Error(`stream_safety:${hardSafety.join(",")}`);
         }
         answer = candidate;
         if (!visible) {
@@ -240,9 +254,10 @@ async function streamAnswer(input: StreamAnswerInput) {
       }
       if (!answer.trim()) throw new Error("stream_empty");
       const finalGate = validateAnswer(answer, input.plan);
-      if (!finalGate.passed) {
-        if (visible) throw new StreamInterruptedError("writing_answer", finalGate.triggers.join("；"));
-        throw new Error(`stream_quality:${finalGate.triggers.join(",")}`);
+      const finalTriggers = splitQualityTriggers(finalGate.triggers);
+      if (finalTriggers.hardSafety.length) {
+        if (visible) throw new StreamInterruptedError("writing_answer", "hard_safety", finalTriggers.hardSafety.join("；"));
+        throw new Error(`stream_safety:${finalTriggers.hardSafety.join(",")}`);
       }
       const usage = await generated.usage;
       return {
@@ -250,6 +265,7 @@ async function streamAnswer(input: StreamAnswerInput) {
         totalTokens: Number(usage.totalTokens ?? 0),
         modelPath,
         firstChunkLatencyMs: firstChunkLatencyMs ?? Date.now() - input.startedAt,
+        semanticWarnings: finalTriggers.semantic,
       };
     } catch (error) {
       if (error instanceof StreamInterruptedError || (error instanceof Error && error.name === "AbortError")) throw error;
@@ -289,7 +305,7 @@ export async function buildChatDelivery(input: PipelineInput): Promise<ChatDeliv
           signal: plannerController.signal,
           userId: input.sessionId,
         });
-        frame = mergePlannedFrame(localFrame, planned.frame);
+        frame = mergePlannedFrame(localFrame, planned.frame, input.question);
         plannerTokens = planned.totalTokens;
         plannerUsed = true;
         plannerModelPath = planned.modelPath;
@@ -352,6 +368,10 @@ export async function buildChatDelivery(input: PipelineInput): Promise<ChatDeliv
     plannerModelPath,
     plannerFallbackReason,
     deliveryMode,
+    localIntent: localFrame.answerIntent,
+    plannedIntent: frame.intentResolution?.plannedIntent,
+    resolvedIntent: frame.answerIntent,
+    intentConflictReason: frame.intentResolution?.conflictReason,
   };
 
   console.info("ask-me-retrieval", JSON.stringify({
@@ -369,6 +389,10 @@ export async function buildChatDelivery(input: PipelineInput): Promise<ChatDeliv
     plannerUsed,
     plannerModelPath,
     plannerFallbackReason,
+    localIntent: localFrame.answerIntent,
+    plannedIntent: frame.intentResolution?.plannedIntent,
+    resolvedIntent: frame.answerIntent,
+    intentConflictReason: frame.intentResolution?.conflictReason,
     historyCount: history.length,
     contextApplied: retrievalTrace.contextApplied,
     matchedProjects: retrievalTrace.matchedProjects,
@@ -477,6 +501,19 @@ export async function buildChatDelivery(input: PipelineInput): Promise<ChatDeliv
         startedAt: input.startedAt ?? Date.now(),
         onDelta: input.onDelta!,
       });
+      if (streamed.semanticWarnings.length) {
+        console.warn("ask-me-stream-semantic-warning", JSON.stringify({
+          failureType: "semantic_warning",
+          topic: plan.topic,
+          answerIntent: plan.intent,
+          deliveryMode,
+          visible: true,
+          metric: "semantic_gate_warning",
+          visibleAnswerWithdrawal: false,
+          semanticWithdrawal: false,
+          triggers: streamed.semanticWarnings.slice(0, 8),
+        }));
+      }
       console.info("ask-me-stream", JSON.stringify({
         topic: plan.topic,
         answerIntent: plan.intent,
@@ -484,6 +521,7 @@ export async function buildChatDelivery(input: PipelineInput): Promise<ChatDeliv
         modelPath: streamed.modelPath,
         firstChunkLatencyMs: streamed.firstChunkLatencyMs,
         actualTokens: streamed.totalTokens,
+        semanticWarningCount: streamed.semanticWarnings.length,
       }));
       return {
         answer: streamed.answer,
@@ -510,6 +548,7 @@ export async function buildChatDelivery(input: PipelineInput): Promise<ChatDeliv
           modelPath: streamed.modelPath,
           deliveryMode,
           firstChunkLatencyMs: streamed.firstChunkLatencyMs,
+          semanticWarningCount: streamed.semanticWarnings.length,
         },
       };
     } catch (error) {

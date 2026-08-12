@@ -8,6 +8,17 @@ const answerIntents = ["agent_identity", "capability_scope", "introduction", "ca
 
 const careerTransitionPattern = /(?:为什么|为何).{0,12}(?:(?:从)?(?:财会|会计|财务|审计|统计)(?!问题)(?:背景|专业|经历)?.{0,12}(?:转向|转型|转(?!化)|选择|改做|走到|进入)|(?:转向|转型|选择|改做|走到|进入)).{0,12}(?:AI\s*产品|产品经理|产品)|(?:(?:从)(?:财会|会计|财务|审计|统计|原专业|传统行业)|(?:财会|会计|财务|审计|统计|原专业|传统行业)(?:背景|专业|经历)).{0,12}(?:转向|转型|转(?!化)|选择|改做|走到|进入).{0,8}(?:AI\s*产品|产品经理|产品)/i;
 const careerTransitionContextPattern = /(?:财会|会计|财务|审计|统计|传统行业).{0,24}(?:产品|AI).{0,14}(?:连续|迁移|选择|适合|方向|准备)|(?:为什么|为何|如何|怎么).{0,12}(?:转型|转向|选择).{0,14}(?:AI|产品)/i;
+const careerTransitionActionPattern = /(?:转型|转向|转(?!化)|改做|走到|进入|从.{0,12}(?:到|选择)|不继续.{0,12}(?:而)?(?:选择|做)|选择.{0,12}(?:AI|产品|而不是)|连续性|做了哪些准备)/i;
+const experienceValuePattern = /(?:(?:(?:应用)?统计学?|所学|你的|他的|候选人的|原)(?:这个)?专业(?:背景)?|专业背景|之前的?经历|过往经历|审计(?:经历|训练)?|财会(?:经历|背景)?|数据分析(?:能力|背景)?).{0,28}(?:对.{0,12})?(?:做|求职|支持|帮助|价值|作用|迁移|产品判断).{0,16}(?:AI\s*产品|产品|决策|能力)?|(?:AI\s*产品|产品决策).{0,18}(?:帮助|价值|作用|支持|迁移)/i;
+
+export function hasCareerTransitionSignature(question: string) {
+  return careerTransitionActionPattern.test(question)
+    && (careerTransitionPattern.test(question) || careerTransitionContextPattern.test(question));
+}
+
+export function hasExperienceValueSignature(question: string) {
+  return experienceValuePattern.test(question);
+}
 const roleFitPattern = /匹配(?:之处|点|度|证据)?|契合(?:之处|点|度)?|适合|胜任|为什么.{0,8}(?:选择你|选你)|能为.{0,16}(?:岗位|岗|团队|业务).{0,8}(?:带来|创造)|与.{0,18}(?:岗位|岗).{0,8}(?:关系|匹配)/i;
 const resultEvidencePattern = /(?:有没有|是否|能否证明|做过|负责过|实现过|取得|形成|达到|已经|目前).{0,16}(?:商业化|变现|营收|收入|增长|用户|留存|上线|结果|成果|规模)|(?:商业化|变现|营收|收入|增长|用户|留存|上线).{0,12}(?:数据|结果|成果|规模|经验|案例|证明|做过|负责过|实现过)|(?:商业化|变现|营收|收入|增长|用户|留存|上线)(?:情况)?(?:怎么样|如何)[？?。\s]*$/i;
 
@@ -24,7 +35,7 @@ export function extractTargetRole(question: string) {
 export function inferAnswerIntent(question: string, topic: QuestionTopic = "unknown", facet: QuestionFacet = "overview"): AnswerIntent {
   if (/^(?:(?:你|您)?(?:是谁|叫什么(?:名字)?|是什么(?:身份|助手|Agent|角色)?|的身份是什么)|(?:请)?(?:介绍|说明)(?:一下)?你的身份)[？?。.！!\s]*$/i.test(question)) return "agent_identity";
   if (/^(?:(?:你|您)(?:能|可以)(?:做|回答|介绍|帮我)(?:些什么|什么|哪些(?:问题|内容|开放题)?)?|你有什么(?:作用|用处|功能)|你是做什么的|你能干什么|你可以干什么|能问你什么|可以问什么|功能范围|能力范围|你不能回答开放(?:问题|题目|题)?(?:吗)?|你能回答(?:开放|没有标准答案的)?(?:问题|题目|题)?(?:吗)?|.*(?:Agent|助手).{0,8}(?:能不能|可以不可以|能否)?回答.{0,12}(?:开放|标准答案|问题))[？?。.！!\s]*$/i.test(question)) return "capability_scope";
-  if (careerTransitionPattern.test(question) || careerTransitionContextPattern.test(question)) return "career_transition";
+  if (hasCareerTransitionSignature(question)) return "career_transition";
   if (roleFitPattern.test(question)) return "role_fit";
   if (/AI\s*(?:编程|写|生成)|代码.*AI|AI.*占比|用了多少\s*AI/i.test(question)) return "ai_collaboration";
   if (/挑战|困难|失败|取舍|踩坑|复盘|怎么推进|如何推进/i.test(question)) return "challenge";
@@ -39,7 +50,7 @@ export function inferAnswerIntent(question: string, topic: QuestionTopic = "unkn
   if (/代表项目|最能代表|最有价值的项目/i.test(question)) return "representative_project";
   if (/自我介绍|介绍一下自己|60\s*秒/i.test(question)) return "introduction";
   if (/(?:项目|系统|工具|助手).{0,10}(?:能做什么|做什么|有什么功能|如何工作)/i.test(question)) return "project_overview";
-  if (/(?:统计|数据分析|审计|财会|财务|之前的?经历|过往经历).{0,24}(?:(?:迁移|帮助|带来|形成|求职).{0,16}(?:AI|产品|决策|能力)|(?:AI|产品).{0,12}(?:帮助|价值|作用|迁移))/i.test(question)) return "experience_value";
+  if (hasExperienceValueSignature(question)) return "experience_value";
   if (/技术能力|技术栈|会什么|数据分析|(?:AI\s*)?评测|如何评估|有哪些实践/i.test(question) || facet === "evaluation") return "skills";
   if (/企业级?\s*AI|企业\s*AI|企业场景|业务问题.{0,8}(?:转化|转成|变成).{0,8}(?:AI|产品)|(?:AI|产品)方案|项目经历.{0,12}(?:价值|帮助|迁移)|(?:从)?(?:财会|会计|财务|审计|统计).{0,14}(?:积累|迁移|帮助|带来|形成).{0,12}(?:产品|能力|需求|决策)/i.test(question)) return "experience_value";
   if (facet === "contribution") return "contribution";
@@ -107,6 +118,7 @@ type ContractInput = {
   direct: string[];
   fallback: string;
   next?: string[];
+  generationMode?: "local" | "realtime";
 };
 
 function define(input: ContractInput): QuestionContract {
@@ -146,6 +158,7 @@ function define(input: ContractInput): QuestionContract {
     directAnswerTerms: input.direct,
     fallbackAnswer: input.fallback,
     nextContractIds: input.next ?? [],
+    generationMode: input.generationMode ?? "local",
   };
 }
 
@@ -261,6 +274,14 @@ export const questionContracts: QuestionContract[] = [
     required: ["指标与样本意识", "分层分析和失败样本", "用数据支持取舍"], direct: ["统计", "指标", "产品决策"],
     fallback: "统计学背景对我最大的帮助，是让我在做产品判断时先问三个问题：**指标是否可信、差异来自哪里、结论能否复现**。这会直接影响 AI 产品的评测设计，而不只是用于事后做报表。\n\n在项目中，我会先明确要验证的用户任务和成功标准，再**固定样本与评价口径**，把整体结果拆到不同类型的 Bad Case 中观察。如果平均表现变化不大，但某一类高价值问题持续失败，产品优先级就不应该被平均数掩盖；如果样本或标注口径变化，模型结果也不能直接横向比较。\n\n因此统计训练让我更习惯用**基线、分层、对照和误差分析**支持产品取舍，把“感觉模型更好了”转化为可以讨论、验证和继续迭代的判断。",
     next: ["data_evaluation", "evaluation", "differentiation"],
+  }),
+  define({
+    id: "profession_value", question: "你的专业对你做 AI 产品有什么帮助？", aliases: ["你的专业对你做AI产品有什么帮助", "应用统计学专业对 AI 产品有什么价值？", "你所学专业如何支持产品判断？", "专业背景对你求职 AI 产品有什么帮助？"], topic: "statistics", facet: "transfer",
+    dimensions: ["数据与实验判断", "评测和 Bad Case 方法", "业务与风险意识"], knowledge: ["K3", "K17", "K8", "K9"], forbidden: ["deepflow", "local_tools"], length: { min: 280, max: 480 }, generationMode: "realtime",
+    goal: "解释应用统计学专业以及相邻经历如何迁移为 AI 产品判断能力。", thesis: "应用统计学专业对我做 AI 产品最直接的帮助，是让我习惯用数据、实验和结论边界支撑判断。",
+    required: ["数据与实验意识", "建立基线、控制变量和分析 Bad Case", "对产品判断的迁移价值"], direct: ["专业", "统计", "AI 产品", "帮助"],
+    fallback: "应用统计学专业对我做 AI 产品最直接的帮助，是让我具备**数据与实验意识**，习惯用样本、指标和结论边界支撑判断。我会先明确用户任务与成功标准，再**建立基线、控制变量并分析 Bad Case**，判断问题来自哪里、下一步应该验证什么。审计经历进一步强化了我对业务流程、证据和风险的敏感度。因此，这些训练让我能把模糊的产品感受转化为**可验证的产品判断**。",
+    next: ["statistics_product", "evaluation", "role_fit"],
   }),
   define({
     id: "audit_value", question: "审计经历如何帮助你做 AI 产品？", aliases: ["审计经历如何帮助他做 AI 产品？", "你如何把审计经验迁移到企业 AI 场景？", "他如何把审计经验迁移到企业 AI 场景？"], topic: "audit", facet: "transfer",
@@ -568,22 +589,37 @@ export function buildLocalQuestionFrame(question: string, history: { role: "user
   };
 }
 
-export function mergePlannedFrame(local: QuestionFrame, planned: z.infer<typeof plannedQuestionFrameSchema>): QuestionFrame {
+export function mergePlannedFrame(local: QuestionFrame, planned: z.infer<typeof plannedQuestionFrameSchema>, question = ""): QuestionFrame {
   const keepLocalIntent = local.confidence >= 0.82 && local.answerIntent !== "general";
-  const answerIntent = keepLocalIntent ? local.answerIntent : planned.answerIntent;
+  const blockCareerTransition = planned.answerIntent === "career_transition" && !hasCareerTransitionSignature(question);
+  const inferredValueIntent = hasExperienceValueSignature(question) ? "experience_value" : local.answerIntent;
+  const answerIntent = keepLocalIntent
+    ? local.answerIntent
+    : blockCareerTransition
+      ? inferredValueIntent
+      : planned.answerIntent;
   const plannedTopic = planned.topic === "unknown" ? local.topic : planned.topic;
   const topic = ["career_transition", "experience_value"].includes(answerIntent) ? "profile" : answerIntent === "role_fit" ? "role_fit" : plannedTopic;
   const facet = ["career_transition", "experience_value"].includes(answerIntent) ? "transfer" : answerIntent === "role_fit" ? "fit" : planned.facet;
   const targetRole = local.targetRole ?? planned.targetRole;
-  const questionMode = keepLocalIntent ? local.questionMode : planned.questionMode;
+  const questionMode = keepLocalIntent || blockCareerTransition
+    ? questionModeFor(question, answerIntent)
+    : planned.questionMode;
+  const conflictReason = local.answerIntent !== planned.answerIntent
+    ? blockCareerTransition
+      ? "missing_career_transition_signature"
+      : keepLocalIntent
+        ? "local_high_confidence"
+        : undefined
+    : undefined;
   return {
     ...local,
     topic,
     facet,
     answerIntent,
     questionMode,
-    evidencePolicy: keepLocalIntent ? local.evidencePolicy : planned.evidencePolicy,
-    focusTerms: keepLocalIntent ? local.focusTerms : planned.focusTerms,
+    evidencePolicy: keepLocalIntent || blockCareerTransition ? evidencePolicyFor(answerIntent, questionMode) : planned.evidencePolicy,
+    focusTerms: keepLocalIntent || blockCareerTransition ? focusTermsFor(answerIntent, targetRole) : planned.focusTerms,
     targetRole,
     requestedDimensions: planned.requestedDimensions,
     activeProject: planned.activeProject ?? (topic === "baidu" ? "baidu-ai-coding-evaluation" : topic === "rag" ? "rag-knowledge-base" : topic === "deepflow" || topic === "agent" ? "deepflow" : undefined),
@@ -598,6 +634,12 @@ export function mergePlannedFrame(local: QuestionFrame, planned: z.infer<typeof 
     targetLength: { min: facet === "overview" ? 220 : 280, max: 480 },
     answerGoal: "先直接回答问题，再使用最相关的公开实践说明判断、机制或迁移价值。",
     routeSource: "model",
+    intentResolution: {
+      localIntent: local.answerIntent,
+      plannedIntent: planned.answerIntent,
+      resolvedIntent: answerIntent,
+      conflictReason,
+    },
   };
 }
 

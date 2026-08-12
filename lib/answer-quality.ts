@@ -141,6 +141,32 @@ export interface QualityGateResult {
   triggers: string[];
 }
 
+const HARD_SAFETY_TRIGGER_PREFIXES = [
+  "unsupported_claim:",
+  "unsupported_organization:",
+  "unsupported_organization",
+  "unsupported_event",
+  "unsupported_relative_date",
+  "unsupported_number",
+  "forbidden:",
+  "reasoning_presented_as_fact",
+];
+
+export function isHardSafetyTrigger(trigger: string) {
+  return HARD_SAFETY_TRIGGER_PREFIXES.some((prefix) => trigger === prefix || trigger.startsWith(prefix));
+}
+
+export function splitQualityTriggers(triggers: readonly string[]) {
+  return {
+    hardSafety: triggers.filter(isHardSafetyTrigger),
+    semantic: triggers.filter((trigger) => !isHardSafetyTrigger(trigger)),
+  };
+}
+
+export function hasHardSafetyTriggers(triggers: readonly string[]) {
+  return triggers.some(isHardSafetyTrigger);
+}
+
 const ADVISORY_TRIGGERS = new Set([
   "excessive_emphasis",
   "insufficient_emphasis",
@@ -346,7 +372,7 @@ export function validateAnswerFragment(candidate: string, plan: AnswerPlan, sent
     }
   }
   const uniqueTriggers = [...new Set(triggers)];
-  return { passed: !hasBlockingQualityTriggers(uniqueTriggers), triggers: uniqueTriggers };
+  return { passed: !hasHardSafetyTriggers(uniqueTriggers), triggers: uniqueTriggers };
 }
 
 export function repairInstruction(plan: AnswerPlan, triggers: string[]) {

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { candidateNarrative } from "../content/narrative.ts";
 import { buildAnswerPlan, systemPrompt } from "../lib/answer.ts";
-import { validateAnswer } from "../lib/answer-quality.ts";
+import { splitQualityTriggers, validateAnswer } from "../lib/answer-quality.ts";
 import { parseAnswerEmphasis } from "../lib/answer-format.ts";
 import { matchStableAnswer, retrieveKnowledge } from "../lib/knowledge.ts";
 import { buildLocalQuestionFrame } from "../lib/question-contracts.ts";
@@ -73,6 +73,22 @@ test("质量门禁拒绝未记录的组织协作和交付事件", () => {
   const result = validateAnswer(fabricated, plan);
   assert.equal(result.passed, false);
   assert.equal(result.triggers.includes("unsupported_event") || result.triggers.includes("unsupported_organization"), true);
+});
+
+test("实时流只将事实安全问题视为可撤回失败", () => {
+  const triggers = splitQualityTriggers([
+    "intent_mismatch:career_transition",
+    "missing_required:3",
+    "forbidden_topic:RAG",
+    "unsupported_number",
+  ]);
+
+  assert.deepEqual(triggers.hardSafety, ["unsupported_number"]);
+  assert.deepEqual(triggers.semantic, [
+    "intent_mismatch:career_transition",
+    "missing_required:3",
+    "forbidden_topic:RAG",
+  ]);
 });
 
 test("回答重点会被安全解析为粗体片段", () => {

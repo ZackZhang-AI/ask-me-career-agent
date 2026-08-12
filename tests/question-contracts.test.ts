@@ -20,6 +20,7 @@ const screenshotCases = [
   { question: "你的实习经历沉淀了哪些可迁移能力？", contractId: "internship_transfer", topic: "profile", facet: "transfer", requiredIds: ["K22", "K8", "K9", "K10"], forbidden: /RAG|DeepFlow|Thirty-Minute Brain/ },
   { question: "举一个审计问题转成产品的例子。", contractId: "audit_product_example", topic: "audit", facet: "example", requiredIds: ["K7"], forbidden: /RAG|DeepFlow|Thirty-Minute Brain/ },
   { question: "你的统计学背景能怎样支持产品决策？", contractId: "statistics_product", topic: "statistics", facet: "transfer", requiredIds: ["K3", "K17"], forbidden: /DeepFlow|Thirty-Minute Brain/ },
+  { question: "你的专业对你做 AI 产品有什么帮助？", contractId: "profession_value", topic: "statistics", facet: "transfer", requiredIds: ["K3", "K17", "K8", "K9"], forbidden: /DeepFlow|Thirty-Minute Brain/ },
   { question: "Agent 之间如何协作？", contractId: "agent_collaboration", topic: "deepflow", facet: "collaboration", requiredIds: ["K18", "K19", "K21"], forbidden: /RAG|审计|Thirty-Minute Brain/ },
 ] as const;
 

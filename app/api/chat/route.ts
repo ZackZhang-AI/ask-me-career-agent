@@ -135,11 +135,20 @@ function streamResponse(input: {
         }));
         await emitDelivery(controller, delivery, { sessionId: input.sessionId, startedAt: input.startedAt, stageLatencies });
       } catch (error) {
+        const failureType = error instanceof Error && error.name === "StreamInterruptedError"
+          ? (error as Error & { failureType?: string }).failureType ?? "transport_interrupted"
+          : error instanceof Error && error.name === "AbortError"
+            ? "transport_interrupted"
+            : "service_unavailable";
         if (error instanceof Error && error.name === "StreamInterruptedError") {
           console.warn("ask-me-stream-interrupted", JSON.stringify({
             stage: "writing_answer",
             discardPartial: true,
             retryable: true,
+            failureType,
+            visible: true,
+            metric: "visible_answer_withdrawal",
+            semanticWithdrawal: false,
             reason: error.message.slice(0, 120),
           }));
         }
@@ -150,6 +159,7 @@ function streamResponse(input: {
             : serviceUnavailableMessage(),
           retryable: true,
           discardPartial: true,
+          failureType,
         }));
         controller.close();
       }

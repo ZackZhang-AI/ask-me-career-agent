@@ -119,7 +119,7 @@ export function decideAnswerability(input: AnswerabilityInput): AnswerabilityDec
       disposition: "answer",
       boundaryReason: "none",
       responseStatus: "completed",
-      shouldGenerate: false,
+      shouldGenerate: input.contract.generationMode === "realtime",
       capabilityIds,
     };
   }

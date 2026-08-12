@@ -24,7 +24,9 @@ test("回答首字出现前保留可感知的加载状态", () => {
   assert.match(chatSource, /if \(!answer\.trim\(\)\) throw new Error\("没有收到有效回答，请重试。"\)/);
   assert.match(chatSource, /if \(!receivedDone\) throw new Error\("回答连接提前结束，请重试。"\)/);
   assert.match(chatSource, /discardPartial = event\.discardPartial === true/);
+  assert.match(chatSource, /event\.failureType === "hard_safety" \|\| event\.failureType === "transport_interrupted"/);
   assert.match(chatSource, /discardPartial \? current\.slice\(0, -1\)/);
+  assert.match(chatSource, /if \(event\.type === "done"\)/);
 });
 
 test("每轮回答后保留三栏推荐问题卡片", () => {
