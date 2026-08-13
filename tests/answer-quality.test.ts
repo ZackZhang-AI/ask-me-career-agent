@@ -52,7 +52,7 @@ test("质量门禁拒绝内部审计措辞和模板化开头", () => {
 
 test("结构化事实骨架回退使用 RAG 代表项目且不包含内部标签", () => {
   assert.match(plan.fallbackAnswer, /RAG Knowledge Base System/);
-  assert.match(plan.fallbackAnswer, /\*\*可信专业问答\*\*/);
+  assert.match(plan.fallbackAnswer, /\*\*医疗私有文档可信问答\*\*/);
   assert.doesNotMatch(plan.fallbackAnswer, /进一步判断|实践依据|落地方式/);
   assert.match(plan.fallbackAnswer, /Dense Retrieval/);
   assert.doesNotMatch(plan.fallbackAnswer, /AI Coding Evaluator Agent|百度实习/);
@@ -102,7 +102,7 @@ test("回答重点会被安全解析为粗体片段", () => {
 
 test("质量门禁拒绝过度加粗和整句加粗", () => {
   const overformatted = `${plan.fallbackAnswer}\n\n**额外重点一**、**额外重点二**、**额外重点三**。`;
-  const longEmphasis = plan.fallbackAnswer.replace("**可信专业问答**", "**这是一个明显超过长度限制而且不应该被整段加粗的标题文本因为它仍在继续扩展**");
+  const longEmphasis = plan.fallbackAnswer.replace("**可运行、可核验、可迭代**", "**这是一个明显超过长度限制而且不应该被整段加粗的标题文本因为它仍在继续扩展**");
   assert.equal(validateAnswer(overformatted, plan).triggers.includes("excessive_emphasis"), true);
   assert.equal(validateAnswer(longEmphasis, plan).triggers.includes("long_emphasis"), true);
   assert.equal(validateAnswer(longEmphasis, plan).passed, true);
@@ -126,12 +126,12 @@ test("假设题的方法表达不被误判为未记录事件", () => {
 });
 
 test("质量门禁拒绝只有栏目作用的加黑词语", () => {
-  const lowInformation = plan.fallbackAnswer.replace("**可信专业问答**", "**核心项目**");
+  const lowInformation = plan.fallbackAnswer.replace("**医疗私有文档可信问答**", "**核心项目**");
   assert.equal(validateAnswer(lowInformation, plan).triggers.includes("low_information_emphasis"), true);
 });
 
 test("长篇契约回答至少保留两个阅读重点", () => {
-  const underformatted = plan.fallbackAnswer.replace("**可信专业问答**", "可信专业问答");
+  const underformatted = plan.fallbackAnswer.replace("**医疗私有文档可信问答**", "医疗私有文档可信问答");
   assert.equal(validateAnswer(underformatted, plan).triggers.includes("insufficient_emphasis"), true);
 });
 

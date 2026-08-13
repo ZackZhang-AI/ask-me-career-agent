@@ -50,7 +50,7 @@ test("达到上线内容最低数量且经历与项目可单独定位", () => {
 });
 
 test("STAR 已确认公开且保持证据边界", () => {
-  assert.equal(starStories.length, 9);
+  assert.equal(starStories.length, 10);
   assert.equal(starStories.every((item) => item.visibility === "public" && item.status === "active" && item.verification === "self_attested"), true);
   assert.equal(starStories.every((item) => item.limitations.length > 0 && item.claimIds.length > 0 && item.sourceIds.length > 0), true);
   const serialized = JSON.stringify(starStories);
@@ -103,7 +103,7 @@ test("核心问题稳定匹配标准答案和评测要求", () => {
   assert.equal(matched?.id, "A03");
   assert.match(matched?.standardAnswer ?? "", /RAG Knowledge Base System/);
   assert.doesNotMatch(matched?.standardAnswer ?? "", /AI Coding Evaluator Agent|百度实习/);
-  assert.deepEqual(matched?.requiredClaimIds, ["C3"]);
+  assert.deepEqual(matched?.requiredClaimIds, ["C3", "C17", "C18", "C19", "C20", "C21"]);
   assert.equal(matched?.requiredSourceIds.includes("S3"), true);
 });
 
@@ -130,6 +130,19 @@ test("核心回答用克制的短词组突出招聘重点", () => {
     assert.equal(emphasized.every((text) => text.length <= 12 && !/[。！？；：]/.test(text)), true, answer.id);
     assert.equal(emphasized.every(isHighSignalEmphasis), true, `${answer.id}: ${emphasized.join(" | ")}`);
   }
+});
+
+test("百川实习按德勤之后百度之前归档且 RAG 明确归属该实习", () => {
+  const internship = matchStableAnswer("请介绍一下你的百川智能实习。");
+  const experience = knowledge.find((item) => item.id === "K27");
+  const representative = matchStableAnswer("哪个项目最能代表他的 AI 产品能力？");
+  assert.equal(internship?.id, "A35");
+  assert.match(internship?.standardAnswer ?? "", /德勤 IT 审计之后、百度实习之前/);
+  assert.match(internship?.standardAnswer ?? "", /医疗 RAG/);
+  assert.equal(internship?.requiredSourceIds.includes("S12"), true);
+  assert.match(experience?.content ?? "", /德勤 IT 审计之后、百度实习之前/);
+  assert.equal(representative?.requiredClaimIds.includes("C18"), true);
+  assert.equal(representative?.requiredSourceIds.includes("S12"), true);
 });
 
 test("项目别名和最近上下文可解析多轮指代", () => {

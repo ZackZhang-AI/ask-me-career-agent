@@ -13,7 +13,7 @@ export const profile = {
 export const featuredProjects = [
   {
     name: "RAG Knowledge Base System",
-    summary: "专业文档问答原型，已跑通文档摄入、Dense Retrieval 与回答生成主链路；引用和评测能力持续迭代。",
+    summary: "百川医疗 RAG 业务场景的脱敏重构，已跑通知识入库、Dense Retrieval、Rerank、来源片段、短期记忆与自动评测。",
     stack: "FastAPI / Vue 3 / Milvus / RAGAS",
     url: "https://github.com/ZackZhang-AI/RAG-Knowledge-Base-System",
     status: "公开仓库，持续迭代",

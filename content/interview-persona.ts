@@ -31,7 +31,7 @@ export const interviewPersona = {
       id: "rag_agent_workflow",
       label: "RAG 与 Agent 工作流",
       topics: ["rag", "deepflow", "ask_me", "agent"],
-      terms: ["RAG", "Agent", "知识库", "检索", "引用", "工作流", "任务", "工具"],
+      terms: ["RAG", "医疗 RAG", "百川智能", "Agent", "知识库", "检索", "Rerank", "来源", "评测", "工作流"],
     },
     {
       id: "enterprise_process",

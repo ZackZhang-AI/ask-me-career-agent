@@ -7,7 +7,7 @@ import { getFollowUpQuestions } from "./question-suggestions.ts";
 import { buildLocalQuestionFrame, findQuestionContract, frameFromContract } from "./question-contracts";
 
 const boundaryPattern = /短板|不足|限制|边界|风险|真实性|真实数据|用户(?:数|规模|反馈|测试)|增长|留存|生产(?:状态|规模|环境)|完成(?:了吗|情况)|未完成|个人贡献(?:比例|边界)/;
-const knownOrganizations = ["东北大学", "德勤", "容诚", "ACCA"];
+const knownOrganizations = ["东北大学", "百川智能", "百度", "德勤", "容诚", "ACCA"];
 const diagnosticMethodFacts = [
   "如果同一组 Bad Case 没有改善，优先确认评测口径与失败分类是否稳定，避免把指标波动误判为方案变化。",
   "随后沿知识摄入、检索、回答、引用链路逐段定位：先看召回证据是否相关且完整，再看回答是否忠实使用证据，最后检查引用与评测是否正确归因。",
@@ -196,8 +196,8 @@ function openPointLabels(intent: AnswerIntent, facet: QuestionFrame["facet"]) {
 }
 
 function openAnswer(plan: Omit<AnswerPlan, "fallbackAnswer">, facts: string[], story?: StarStory) {
-  const freshFacts = facts.filter((fact) => !plan.avoidPoints.includes(fact));
   const agentVoice = metaIntents.includes(plan.intent);
+  const freshFacts = agentVoice ? facts : facts.filter((fact) => !plan.avoidPoints.includes(fact));
   const candidates = (freshFacts.length ? freshFacts : facts)
     .map((fact) => agentVoice ? fact.trim() : firstPersonFact(fact))
     .filter((fact) => normalize(fact) !== normalize(plan.thesis));
@@ -234,7 +234,7 @@ function openAnswer(plan: Omit<AnswerPlan, "fallbackAnswer">, facts: string[], s
 function openThesis(question: string, intent: AnswerIntent, items: KnowledgeItem[], depth: ConversationDepth, story?: StarStory, frame?: QuestionFrame) {
   if (intent === "agent_identity") return agentProfile.identity;
   if (intent === "capability_scope") {
-    return "可以。我能围绕张倬玮的经历、项目、能力和岗位匹配回答开放问题，也能按正式面试口吻组织动机、方法、取舍和复盘。对于没有公开事实的假设题，我会明确说明这是处理思路，不把推演说成已经发生的经历。";
+    return "可以。我能围绕张倬玮的教育背景、审计经历、AI 项目、能力和岗位匹配回答开放问题，也能按正式面试口吻组织动机、方法、取舍和复盘。对于没有公开事实的假设题，我会明确说明这是处理思路，不把推演说成已经发生的经历。";
   }
   if (intent === "career_transition") return candidateNarrative.careerTransition.thesis;
   if (intent === "experience_value") {
