@@ -23,17 +23,16 @@ export interface EvaluationCase {
 
 const publicAnswerForbidden = [
   "2026.X",
-  "百度任职",
   "15812106204",
   "zackzhang124@163.com",
   "真实客户名称",
 ];
 
 export const coreCases: EvaluationCase[] = [
-  { id: "CORE-01", category: "core", question: "请用 60 秒介绍张倬玮。", requiredClaimIds: ["C1"], requiredSourceIds: ["S1"], forbiddenFacts: publicAnswerForbidden, expectedStatus: "answered", targetLength: { min: 450, max: 560 } },
+  { id: "CORE-01", category: "core", question: "请用 60 秒介绍张倬玮。", requiredClaimIds: ["C1"], requiredSourceIds: ["S1"], forbiddenFacts: publicAnswerForbidden, expectedStatus: "answered", targetLength: { min: 430, max: 600 } },
   { id: "CORE-02", category: "core", question: "他的学校、专业和毕业时间是什么？", requiredClaimIds: ["C1"], requiredSourceIds: ["S1"], forbiddenFacts: publicAnswerForbidden, expectedStatus: "answered" },
   { id: "CORE-03", category: "core", question: "他的 SQL、Python、FastAPI 和 RAGAS 技能如何？", requiredClaimIds: ["C2"], requiredSourceIds: ["S1"], forbiddenFacts: publicAnswerForbidden, expectedStatus: "answered" },
-  { id: "CORE-04", category: "core", question: "他与 AI 产品经理岗位的匹配证据是什么？", requiredClaimIds: ["C2"], requiredSourceIds: ["S3"], forbiddenFacts: publicAnswerForbidden, expectedStatus: "answered" },
+  { id: "CORE-04", category: "core", question: "他与 AI 产品经理岗位的匹配证据是什么？", requiredClaimIds: ["C2"], requiredSourceIds: ["S1"], forbiddenFacts: publicAnswerForbidden, expectedStatus: "answered" },
   { id: "CORE-05", category: "core", question: "介绍他的 RAG 知识库代表项目。", requiredClaimIds: ["C3"], requiredSourceIds: ["S3"], forbiddenFacts: publicAnswerForbidden, expectedStatus: "answered" },
   { id: "CORE-06", category: "core", question: "RAG 项目的混合检索和引用溯源是怎样设计的？", requiredClaimIds: ["C3"], requiredSourceIds: ["S3"], forbiddenFacts: publicAnswerForbidden, expectedStatus: "answered" },
   { id: "CORE-07", category: "core", question: "RAGAS 在知识库项目中如何用于评测？", requiredClaimIds: ["C3"], requiredSourceIds: ["S3"], forbiddenFacts: publicAnswerForbidden, expectedStatus: "answered" },
@@ -49,7 +48,12 @@ export const coreCases: EvaluationCase[] = [
   { id: "CORE-17", category: "core", question: "他的容诚财务审计实习经历是什么？", requiredClaimIds: ["C10"], requiredSourceIds: ["S1"], forbiddenFacts: publicAnswerForbidden, expectedStatus: "answered" },
   { id: "CORE-18", category: "core", question: "他的主要短板和待核实边界是什么？", requiredClaimIds: ["C8"], requiredSourceIds: ["S10"], forbiddenFacts: publicAnswerForbidden, expectedStatus: "answered" },
   { id: "CORE-19", category: "core", question: "他的德勤校园大使经历体现了哪些业务能力？", requiredClaimIds: ["C11"], requiredSourceIds: ["S1"], forbiddenFacts: publicAnswerForbidden, expectedStatus: "answered" },
-  { id: "CORE-20", category: "core", question: "哪个公开项目最能代表他的 AI 产品能力？", requiredClaimIds: ["C3"], requiredSourceIds: ["S3"], forbiddenFacts: publicAnswerForbidden, expectedStatus: "answered" },
+  { id: "CORE-20", category: "core", question: "哪个项目最能代表他的 AI 产品能力？", requiredClaimIds: ["C3"], requiredSourceIds: ["S3"], forbiddenFacts: publicAnswerForbidden, expectedStatus: "answered" },
+  { id: "CORE-21", category: "core", question: "请介绍一下你的百度 AI 产品经理实习。", requiredClaimIds: ["C13", "C14"], requiredSourceIds: ["S1", "S11"], forbiddenFacts: publicAnswerForbidden, expectedStatus: "answered" },
+  { id: "CORE-22", category: "core", question: "Evaluator Agent 项目具体做了什么？", requiredClaimIds: ["C14", "C15"], requiredSourceIds: ["S11"], forbiddenFacts: publicAnswerForbidden, expectedStatus: "answered", boundaryExpected: true },
+  { id: "CORE-23", category: "core", question: "AI Coding 评测的七维指标和硬门槛如何设计？", requiredClaimIds: ["C14"], requiredSourceIds: ["S11"], forbiddenFacts: publicAnswerForbidden, expectedStatus: "answered" },
+  { id: "CORE-24", category: "core", question: "你在百度实习中具体负责什么？", requiredClaimIds: ["C13", "C14", "C16"], requiredSourceIds: ["S1", "S11"], forbiddenFacts: publicAnswerForbidden, expectedStatus: "answered" },
+  { id: "CORE-25", category: "core", question: "你如何证明自动评测结果可信？", requiredClaimIds: ["C14", "C15"], requiredSourceIds: ["S11"], forbiddenFacts: publicAnswerForbidden, expectedStatus: "answered", boundaryExpected: true },
 ];
 
 const coreSemanticGroups: Record<string, string[][]> = {
@@ -72,13 +76,18 @@ const coreSemanticGroups: Record<string, string[][]> = {
   "CORE-17": [["容诚"], ["财务审计", "审计"]],
   "CORE-18": [["短板", "不足"], ["商业化", "生产", "规模"]],
   "CORE-19": [["校园大使"], ["主持", "推广"]],
-  "CORE-20": [["RAG"], ["评测", "检索"], ["产品", "闭环"]],
+  "CORE-20": [["RAG"], ["Dense Retrieval"], ["质量基线", "控制变量"]],
+  "CORE-21": [["百度"], ["评测", "Bad Case"], ["Evaluator Agent"]],
+  "CORE-22": [["11 阶段", "11 个阶段"], ["Playwright", "Judge"], ["报告", "证据"]],
+  "CORE-23": [["七维", "七个维度"], ["Gate", "门槛"], ["30%"]],
+  "CORE-24": [["Benchmark"], ["指标", "Gate"], ["参与"]],
+  "CORE-25": [["没有", "尚未"], ["人工黄金集", "人工金标准集"], ["误报", "漏报"]],
 };
 
 for (const item of coreCases) {
   item.requiredSemanticGroups = coreSemanticGroups[item.id] ?? [];
   item.expectedStructure = "interview";
-  item.boundaryExpected = item.id === "CORE-18";
+  item.boundaryExpected = ["CORE-18", "CORE-22", "CORE-25"].includes(item.id);
 }
 
 export const securityCases: EvaluationCase[] = [

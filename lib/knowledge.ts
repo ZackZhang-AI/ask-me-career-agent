@@ -96,7 +96,13 @@ export function retrieveKnowledge(question: string, limitOrOptions: number | Ret
   })();
   const retrievable = knowledge.filter(isRetrievable);
 
-  if (frame?.routeSource === "contract" && frame.requiredKnowledgeIds.length) {
+  // Agent 能力说明和真正未规划的开放题不能靠“问题、产品、项目”等弱词召回一条随机材料。
+  // 模型规划完成后会带回明确主题，再进入正常证据检索。
+  if (frame && (frame.questionMode === "agent_meta" || (frame.topic === "unknown" && frame.answerIntent === "general"))) {
+    return [];
+  }
+
+  if (frame?.requiredKnowledgeIds.length && (frame.routeSource === "contract" || ["career_transition", "role_fit"].includes(frame.answerIntent))) {
     const byId = new Map(retrievable.map((item) => [item.id, item]));
     return frame.requiredKnowledgeIds
       .map((id) => byId.get(id))
@@ -128,15 +134,32 @@ export function retrieveKnowledge(question: string, limitOrOptions: number | Ret
 export function matchStableAnswer(question: string, history: ChatMessage[] = [], frame?: QuestionFrame) {
   const normalizedQuestion = normalizeSearchText(question);
   const resolved = resolveRetrievalQuery(question, history);
+  const effectiveFrame = frame ?? buildLocalQuestionFrame(question, history);
   const usesReference = usesRecentContext(question, history);
-  const asksForOutcomeEvidence = /用户测试|满意度|用户规模|真实用户|增长|留存|生产状态|商业化|结果数据/.test(question);
-  if (resolved.matchedProjects.length > 1) return undefined;
+  const asksForOutcomeEvidence = effectiveFrame.answerIntent === "result"
+    && /用户测试|满意度|用户规模|真实用户|增长|留存|生产状态|商业化|变现|营收|收入|结果数据|量化结果/.test(question);
+  const compatibleIntents = new Set([
+    effectiveFrame.answerIntent,
+    ...(effectiveFrame.answerIntent === "skills" ? ["contribution"] : []),
+    ...(effectiveFrame.answerIntent === "project_overview" ? ["representative_project", "project_problem"] : []),
+    ...(effectiveFrame.answerIntent === "experience_value" ? ["experience"] : []),
+  ]);
   const ranked = stableAnswers
     .filter(isStableAnswerRetrievable)
     .map((item) => {
-      if (frame?.activeProject && item.relatedProject !== frame.activeProject) return { item, score: 0, hasAnswerMatch: false };
+      if (item.matchRequiresProjectContext && !effectiveFrame.activeProject && !(item.relatedProject && resolved.matchedProjects.includes(item.relatedProject))) {
+        return { item, score: 0, hasAnswerMatch: false };
+      }
+      if (resolved.matchedProjects.length > 1 && item.relatedProject) return { item, score: 0, hasAnswerMatch: false };
+      if (effectiveFrame.activeProject && item.relatedProject && item.relatedProject !== effectiveFrame.activeProject) return { item, score: 0, hasAnswerMatch: false };
+      if (item.id === "A02" && effectiveFrame.targetRole && !/^AI\s*产品经理$/i.test(effectiveFrame.targetRole)) {
+        return { item, score: 0, hasAnswerMatch: false };
+      }
       if (usesReference && item.relatedProject && !resolved.matchedProjects.includes(item.relatedProject)) return { item, score: 0 };
       const exact = normalizeSearchText(item.question) === normalizedQuestion ? 100 : 0;
+      if (!exact && effectiveFrame.routeSource !== "contract" && effectiveFrame.answerIntent !== "general" && !compatibleIntents.has(item.factSkeleton.intent)) {
+        return { item, score: 0, hasAnswerMatch: false };
+      }
       const keywordScore = item.matchKeywords.reduce((score, keyword) => {
         const normalizedKeyword = normalizeSearchText(keyword);
         return score + (normalizedQuestion.includes(normalizedKeyword) ? Math.max(4, normalizedKeyword.length * 2) : 0);

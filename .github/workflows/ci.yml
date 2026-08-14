@@ -47,6 +47,9 @@ jobs:
       - name: Test
         run: npm test
 
+      - name: Deterministic interview quality gate
+        run: npm run eval:interview -- --mode local --output output/ci-interview-quality.json
+
       - name: Lint
         run: npm run lint
 

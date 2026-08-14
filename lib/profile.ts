@@ -13,23 +13,23 @@ export const profile = {
 export const featuredProjects = [
   {
     name: "RAG Knowledge Base System",
-    summary: "企业级文档问答系统，覆盖解析、混合检索、引用溯源与 RAGAS 评测。",
+    summary: "百川医疗 RAG 业务场景的脱敏重构，已跑通知识入库、Dense Retrieval、Rerank、来源片段、短期记忆与自动评测。",
     stack: "FastAPI / Vue 3 / Milvus / RAGAS",
     url: "https://github.com/ZackZhang-AI/RAG-Knowledge-Base-System",
-    status: "已完成公开仓库",
+    status: "公开仓库，持续迭代",
   },
   {
     name: "DeepFlow",
-    summary: "多 Agent 深度研究工作台，覆盖计划、人审、检索、分析和报告生成。",
+    summary: "多 Agent 深度研究工作台，已形成从任务澄清到报告输出的可演示 MVP。",
     stack: "FastAPI / Next.js / Multi-Agent / RAG",
     url: "https://github.com/ZackZhang-AI/DeepFlow",
-    status: "已完成公开仓库",
+    status: "公开仓库，可演示 MVP",
   },
   {
-    name: "Thirty-Minute Brain",
-    summary: "本地优先的桌面上下文检索工具，帮助快速恢复最近工作现场。",
-    stack: "Tauri / React / Rust / SQLite FTS5",
-    url: "https://github.com/ZackZhang-AI/thirty-minute-brain",
-    status: "已完成公开仓库",
+    name: "AgentScope",
+    summary: "AI Agent 黑匣子回放器，追踪工具调用、延迟与错误，支持安全 Fork、运行对比与确定性评测。",
+    stack: "Next.js / TypeScript / PostgreSQL / Playwright",
+    url: "https://github.com/ZackZhang-AI/HarnessLab",
+    status: "公开仓库，线上可演示",
   },
 ] as const;

@@ -1,9 +1,20 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { candidateNarrative } from "../content/narrative.ts";
+import { extractAnswerEmphasis, isHighSignalEmphasis } from "../lib/answer-format.ts";
 import { answerSimilarity } from "../lib/answer-quality.ts";
 import { contentCatalog, contentCatalogSchema } from "../lib/content.ts";
 import { claims, faqs, knowledge, matchStableAnswer, resolveRetrievalQuery, retrieveKnowledge, sources, stableAnswers, starStories } from "../lib/knowledge.ts";
+import { featuredProjects } from "../lib/profile.ts";
+
+test("首页项目卡片如实区分当前完成度", () => {
+  assert.equal(featuredProjects.every((project) => !project.status.includes("已完成")), true);
+  assert.match(featuredProjects[0].summary, /Dense Retrieval/);
+  assert.match(featuredProjects[1].status, /MVP/);
+  assert.equal(featuredProjects[2].name, "AgentScope");
+  assert.match(featuredProjects[2].url, /HarnessLab$/);
+  assert.match(featuredProjects[2].status, /线上可演示/);
+});
 
 test("内容目录通过 Zod 与引用完整性校验", () => {
   assert.doesNotThrow(() => contentCatalogSchema.parse(contentCatalog));
@@ -39,7 +50,7 @@ test("达到上线内容最低数量且经历与项目可单独定位", () => {
 });
 
 test("STAR 已确认公开且保持证据边界", () => {
-  assert.equal(starStories.length, 8);
+  assert.equal(starStories.length, 10);
   assert.equal(starStories.every((item) => item.visibility === "public" && item.status === "active" && item.verification === "self_attested"), true);
   assert.equal(starStories.every((item) => item.limitations.length > 0 && item.claimIds.length > 0 && item.sourceIds.length > 0), true);
   const serialized = JSON.stringify(starStories);
@@ -91,8 +102,8 @@ test("核心问题稳定匹配标准答案和评测要求", () => {
   const matched = matchStableAnswer("哪个项目最能代表他的 AI 产品能力？");
   assert.equal(matched?.id, "A03");
   assert.match(matched?.standardAnswer ?? "", /RAG Knowledge Base System/);
-  assert.deepEqual(matched?.requiredClaimIds, ["C3"]);
-  assert.equal(matched?.requiredSourceIds.includes("S4"), false);
+  assert.doesNotMatch(matched?.standardAnswer ?? "", /AI Coding Evaluator Agent|百度实习/);
+  assert.deepEqual(matched?.requiredClaimIds, ["C3", "C17", "C18", "C19", "C20", "C21"]);
   assert.equal(matched?.requiredSourceIds.includes("S3"), true);
 });
 
@@ -100,8 +111,8 @@ test("60 秒介绍提供招聘判断、核心证据与完整来源", () => {
   const matched = matchStableAnswer("60 秒了解张倬玮。");
   assert.equal(matched?.id, "A01");
   assert.equal((matched?.details?.length ?? 0) >= 4, true);
-  assert.equal(matched?.requiredSourceIds.includes("S3"), true);
-  assert.equal(matched?.requiredSourceIds.includes("S4"), true);
+  assert.equal(matched?.requiredSourceIds.includes("S1"), true);
+  assert.equal(matched?.requiredSourceIds.includes("S11"), true);
 });
 
 test("招聘方高频问题都有结构化证据", () => {
@@ -113,10 +124,25 @@ test("招聘方高频问题都有结构化证据", () => {
 
 test("核心回答用克制的短词组突出招聘重点", () => {
   for (const answer of stableAnswers) {
-    const emphasized = [...answer.standardAnswer.matchAll(/\*\*([^*]+)\*\*/g)].map((match) => match[1]);
+    const emphasized = extractAnswerEmphasis(answer.standardAnswer);
     assert.equal(emphasized.length >= 1 && emphasized.length <= 3, true, answer.id);
+    if (answer.standardAnswer.length > 240) assert.equal(emphasized.length >= 2, true, answer.id);
     assert.equal(emphasized.every((text) => text.length <= 12 && !/[。！？；：]/.test(text)), true, answer.id);
+    assert.equal(emphasized.every(isHighSignalEmphasis), true, `${answer.id}: ${emphasized.join(" | ")}`);
   }
+});
+
+test("百川实习按德勤之后百度之前归档且 RAG 明确归属该实习", () => {
+  const internship = matchStableAnswer("请介绍一下你的百川智能实习。");
+  const experience = knowledge.find((item) => item.id === "K27");
+  const representative = matchStableAnswer("哪个项目最能代表他的 AI 产品能力？");
+  assert.equal(internship?.id, "A35");
+  assert.match(internship?.standardAnswer ?? "", /德勤 IT 审计之后、百度实习之前/);
+  assert.match(internship?.standardAnswer ?? "", /医疗 RAG/);
+  assert.equal(internship?.requiredSourceIds.includes("S12"), true);
+  assert.match(experience?.content ?? "", /德勤 IT 审计之后、百度实习之前/);
+  assert.equal(representative?.requiredClaimIds.includes("C18"), true);
+  assert.equal(representative?.requiredSourceIds.includes("S12"), true);
 });
 
 test("项目别名和最近上下文可解析多轮指代", () => {
@@ -137,10 +163,11 @@ test("检索只返回公开、有效且非未验证内容", () => {
   }
 });
 
-test("百度占位经历与联系方式不进入内容目录", () => {
+test("百度确认经历进入内容目录且占位与联系方式不进入", () => {
   const serialized = JSON.stringify(contentCatalog);
   assert.equal(serialized.includes("2026.X"), false);
-  assert.equal(serialized.includes("百度"), false);
+  assert.equal(serialized.includes("百度"), true);
+  assert.equal(serialized.includes("Evaluator Agent"), true);
   assert.equal(serialized.includes("zackzhang124@163.com"), false);
   assert.equal(serialized.includes("15812106204"), false);
 });
@@ -148,10 +175,13 @@ test("百度占位经历与联系方式不进入内容目录", () => {
 test("30、60、90 秒介绍独立成稿且时长层次清晰", () => {
   const introductions = candidateNarrative.introductions;
   assert.equal(introductions.seconds30.length >= 150 && introductions.seconds30.length < introductions.seconds60.length, true);
-  assert.equal(introductions.seconds60.length >= 450 && introductions.seconds60.length <= 560, true);
+  assert.equal(introductions.seconds60.length >= 430 && introductions.seconds60.length <= 600, true);
   assert.equal(introductions.seconds90.length > introductions.seconds60.length, true);
   assert.equal(new Set(Object.values(introductions)).size, 3);
-  for (const answer of Object.values(introductions)) assert.doesNotMatch(answer, /百度|Claim|Source|证据边界/);
+  for (const answer of Object.values(introductions)) {
+    assert.match(answer, /百度/);
+    assert.doesNotMatch(answer, /Claim|Source|证据边界/);
+  }
 });
 
 test("核心问题拥有独立判断任务，不复用同一份回答", () => {

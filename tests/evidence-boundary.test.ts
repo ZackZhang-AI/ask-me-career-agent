@@ -3,13 +3,14 @@ import test from "node:test";
 import { buildContext } from "../lib/answer.ts";
 import { claims, knowledge, matchStableAnswer, serializeKnowledgeItems, sources } from "../lib/knowledge.ts";
 
-test("RAG 回答区分当前 Dense Retrieval 与待复核的高级能力", () => {
+test("RAG 回答区分当前 Dense 加 Rerank 与未完成能力", () => {
   const answer = matchStableAnswer("RAG 项目解决了什么问题？");
   const rag = knowledge.find((item) => item.id === "K4");
   const source = sources.find((item) => item.id === "S3");
   assert.ok(answer && rag && source);
   assert.match(answer.standardAnswer, /Dense Retrieval/);
-  assert.match(answer.standardAnswer, /逐步验证/);
+  assert.match(answer.standardAnswer, /Rerank/);
+  assert.match(answer.standardAnswer, /PDF 页码高亮|一键定位/);
   assert.equal(rag.projectStatus, "in_progress");
   assert.equal(source.projectStatus, "in_progress");
   assert.equal(answer.standardAnswer.includes("公开实现多格式解析、混合检索"), false);

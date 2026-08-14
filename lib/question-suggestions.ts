@@ -1,44 +1,51 @@
 export type QuestionCategory = "profile" | "fit" | "project" | "experience" | "skills" | "gaps" | "security" | "other";
+export type HrFollowUpKind = "evidence" | "retrospective" | "fit";
+
+export interface HrFollowUpSuggestion {
+  kind: HrFollowUpKind;
+  label: string;
+  question: string;
+}
 
 export const questionGroups = [
   {
     id: "screening",
     label: "快速判断",
     questions: [
-      "60 秒了解张倬玮。",
-      "他为什么适合 AI 产品经理岗位？",
-      "哪个项目最能代表他的 AI 产品能力？",
-      "他在代表项目中负责哪些核心工作？",
+      "请介绍一下你自己。",
+      "你为什么适合 AI 产品经理岗位？",
+      "哪个项目最能代表你的 AI 产品能力？",
+      "你在百度实习中具体负责什么？",
     ],
   },
   {
     id: "projects",
     label: "项目与贡献",
     questions: [
-      "哪个项目最能代表他的 AI 产品能力？",
-      "他如何把业务问题转化为 AI 产品方案？",
-      "他在代表项目中负责哪些核心工作？",
-      "他如何评估并改进 AI 产品效果？",
+      "哪个项目最能代表你的 AI 产品能力？",
+      "Evaluator Agent 项目具体做了什么？",
+      "AI Coding 评测的七维指标和硬门槛如何设计？",
+      "你如何分析和归因 AI Coding 的 Bad Case？",
     ],
   },
   {
     id: "experience",
     label: "经历与业务",
     questions: [
-      "应用统计学背景如何帮助他做 AI 产品？",
-      "审计经历如何帮助他做 AI 产品？",
-      "他的实习经历沉淀了哪些可迁移能力？",
-      "他的教育与项目经历形成了怎样的能力组合？",
+      "请介绍一下你的百度 AI 产品经理实习。",
+      "审计经历如何帮助你做 AI 产品？",
+      "你的实习经历沉淀了哪些可迁移能力？",
+      "应用统计学背景如何帮助你做 AI 产品？",
     ],
   },
   {
     id: "capabilities",
     label: "能力亮点",
     questions: [
-      "他的核心技术能力有哪些？",
-      "他在数据分析与 AI 评测方面有哪些实践？",
-      "他对企业级 AI 场景有哪些理解？",
-      "他如何使用 AI 编程工具提升交付效率？",
+      "你的核心技术能力有哪些？",
+      "你在数据分析与 AI 评测方面有哪些实践？",
+      "你如何证明自动评测结果可信？",
+      "你对企业级 AI 场景有哪些理解？",
     ],
   },
 ] as const;
@@ -144,7 +151,7 @@ export const recommendationQuestionCandidates = [...new Set([
   ...Object.values(followUpsByCategory).flat(),
   ...evergreenRecruiterQuestions,
   ...Object.values(explorationQuestionsByCategory).flat(),
-])];
+].map(toCandidatePerspective))];
 
 function toCandidatePerspective(question: string) {
   return question
@@ -162,7 +169,7 @@ function normalizeQuestion(question: string) {
 }
 
 export function inferQuestionCategory(question: string): QuestionCategory {
-  if (/项目|rag|agent|deepflow|贡献|核心工作|产品方案|ai\s*编程|用户增长|生产/.test(question.toLowerCase())) return "project";
+  if (/项目|rag|agent|deepflow|百度|ai\s*coding|贡献|核心工作|产品方案|ai\s*编程|用户增长|生产/.test(question.toLowerCase())) return "project";
   if (/匹配|岗位|适合|录用|优势|团队价值|带来什么价值/.test(question)) return "fit";
   if (/实习|经历|审计|德勤|容诚|业务/.test(question)) return "experience";
   if (/技能|技术|模型|英语|证书|评测|评估|效果|隐私|企业数据|企业级/.test(question)) return "skills";
@@ -209,5 +216,68 @@ export function getFollowUpQuestions(
   addQuestions(legacyCandidates, limit);
 
   return selected;
+}
+
+const hrFollowUpIntents: Array<{
+  kind: HrFollowUpKind;
+  label: string;
+  matcher: RegExp;
+  fallbacks: readonly string[];
+}> = [
+  {
+    kind: "evidence",
+    label: "证据追问",
+    matcher: /评估|评测|可信|一致性|效果|负责|贡献|证据|核验|演示|数据|指标|gate/i,
+    fallbacks: [
+      "你如何证明自动评测结果可信？",
+      "AI Coding 评测的七维指标和硬门槛如何设计？",
+      "你在百度实习中具体负责什么？",
+    ],
+  },
+  {
+    kind: "retrospective",
+    label: "项目复盘",
+    matcher: /转化|改进|取舍|复盘|核心工作|项目|归因|bad case/i,
+    fallbacks: [
+      "你如何分析和归因 AI Coding 的 Bad Case？",
+      "Evaluator Agent 项目具体做了什么？",
+      "你如何把业务问题转化为 AI 产品方案？",
+    ],
+  },
+  {
+    kind: "fit",
+    label: "岗位匹配",
+    matcher: /适合|岗位|价值|胜任|优势|团队/,
+    fallbacks: [
+      "你为什么适合 AI 产品经理岗位？",
+      "请介绍一下你自己。",
+      "哪个项目最能代表你的 AI 产品能力？",
+    ],
+  },
+];
+
+export function getHrFollowUpQuestions(
+  question: string,
+  askedQuestions: readonly string[] = [],
+  preferredQuestions: readonly string[] = [],
+): HrFollowUpSuggestion[] {
+  const seen = new Set(askedQuestions.map(normalizeQuestion));
+  const used = new Set<string>();
+  const candidates = getFollowUpQuestions(question, askedQuestions, 9, preferredQuestions);
+
+  return hrFollowUpIntents.flatMap((intent): HrFollowUpSuggestion[] => {
+    const pool = [
+      ...candidates.filter((candidate) => intent.matcher.test(candidate)),
+      ...intent.fallbacks.map(toCandidatePerspective),
+      ...candidates,
+    ];
+    const selected = pool.find((candidate) => {
+      const normalized = normalizeQuestion(candidate);
+      return normalized && !seen.has(normalized) && !used.has(normalized) && Boolean(findQuestionContract(candidate));
+    });
+    if (!selected) return [];
+    used.add(normalizeQuestion(selected));
+    return [{ kind: intent.kind, label: intent.label, question: selected }];
+  });
 }
 import { findQuestionContract, recommendedContractQuestions } from "./question-contracts";
