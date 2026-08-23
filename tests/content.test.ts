@@ -50,7 +50,7 @@ test("达到上线内容最低数量且经历与项目可单独定位", () => {
 });
 
 test("STAR 已确认公开且保持证据边界", () => {
-  assert.equal(starStories.length, 10);
+  assert.equal(starStories.length, 11);
   assert.equal(starStories.every((item) => item.visibility === "public" && item.status === "active" && item.verification === "self_attested"), true);
   assert.equal(starStories.every((item) => item.limitations.length > 0 && item.claimIds.length > 0 && item.sourceIds.length > 0), true);
   const serialized = JSON.stringify(starStories);
@@ -132,17 +132,37 @@ test("核心回答用克制的短词组突出招聘重点", () => {
   }
 });
 
-test("百川实习按德勤之后百度之前归档且 RAG 明确归属该实习", () => {
+test("百川实习按最新简历日期归档且 RAG 明确归属该实习", () => {
   const internship = matchStableAnswer("请介绍一下你的百川智能实习。");
   const experience = knowledge.find((item) => item.id === "K27");
   const representative = matchStableAnswer("哪个项目最能代表他的 AI 产品能力？");
   assert.equal(internship?.id, "A35");
-  assert.match(internship?.standardAnswer ?? "", /德勤 IT 审计之后、百度实习之前/);
+  assert.match(internship?.standardAnswer ?? "", /2026 年 4 月到 6 月/);
   assert.match(internship?.standardAnswer ?? "", /医疗 RAG/);
   assert.equal(internship?.requiredSourceIds.includes("S12"), true);
-  assert.match(experience?.content ?? "", /德勤 IT 审计之后、百度实习之前/);
+  assert.match(experience?.content ?? "", /2026 年 4 月至 6 月/);
   assert.equal(representative?.requiredClaimIds.includes("C18"), true);
   assert.equal(representative?.requiredSourceIds.includes("S12"), true);
+});
+
+test("最新简历成为回答主线并串联实习与全部项目", () => {
+  const journey = matchStableAnswer("你的实习和项目是如何串联起来的？");
+  const askMe = matchStableAnswer("Ask Me 项目体现了什么能力？");
+  const deepFlow = matchStableAnswer("DeepFlow 是什么？");
+  const resumeSource = sources.find((item) => item.id === "S1");
+
+  assert.equal(journey?.id, "A36");
+  assert.match(journey?.standardAnswer ?? "", /德勤 IT 审计/);
+  assert.match(journey?.standardAnswer ?? "", /百川医疗 RAG/);
+  assert.match(journey?.standardAnswer ?? "", /百度/);
+  assert.match(journey?.standardAnswer ?? "", /Ask Me/);
+  assert.match(journey?.standardAnswer ?? "", /DeepFlow/);
+  assert.match(journey?.standardAnswer ?? "", /Resume Autofill AI/);
+  assert.match(askMe?.standardAnswer ?? "", /163 项自动化测试/);
+  assert.match(askMe?.standardAnswer ?? "", /48 个 AI 面试用例/);
+  assert.match(deepFlow?.standardAnswer ?? "", /Hybrid 检索/);
+  assert.match(deepFlow?.standardAnswer ?? "", /Agent Trace/);
+  assert.match(resumeSource?.title ?? "", /2026-08-23/);
 });
 
 test("项目别名和最近上下文可解析多轮指代", () => {
@@ -170,6 +190,34 @@ test("百度确认经历进入内容目录且占位与联系方式不进入", ()
   assert.equal(serialized.includes("Evaluator Agent"), true);
   assert.equal(serialized.includes("zackzhang124@163.com"), false);
   assert.equal(serialized.includes("15812106204"), false);
+});
+
+test("百度最新手册替换单样例口径并保留 Pilot 结论边界", () => {
+  const internship = matchStableAnswer("请介绍一下你的百度 AI 产品经理实习。");
+  const reliability = matchStableAnswer("你如何证明自动评测结果可信？");
+  const pilot = knowledge.find((item) => item.id === "K24");
+  const diagnostic = knowledge.find((item) => item.id === "K33");
+
+  assert.match(internship?.standardAnswer ?? "", /6 个模型、6 类任务和 36 次运行/);
+  assert.match(internship?.standardAnswer ?? "", /18 份盲评/);
+  assert.doesNotMatch(internship?.standardAnswer ?? "", /单个 Dashboard 样例|单样例 MVP/);
+  assert.match(reliability?.standardAnswer ?? "", /6\/6 个 Gold/);
+  assert.match(reliability?.standardAnswer ?? "", /10\/10 个确定性缺陷/);
+  assert.match(pilot?.limitations ?? "", /不代表生产平台或行业排名/);
+  assert.match(diagnostic?.limitations ?? "", /不进入榜单/);
+});
+
+test("医疗 RAG 最新题库补齐三轮评测与多跳风险边界", () => {
+  const overview = matchStableAnswer("请介绍一下你的 RAG 知识库项目。");
+  const result = matchStableAnswer("你的 RAG 项目目前取得了什么结果？");
+  const evaluation = knowledge.find((item) => item.id === "K31");
+  const multiHop = knowledge.find((item) => item.id === "K36");
+
+  assert.match(overview?.standardAnswer ?? "", /三轮、累计 30 次 QA 执行/);
+  assert.match(result?.standardAnswer ?? "", /单跳均分 9\.71/);
+  assert.match(result?.standardAnswer ?? "", /多跳只有 4\.38/);
+  assert.match(evaluation?.limitations ?? "", /不等于 30 个独立真实医疗问题/);
+  assert.match(multiHop?.limitations ?? "", /多跳样本仅 2 个/);
 });
 
 test("30、60、90 秒介绍独立成稿且时长层次清晰", () => {

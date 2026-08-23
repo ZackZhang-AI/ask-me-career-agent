@@ -165,7 +165,7 @@ function define(input: ContractInput): QuestionContract {
 export const questionContracts: QuestionContract[] = [
   define({
     id: "intro", question: "60 秒了解张倬玮。", aliases: ["请用 60 秒介绍张倬玮。", "请介绍一下你自己。"], topic: "profile", facet: "overview",
-    dimensions: ["候选人定位", "真实 AI 产品实习", "能力主线"], knowledge: ["K1", "K27", "K22", "K2"], shape: "narrative", length: { min: 430, max: 600 },
+    dimensions: ["候选人定位", "真实 AI 产品实习", "项目能力主线"], knowledge: ["K1", "K27", "K22", "K37", "K2"], stories: ["ST11"], shape: "narrative", length: { min: 430, max: 600 },
     goal: "让面试官快速形成是否值得继续沟通的候选人判断。", thesis: "我是张倬玮，一名把数据评测、企业业务理解和 AI 产品落地结合起来的应用统计学学生。",
     required: ["应用统计学与审计基础", "百川医疗 RAG 与百度模型评测", "持续学习和产品落地能力"], direct: ["数据", "百川", "百度", "AI 产品"],
     fallback: candidateNarrative.introductions.seconds60,
@@ -173,31 +173,31 @@ export const questionContracts: QuestionContract[] = [
   }),
   define({
     id: "role_fit", question: "你为什么适合 AI 产品经理岗位？", aliases: ["他为什么适合 AI 产品经理岗位？", "你能为 AI 产品团队带来什么价值？", "他能为 AI 产品团队带来什么价值？"], topic: "role_fit", facet: "fit",
-    dimensions: ["岗位匹配", "真实 AI 产品实践", "入职价值"], knowledge: ["K27", "K19", "K22", "K2"], shape: "fit_mapping", length: { min: 320, max: 500 },
+    dimensions: ["岗位匹配", "真实 AI 产品实践", "自主产品验证", "入职价值"], knowledge: ["K27", "K19", "K22", "K12", "K5", "K2", "K37"], stories: ["ST11"], shape: "fit_mapping", length: { min: 360, max: 540 },
     goal: "说明候选人与初级 AI 产品岗位的具体匹配关系。", thesis: "我适合 AI 产品岗位，核心不是会使用模型，而是能把业务问题、质量验证和工程落地连起来。",
-    required: ["模型评测与归因", "企业流程和风险理解", "产品工程推进能力"], direct: ["适合", "评测", "业务", "落地"],
-    fallback: "我适合 AI 产品经理岗位，核心不是单纯会使用模型，而是已经在真实业务里练习把**需求、模型能力、质量验证和工程落地**连起来。百川医疗 RAG 实习中，我参与需求与 MVP 梳理、检索问答功能设计和 QA 四维评测；随后在百度参与模型或 Agent 版本评测、Bad Case 归因，以及 AI Coding 七维指标、Gate 和 Evaluator Agent MVP 验证。\n\n应用统计学背景让我重视样本、指标和结论边界；财务与 IT 审计让我理解企业流程中的**证据、权限、口径和风险**。这些能力让我不会只看模型演示效果，而会追问答案是否有依据、结果是否可复现、异常能否被定位。\n\n因此我能在业务目标、模型效果和工程约束之间建立共同语言，把需求转成配置、状态、评测和验收。我的优势不是把自己包装成算法或平台 Owner，而是让团队更快判断一个方向是否有效、问题在哪里、下一步是否值得继续投入。",
+    required: ["模型评测与归因", "企业流程和风险理解", "Ask Me 与 DeepFlow 自主验证", "产品工程推进能力"], direct: ["适合", "评测", "业务", "落地"],
+    fallback: "我适合 AI 产品经理岗位，核心不是单纯会使用模型，而是已经形成了从业务理解、产品设计到质量验证和快速落地的完整能力链。\n\n**真实业务闭环**：百川医疗 RAG 中，我参与需求调研、知识库与检索问答设计和三轮 QA 评测；随后在百度参与六类 AI Coding 任务、七维 Gate、6 个模型 36 次 Pilot 与 Bad Case 归因。\n\n**数据与风险**：应用统计学让我重视样本、指标和结论边界；德勤 IT 审计让我理解企业流程中的证据、数据边界和人工复核。这些能力让我不会只看模型演示，而会追问结果能否复现、错误能否定位、风险是否可控。\n\n**自主产品验证**：Ask Me 验证可信回答、风险分级和招聘决策路径，DeepFlow 验证多 Agent、私域 RAG 和过程追踪。它们说明我能从问题洞察出发把方案推进到可运行、可测试的状态，并在业务、模型和工程之间建立共同语言。",
     next: ["baichuan_internship", "representative_project", "baidu_internship"],
   }),
   define({
     id: "baichuan_internship", question: "请介绍一下你的百川智能实习。", aliases: ["你在百川智能实习期间主要做了什么？", "百川智能实习做了什么？", "请介绍你的医疗 RAG 实习。"], topic: "rag", facet: "overview",
-    dimensions: ["实习顺序", "业务问题", "个人工作", "事实边界"], knowledge: ["K27", "K4", "K28", "K31"], stories: ["ST10"], shape: "narrative", length: { min: 360, max: 540 }, forbidden: ["deepflow", "local_tools"],
-    goal: "让面试官快速确认百川实习的顺序、业务问题、个人工作和事实边界。", thesis: "在德勤 IT 审计之后、百度实习之前，我在百川智能 AI 产品部门参与医疗 RAG 实习。",
-    required: ["德勤之后百度之前", "医疗 RAG 业务问题", "需求功能评测三类工作", "脱敏 Demo 边界"], direct: ["百川智能", "医疗 RAG", "实习"],
-    fallback: "在德勤 IT 审计之后、百度实习之前，我在百川智能 AI 产品部门参与了一段医疗 RAG 实习，主要产出是**医疗知识库问答产品**。它把指南、共识、论文、药品说明书和内部制度等私有文档转成可检索、可问答、可核验的信息服务，但不替代医生诊断。\n\n我的工作主要有三部分：参与需求和 MVP 梳理，把产品拆成文档处理、知识库管理、检索问答和评测四层；与算法、研发协作，参与稠密向量召回、Rerank、短期记忆、多助手配置等产品规则和验收边界；参与 QA 数据、四维 LLM-as-Judge 打分与报告输出，让 Bad Case 能回到召回、排序或生成环节。\n\n公开 RAG 项目是这段业务场景的**脱敏重构**，不是百川生产代码。当前公开实现包括知识入库、Dense 加 Rerank、来源片段、Redis 短期记忆、多助手基础配置和自动评测；BM25、长期记忆、完整 Agent 与生产级 RBAC 仍未完整落地。",
+    dimensions: ["实习顺序", "业务问题", "个人工作", "评测结果与边界"], knowledge: ["K27", "K4", "K28", "K31", "K35", "K36"], stories: ["ST10", "ST1"], shape: "narrative", length: { min: 360, max: 540 }, forbidden: ["deepflow", "local_tools"],
+    goal: "让面试官快速确认百川实习的日期、业务问题、个人工作和事实边界。", thesis: "2026 年 4 月到 6 月，我在百川智能参与 AI 产品经理实习，主要项目是企业级医疗 RAG 知识库问答系统。",
+    required: ["2026 年 4 月到 6 月", "医疗 RAG 业务问题", "需求产品评测三类工作", "脱敏 Demo 边界"], direct: ["百川智能", "医疗 RAG", "实习"],
+    fallback: "2026 年 4 月到 6 月，我在百川智能参与 AI 产品经理实习，主要项目是**企业级医疗 RAG 知识库问答系统**。它面向医院、卫健委等医疗场景，把分散、敏感且持续更新的私有文档转成可检索、可问答、可核验的信息服务，但不替代医生诊断。\n\n我的工作主要有三部分：参与需求调研，梳理知识库管理、模型幻觉与答案溯源；参与整体架构和功能设计，与算法、研发推进文档解析、知识库、Dense Retrieval、Rerank、来源片段、短期记忆和多助手配置；参与 QA、四维 LLM-as-Judge 和 Bad Case 回流。\n\n项目完成三轮、累计 30 次 QA 执行，并发现多跳问题明显弱于单跳。公开 RAG 项目是**脱敏重构**，不是百川生产代码；面向客户类型不等于我完成了客户交付，小样本结果也不是线上或客户验收。",
     next: ["project_contribution", "rag_architecture", "evaluation"],
   }),
   define({
     id: "baidu_internship", question: "请介绍一下你的百度 AI 产品经理实习。", aliases: ["你在百度实习期间主要做了什么？", "请用 90 秒介绍这段百度实习。", "你的百度实习经历是什么？"], topic: "baidu", facet: "overview",
-    dimensions: ["工作主线", "重点项目", "结果边界"], knowledge: ["K22", "K23", "K24", "K25"], stories: ["ST9"], shape: "narrative", length: { min: 360, max: 540 },
-    goal: "让面试官快速确认百度实习的真实性、工作主线与项目深度。", thesis: "我在百度实习的工作主线是模型效果评测与策略优化，重点参与 AI Coding Web 端到端评测和 Evaluator Agent MVP 验证。",
-    required: ["模型评测与 Bad Case 归因", "七维指标与 Evaluator Agent", "单样例 MVP 边界"], direct: ["百度", "评测", "Evaluator Agent"],
-    fallback: "随后，我参与百度 AI 产品经理实习，工作主线是**模型效果评测**与策略优化。日常会执行模型或 Agent 版本测试、记录并比较结果、整理 Bad Case，再结合日志、Trace 和页面证据，协助判断问题更可能来自模型、Prompt、工具还是评测器。\n\n重点项目是 AI Coding Web 端到端评测。我参与 Benchmark 调研、七维指标与 Gate 设计、Evaluator Agent MVP 实现验证、样例测试和交付材料整理。评测不只看代码是否通过测试，还覆盖应用能否安装、启动、操作，以及视觉、交互、响应式、可访问性和代码质量。\n\n当前能够确认的是一个 Dashboard 样例跑通 11 阶段链路、20 项工程测试和三视口报告。它证明了方案**可运行、可留证**，但不能被表述为模型效果、用户满意度或业务效率已经提升。本轮只确认经历先后顺序，不推断精确起止日期。",
+    dimensions: ["工作主线", "重点项目", "结果边界"], knowledge: ["K22", "K23", "K24", "K25", "K26", "K32", "K33", "K34"], stories: ["ST9"], shape: "narrative", length: { min: 360, max: 540 },
+    goal: "让面试官快速确认百度实习的真实性、工作主线与项目深度。", thesis: "我在百度实习的工作主线是模型与 AI Coding 产品评测，重点参与 WebDev E2E Bench 和多模型 Pilot。",
+    required: ["模型评测与 Bad Case 归因", "六类任务七维指标与 Gate", "36 次 Pilot 与结论边界"], direct: ["百度", "评测", "Pilot"],
+    fallback: "2026 年 6 月到 8 月，我在百度参与 AI 产品经理实习，核心工作是把**模型评测**与 Bad Case 归因从“得到一个分数”推进到“能支持产品选型和迭代判断”。\n\n我先参与调研 13 项 Coding Benchmark，再参与设计 WebDev E2E Bench，用六类任务覆盖页面生成、功能实现、组件、重设计、轻全栈和 Bugfix+UX，并以七维指标与 Gate 同时保护工程可用性和用户体验。随后参与把确定性工作流、Agent 判断和人工校准组合成 Evaluator。\n\n**正式 Pilot**覆盖 6 个模型、6 类任务和 36 次运行，并完成 18 份盲评。我的工作不止是记录总分，而是把结果拆成场景优势、共同弱项、根因证据和下一步动作。边界是这些结论只适用于本次冻结版本和任务集，不是行业权威排名或生产平台成果。",
     next: ["baidu_contribution", "baidu_project", "baidu_metrics"],
   }),
   define({
     id: "representative_project", question: "哪个项目最能代表你的 AI 产品能力？", aliases: ["哪个项目最能代表他的 AI 产品能力？", "哪个公开项目最能代表你的 AI 产品能力？", "哪个公开项目最能代表他的 AI 产品能力？"], topic: "rag", facet: "overview",
-    dimensions: ["项目问题", "产品判断", "验证边界"], knowledge: ["K4", "K28", "K29", "K31"], stories: ["ST10", "ST1"], shape: "project_arc", length: { min: 390, max: 540 }, forbidden: ["baidu", "deepflow", "local_tools", "audit"],
+    dimensions: ["项目问题", "产品判断", "验证边界"], knowledge: ["K4", "K28", "K29", "K31", "K35", "K36"], stories: ["ST10", "ST1"], shape: "project_arc", length: { min: 390, max: 540 }, forbidden: ["baidu", "deepflow", "local_tools", "audit"],
     goal: "用 RAG 项目证明候选人的问题定义、方案取舍、评测设计与工程落地能力。", thesis: "最能代表我 AI 产品能力的是 RAG Knowledge Base System。",
     required: ["医疗私有文档可信问答", "四层架构和评测闭环", "公开脱敏与未完成边界"], direct: ["RAG", "百川", "Rerank", "评测"],
     fallback: "最能代表我 AI 产品能力的是百川智能实习中的 RAG Knowledge Base System。它面向**医疗私有文档可信问答**，帮助使用者从指南、共识和论文等资料中获得有来源、可核验的答案，同时只辅助资料查阅，不替代诊断。\n\n我参与把产品拆成文档处理、知识库管理、检索问答和评测四层，并把 P0 收敛为知识入库、问答、来源返回和失败状态。公开脱敏项目已跑通 Dense Retrieval、Rerank、来源片段、Redis 短期记忆、多助手基础配置和四维自动评测。\n\n我的工作覆盖需求与 MVP 梳理、功能和配置边界、跨角色协作以及 QA 评测闭环。公开仓库不是百川生产代码；BM25 混合检索、长期记忆、完整 Agent、版本对比和生产级 RBAC 尚未完整落地，也没有可公开的真实客户效果。这个项目体现了我把高风险行业需求转成**可运行、可核验、可迭代**产品闭环的能力。",
@@ -205,7 +205,7 @@ export const questionContracts: QuestionContract[] = [
   }),
   define({
     id: "rag_overview", question: "请介绍一下你的 RAG 知识库项目。", aliases: ["介绍一下你的 RAG 知识库项目。", "介绍一下你的 RAG Knowledge Base System。"], topic: "rag", facet: "overview",
-    dimensions: ["医疗文档问题", "检索方案", "评测闭环"], knowledge: ["K4", "K28", "K29", "K31"], stories: ["ST10", "ST1"], shape: "project_arc", length: { min: 340, max: 520 }, forbidden: ["baidu", "deepflow", "local_tools", "audit"],
+    dimensions: ["医疗文档问题", "检索方案", "评测闭环"], knowledge: ["K4", "K28", "K29", "K31", "K35", "K36"], stories: ["ST10", "ST1"], shape: "project_arc", length: { min: 340, max: 520 }, forbidden: ["baidu", "deepflow", "local_tools", "audit"],
     goal: "完整介绍 RAG 项目的问题、方案取舍与当前边界。", thesis: "RAG Knowledge Base System 面向专业文档问答，重点是让检索、回答、引用和评测形成可持续改进的链路。",
     required: ["专业文档问答问题", "Dense Retrieval 主链路", "评测和 Bad Case 迭代"], direct: ["RAG", "检索", "评测"],
     fallback: "RAG Knowledge Base System 是我在百川智能实习中的主要项目，面向**医疗私有文档问答**。它把指南、共识、论文等资料转成可检索、可问答、可核验的信息服务，辅助专业资料查阅而不替代诊断。\n\n产品分为文档处理、知识库管理、检索问答和评测四层。公开脱敏项目已跑通知识入库、**Dense 加 Rerank**、来源片段、Redis 短期记忆、多助手基础配置和 QA 四维自动评测。我参与需求与 MVP 梳理、功能与配置边界、跨角色协作和评测闭环。\n\n公开仓库不是百川生产代码；BM25 混合检索、长期记忆、完整 Agent、持久化版本对比、专门 Bad Case 平台和生产级 RBAC 尚未完整落地。",
@@ -213,18 +213,18 @@ export const questionContracts: QuestionContract[] = [
   }),
   define({
     id: "baidu_project", question: "Evaluator Agent 项目具体做了什么？", aliases: ["AI Coding Evaluator Agent 是什么？", "你在百度重点做的项目是什么？"], topic: "baidu", facet: "architecture",
-    dimensions: ["输入输出", "11 阶段链路", "工具与 Judge 分工"], knowledge: ["K23", "K24", "K25"], stories: ["ST9"], length: { min: 340, max: 520 },
+    dimensions: ["任务指标", "执行链路", "工具 Judge 与人工分工"], knowledge: ["K23", "K24", "K25", "K32"], stories: ["ST9"], length: { min: 340, max: 520 },
     goal: "解释 Evaluator Agent 的产品目标、执行链路与当前完成边界。", thesis: "Evaluator Agent 把 Task Spec、候选项目和 Rubric 转成可执行的端到端评测与证据报告。",
-    required: ["任务项目环境规则输入", "构建浏览器评分报告链路", "确定性工具 Judge 人工分工"], direct: ["Evaluator Agent", "11 阶段", "报告"],
-    fallback: "Evaluator Agent 的目标，是把 Task Spec、候选项目、运行配置和 Rubric 转成一条**可执行评测链路**。它依次完成任务解析、项目检查、依赖安装、构建验证、服务启动、HTTP 探活、浏览器加载、核心功能流、多视口与可访问性检查、Judge 评分归因，最后汇总成 JSON、Markdown 和可视化报告。\n\n它不是把所有判断都交给大模型。构建状态、HTTP、DOM、浏览器操作、日志和 axe-core 等确定性问题由工具检查；视觉层级、交互自然度和产品完成度等开放维度由 Judge 按 Rubric 评价，并保留截图或交互证据；低置信度和争议结果仍需**人工校准**。\n\n当前 Dashboard 单样例已经跑通这 11 个阶段，**20 项工程测试通过**并生成三视口报告。它仍是受控环境下的 MVP，批量任务、强隔离、人机一致性和成本统计尚未完成。",
+    required: ["六类任务与七维 Gate", "确定性执行和开放判断", "36 次 Pilot 与人工校准"], direct: ["Evaluator Agent", "Pilot", "报告"],
+    fallback: "Evaluator Agent 的目标，是把 Task Spec、候选项目、运行配置和 Rubric 转成一条**评测执行链路**。六类任务覆盖页面、功能、组件、重设计、轻全栈和 Bugfix+UX；七维指标与 Gate 同时保护核心可用性和产品体验。\n\n构建、HTTP、DOM、浏览器操作、日志和 axe-core 等硬事实由确定性工具检查；视觉、交互和产品完成度由双 Judge 按 Rubric 评价，并保留截图和交互证据；**人工校准**结合 Gold、缺陷注入、重复检查和盲评。\n\n正式 Pilot 覆盖 6 个模型、6 类任务和 36 次运行，完成 18 份盲评，并输出分项证据、场景差异、共同风险和优化建议。它已经从 MVP 推进到受控 Pilot，但不是生产平台，也不是行业权威排行榜。",
     next: ["baidu_metrics", "baidu_reliability", "baidu_contribution"],
   }),
   define({
     id: "baidu_contribution", question: "你在百度实习中具体负责什么？", aliases: ["你在百度实习中的个人贡献是什么？", "你个人具体做了什么，导师和研发做了什么？"], topic: "baidu", facet: "contribution",
-    dimensions: ["确认贡献", "协作边界", "可交付产物"], knowledge: ["K22", "K23", "K24", "K26"], stories: ["ST9"], shape: "contribution", length: { min: 320, max: 500 },
-    goal: "清楚说明候选人的确认贡献，并避免夸大独立 Owner 身份。", thesis: "我在百度实习中的确认贡献，是参与评测方法、Evaluator Agent MVP 验证和交付材料沉淀。",
-    required: ["Benchmark 调研", "指标 Gate 与 MVP 验证", "不负责底层训练和生产平台"], direct: ["参与", "评测", "MVP"],
-    fallback: "我在百度实习中的确认贡献主要有四部分：参与 **Benchmark 调研**，把 13 项公开评测按任务形态和能力对象分类；参与 AI Coding **七维指标、权重与 Gate**规则设计；参与 Evaluator Agent MVP 的实现验证和 Dashboard 样例测试；整理报告、截图和交付材料。\n\n我的角色更接近**产品侧的任务拆解**、评测规则、样例验证和问题跟进，而不是底层模型训练者。我能够说明为什么需要端到端可用性、为什么 Gate 不能被体验分抵消，以及确定性工具、Judge 和人工应该分别承担什么。\n\n对于具体代码由谁独立完成、导师与研发的详细分工，我只按真实项目记录回答，不用“从 0 到 1 独立搭建生产平台”包装自己。我的核心价值是把业务目标转成任务、指标、证据和复测闭环，并参与把方案验证到可运行状态。",
+    dimensions: ["确认贡献", "协作边界", "可交付产物"], knowledge: ["K22", "K23", "K24", "K26", "K32", "K33"], stories: ["ST9"], shape: "contribution", length: { min: 320, max: 500 },
+    goal: "清楚说明候选人的确认贡献，并避免夸大独立 Owner 身份。", thesis: "我在百度实习中的确认贡献，是参与评测研究、体系设计、Pilot 执行、校准和结果转化。",
+    required: ["Benchmark 调研", "任务指标与 Pilot", "不负责底层训练和生产平台"], direct: ["参与", "评测", "Pilot"],
+    fallback: "我在百度实习中的确认贡献主要有四部分：参与 13 项 **Benchmark 调研**；参与六类 Web 任务、七维指标与 Gate 设计；参与 Evaluator 实现验证、6 个模型 36 次 Pilot、18 份盲评和可靠性校准；结合日志、Trace、DOM 和截图分析 Bad Case，并把结果转成场景建议与下一轮动作。\n\n我的角色更接近**产品侧的任务拆解、评测规则、结果分析和跨角色推进**，而不是底层模型训练者。Qwen 写入协议诊断也体现了我的判断：低分不一定只有模型原因，需要控制变量验证工具与协议。\n\n对于具体代码由谁独立完成、导师与研发的详细分工，我只按真实项目记录回答。我的核心价值是把业务目标转成任务、指标、证据和复测闭环，而不是用“独立搭建生产平台”包装自己。",
     next: ["baidu_project", "baidu_metrics", "baidu_badcase"],
   }),
   define({
@@ -237,18 +237,18 @@ export const questionContracts: QuestionContract[] = [
   }),
   define({
     id: "baidu_badcase", question: "你如何分析和归因 AI Coding 的 Bad Case？", aliases: ["AI Coding Bad Case 怎么分类？", "模型评测发现问题后你怎么归因？"], topic: "baidu", facet: "method",
-    dimensions: ["现象与根因", "证据链", "控制变量复测"], knowledge: ["K22", "K25"], length: { min: 300, max: 470 },
+    dimensions: ["现象与根因", "证据链", "控制变量复测"], knowledge: ["K22", "K25", "K33"], length: { min: 300, max: 470 },
     goal: "展示从失败现象到可验证根因和产品动作的归因方法。", thesis: "Bad Case 归因要先分离现象与根因，再沿模型、Prompt、工具、环境和评测器建立证据。",
-    required: ["现象根因分离", "日志 Trace DOM 网络截图证据", "固定变量复测"], direct: ["Bad Case", "归因", "证据"],
-    fallback: "分析 Bad Case 时，我会先做**现象与根因分离**。例如“按钮点了没有反应”只是现象，根因可能是需求理解、规划、代码生成、Prompt、工具、环境或评测器。随后结合构建退出码、console 与 network 日志、Trace、DOM 状态和截图，判断问题能否在固定环境稳定复现。\n\n如果要区分模型和 Prompt，我会固定模型只换 Prompt、再固定 Prompt 换模型；如果怀疑工具或环境，就先检查进程、端口、HTTP 和浏览器状态。信息未形成闭环时保留候选原因，不急于给唯一结论，也不能把评测器失败直接算成候选产品失败。\n\n确认根因后，再按影响范围、严重度、频率和修复成本确定优先级，并把稳定复现的问题沉淀成 Task Spec 或回归用例，进行**固定变量复测**，用同一口径验证修复是否有效。",
+    required: ["模型协议与评测器分层归因", "日志 Trace DOM 与截图证据", "固定模型任务预算受控诊断"], direct: ["Bad Case", "归因", "证据"],
+    fallback: "分析 Bad Case 时，我会先做**分层归因**，区分结果现象、模型能力、工具协议和评测器失败，再结合构建退出码、console、network、Trace、DOM 和截图建立证据。信息未闭环时保留候选原因，不把低分直接归因给模型。\n\n**受控诊断**：Qwen Ticket CRUD 中，我固定模型、任务和总预算，只增加 6000 字符写入限制、追加写入和写后校验，得分由 16.04 提升到 69.07，输入 Token 由 254,765 降到 74,447。这说明工具协议本身也可能是根因。\n\n我会明确它只是正式结果后的单任务诊断，不进入榜单，也不能外推为模型普遍提升。它的价值是把 Bad Case 转成可验证约束，并沉淀为后续回归。",
     next: ["baidu_reliability", "baidu_metrics", "tech_collaboration"],
   }),
   define({
     id: "baidu_reliability", question: "你如何证明自动评测结果可信？", aliases: ["Evaluator Agent 的评分可靠吗？", "LLM Judge 如何校准？", "人机一致率是多少？"], topic: "baidu", facet: "evaluation",
     dimensions: ["当前证据", "校准方法", "失败转人工"], knowledge: ["K24", "K25"], length: { min: 310, max: 480 },
-    goal: "坦诚说明当前可靠性证据，并给出可执行的校准方案。", thesis: "当前只能证明工程测试和单样例链路可运行，尚不能声称自动评测已经具备稳定的人机一致性。",
-    required: ["当前没有完整一致性统计", "人工黄金集与重复运行", "工具失败与产品失败分离"], direct: ["没有", "黄金集", "人工"],
-    fallback: "目前**没有完整一致性统计**：我只能证明工程测试和单样例链路能够运行，还不能声称自动评测已经具备稳定的人机一致性，因为完整的一致率、误报漏报和重复运行统计尚未形成。\n\n可信评测需要先建立**人工黄金集**：对确定性问题统计误报与漏报，对等级或排序结果使用适合的一致性指标；同时固定 Judge 版本、Prompt、参数和证据输入，对关键任务重复运行并做顺序交换，避免把评分器波动当作候选模型变化。\n\n系统层还要区分环境失败、工具失败、Judge 信息不充分和候选产品失败，每类保留状态码、有限重试和退出条件。冲突、低置信度或高风险结果转人工仲裁。也就是说，评测器本身同样需要被评测；在这些数据完成前，我不会报告虚构的一致率或自动化率。",
+    goal: "用当前校准证据说明可靠性，同时准确解释样本边界。", thesis: "评测器已具备受控 Pilot 所需的基础可靠性，但主观判断仍需要人工校准。",
+    required: ["6/6 Gold 与 10/10 确定性缺陷", "重复一致性与主观敏感度", "人工样本边界"], direct: ["Gold", "一致性", "人工"],
+    fallback: "我会把可信度拆成三层。**硬检查校准**中，6/6 个 Gold 样例通过，10/10 个确定性缺陷被检出，重复自动检查一致性为 100%；主观缺陷方向敏感度是 5/6，漏掉了较弱的信息层级问题。\n\n**人工样本边界**也必须说明：Auto-Judge Spearman 为 0.6191，Judge-Human 为 0.4599。我把它解释为初步判别力，而不是“已经和人一样可靠”，因为人工评分只有 18 份、由一人完成且抽样不均。\n\n因此，硬事实优先用确定性工具，开放体验保留证据，冲突和低置信度结果转人工，同时继续扩充均衡 Gold 和回归集。评测器可以支持当前 Pilot，但不能替代人。",
     next: ["baidu_metrics", "baidu_badcase", "baidu_project"],
   }),
   define({
@@ -292,6 +292,14 @@ export const questionContracts: QuestionContract[] = [
     next: ["statistics_product", "evaluation", "role_fit"],
   }),
   define({
+    id: "ask_me_capability", question: "Ask Me 项目体现了什么能力？", aliases: ["Ask Me 项目体现了你什么能力？", "Ask Me 体现了你哪些产品能力？", "这个数字分身项目体现了什么能力？", "你从 Ask Me 项目中验证了什么？"], topic: "ask_me", facet: "method",
+    dimensions: ["招聘决策路径", "可信回答机制", "评测驱动迭代"], knowledge: ["K12", "K38"], length: { min: 320, max: 520 },
+    goal: "说明 Ask Me 如何验证从用户问题、可信机制到持续评测的完整 AI 产品能力。", thesis: "Ask Me 最能体现的，是我如何把模糊的求职目标拆成一条可信、可追问、可持续验证的 AI 产品闭环。",
+    required: ["招聘决策路径", "事实与风险分级", "163 项自动化测试和 48 个 AI 面试用例"], direct: ["Ask Me", "产品闭环", "可信", "评测"],
+    fallback: "Ask Me 最能体现的是我如何把一个模糊的求职目标，拆成完整的 AI 产品闭环，而不是只做聊天页面。传统简历信息有限、不能继续追问，项目贡献也很难核验，所以我从招聘方决策过程出发，设计“快速了解—深入追问—核验项目—查看简历或联系”的路径，并支持推荐问题、自由提问、多轮指代和动态追问。\n\n**可信回答与产品取舍**：我把经历拆成事实、贡献和来源，按问题风险分级回答——高频题快速响应，事实题二次审校，方法题实时生成；同时保留主动拒答，让数字分身可以像面试一样优化表达，但不编造结果。\n\n**评测驱动迭代**：我建立核心问答、安全和多轮对话回归，最新版简历记录 163 项自动化测试和 48 个 AI 面试用例。测试不是招聘转化数据，但能持续发现答非所问、过度拒答、重复套话和流式异常。这个项目体现了我从用户决策出发定义产品、平衡速度、表现力与可信度，并持续验收体验的能力。",
+    next: ["internship_transfer", "evaluation", "role_fit"],
+  }),
+  define({
     id: "audit_value", question: "审计经历如何帮助你做 AI 产品？", aliases: ["审计经历如何帮助他做 AI 产品？", "你如何把审计经验迁移到企业 AI 场景？", "他如何把审计经验迁移到企业 AI 场景？"], topic: "audit", facet: "transfer",
     dimensions: ["流程理解", "证据意识", "企业风险"], knowledge: ["K8", "K9", "K7"], stories: ["ST4", "ST6"], forbidden: ["rag", "deepflow", "local_tools"], length: { min: 280, max: 450 },
     goal: "解释审计经历向企业 AI 产品能力的迁移。", thesis: "审计经历让我理解企业 AI 的价值不仅是自动化，还包括证据、口径、权限和人工复核。",
@@ -300,11 +308,11 @@ export const questionContracts: QuestionContract[] = [
     next: ["audit_product_example", "internship_transfer", "enterprise_ai"],
   }),
   define({
-    id: "internship_transfer", question: "你的实习经历沉淀了哪些可迁移能力？", aliases: ["他的实习经历沉淀了哪些可迁移能力？"], topic: "profile", facet: "transfer",
-    dimensions: ["效果定义", "风险与证据", "跨角色推进"], knowledge: ["K27", "K19", "K22", "K8"], stories: ["ST10", "ST9", "ST6"], length: { min: 320, max: 520 },
-    goal: "总结百川、百度与审计经历对 AI 产品岗位的可迁移价值。", thesis: "几段实习让我形成了定义效果、按证据判断问题并把协作推进到可验收状态的能力。",
-    required: ["百川需求到评测闭环", "百度评测与归因", "审计证据和风险意识"], direct: ["实习", "百川", "百度", "评测"],
-    fallback: "几段实习沉淀出的共性能力，是**定义效果与证据归因**。德勤 IT 审计与容诚财务审计训练了我对流程、口径、风险和可复核记录的敏感度；百川医疗 RAG 让我把业务需求拆成知识入库、检索问答、来源返回和评测，并与算法、研发对齐功能与验收边界；百度实习又让我把“模型好不好”拆成任务、指标、Gate 和 Bad Case。\n\n这些能力可以直接迁移到 AI 产品工作：面对陌生场景先梳理目标用户和成功标准；讨论模型效果时区分现象、根因与评测器问题；推进方案时明确产品、算法、研发和人工审核的责任边界，并用同一口径复测。\n\n因此我不仅能提出功能想法，也更重视方案是否进入真实流程、结论是否有证据、问题能否复现，以及下一轮动作能否通过**跨角色推进**被团队接住。",
+    id: "internship_transfer", question: "你的实习和项目是如何串联起来的？", aliases: ["你的实习经历沉淀了哪些可迁移能力？", "他的实习经历沉淀了哪些可迁移能力？", "你的项目怎么串联起来？", "这些项目之间有什么关系？", "为什么做这些项目？"], topic: "profile", facet: "transfer",
+    dimensions: ["流程与证据", "真实 AI 产品闭环", "Agent 产品验证", "能力迁移"], knowledge: ["K1", "K8", "K27", "K19", "K22", "K12", "K5", "K37", "K39"], stories: ["ST11", "ST10", "ST9", "ST6"], length: { min: 400, max: 600 },
+    goal: "以最新简历为主线，说明德勤、百川、百度和独立项目如何形成连续的 AI 产品能力。", thesis: "我的实习和项目不是横向堆叠，而是在同一条能力主线上逐步深入。",
+    required: ["德勤流程证据意识", "百川与百度真实 AI 产品闭环", "Ask Me 与 DeepFlow 验证", "统一方法"], direct: ["串联", "百川", "百度", "Ask Me", "DeepFlow"],
+    fallback: "我的实习和项目可以这样**串联**：先理解真实流程，再把问题转成 AI 产品，最后用评测和 Bad Case 推动迭代。\n\n**真实 AI 闭环**：应用统计学和德勤 IT 审计让我建立样本、指标、流程、证据和风险意识，也启发了日志抽查与资料归档工具；百川医疗 RAG 把这种意识迁移到知识库、检索、来源和四维评测；百度又把质量判断推进到六类任务、七维 Gate、多模型 Pilot 和工具协议归因。\n\n**Agent 项目验证**：Ask Me 将可信回答和风险分级用于招聘决策，DeepFlow 将多 Agent、私域 RAG、引用与 Trace 用于复杂研究；Resume Autofill AI、个人知识库、HarnessLab、Read-Later Regret 和 Downloads Butler 则验证更具体的问题。项目名称不同，但底层方法一致：发现问题、定义方案、快速验证、评测归因和持续迭代。",
     next: ["baichuan_internship", "baidu_internship", "role_fit"],
   }),
   define({
@@ -324,9 +332,9 @@ export const questionContracts: QuestionContract[] = [
   }),
   define({
     id: "data_evaluation", question: "你在数据分析与 AI 评测方面有哪些实践？", aliases: ["他在数据分析与 AI 评测方面有哪些实践？"], topic: "skills", facet: "evaluation",
-    dimensions: ["数据分析方法", "真实模型评测", "迭代决策"], knowledge: ["K3", "K22", "K23", "K25"], stories: ["ST9"], length: { min: 320, max: 500 }, goal: "展示数据分析和真实模型评测如何共同支持迭代。",
-    thesis: "我会把数据分析和 AI 评测放在同一条迭代链路里：先定义问题，再分层定位，最后用失败样本决定动作。", required: ["SQL Python 数据基础", "检索回答引用分层", "Bad Case 回流"], direct: ["数据分析", "AI 评测", "Bad Case"],
-    fallback: "我会把数据分析和 AI 评测放在同一条迭代链路里：先定义问题，再分层定位，最后用失败样本决定动作。应用统计学与 SQL、Python 训练让我能够整理数据、定义指标，并判断不同样本或版本之间的差异是否可信。\n\n在百度实习中，我参与模型或 Agent 版本评测、结果记录和 **Bad Case 归因**；重点的 AI Coding 项目把效果拆成功能、端到端可用性、视觉、交互、响应式、可访问性和代码质量，并用 Gate 保护**核心可用性**。问题出现后，再沿模型、Prompt、工具、环境和评测器建立证据。\n\n这套方法也延伸到 RAG 的召回、回答忠实度和引用支持。每轮**固定任务与口径**，只改变一个关键变量；单样例只能证明链路可行，不能外推整体提升。评测对我来说不是一次打分，而是连接问题定位、产品取舍和版本优先级的持续机制。",
+    dimensions: ["数据分析方法", "真实模型评测", "迭代决策"], knowledge: ["K3", "K22", "K23", "K24", "K25", "K35", "K36"], stories: ["ST9", "ST1"], length: { min: 320, max: 500 }, goal: "展示数据分析和真实模型评测如何共同支持迭代。",
+    thesis: "我会把数据分析和 AI 评测放在同一条迭代链路里：先定义问题，再用样本、指标和失败证据决定动作。", required: ["6 个模型 36 次 Pilot", "Gold 缺陷注入与重复检查", "RAG 三轮 30 次评测"], direct: ["数据分析", "AI 评测", "Pilot"],
+    fallback: "我在数据分析与 AI 评测上的实践，重点是把模糊的“效果好不好”变成可检查、可归因、能推动迭代的判断。\n\n**多模型 Pilot**：在百度 AI Coding Web 评测中，我参与设计六类任务、七维指标和 Gate，并完成 6 个模型、36 次正式 Pilot 与 18 份盲评；校准中结合 Gold、缺陷注入和重复检查，验证硬检查与主观判断各自的可靠性。\n\n**RAG 质量回归**：在百川医疗 RAG 中，我参与三轮、累计 30 次 QA 评测，并从单跳与多跳差异中定位风险。两段实践让我形成了用样本、指标、证据和结论边界支持产品判断的习惯，而不是把一次分数当成答案。",
     next: ["baidu_metrics", "baidu_badcase", "statistics_product"],
   }),
   define({
@@ -373,7 +381,7 @@ export const questionContracts: QuestionContract[] = [
   }),
   define({
     id: "deepflow_thinking", question: "DeepFlow 体现了你哪些多 Agent 产品思考？", aliases: ["DeepFlow 体现了他哪些多 Agent 产品思考？"], topic: "deepflow", facet: "method",
-    dimensions: ["任务拆分", "自主与可控", "过程观测"], knowledge: ["K18", "K19", "K21"], stories: ["ST2"], forbidden: ["rag", "audit", "local_tools"], length: { min: 300, max: 470 }, goal: "说明多 Agent 设计的产品判断。",
+    dimensions: ["任务拆分", "自主与可控", "私域检索与过程观测"], knowledge: ["K5", "K18", "K19", "K21"], stories: ["ST2"], forbidden: ["rag", "audit", "local_tools"], length: { min: 320, max: 500 }, goal: "说明多 Agent 设计的产品判断。",
     thesis: "DeepFlow 体现的核心不是 Agent 数量，而是如何按职责拆任务、控制自主性并让过程可观察。", required: ["角色职责和交接", "人审节点", "状态与报告资产"], direct: ["Agent", "分工", "人审", "观测"],
     fallback: "DeepFlow 体现的核心不是 Agent 数量，而是**如何按职责拆任务、控制自主性并让过程可观察**。Coordinator 负责组织任务，Planner 拆解研究计划，Researcher 和 Coder 分别处理资料与分析执行，Reporter 汇总报告；角色划分服务于不同工具、上下文和评价标准，而不是为了形式上显得复杂。\n\n产品取舍上，我不会让复杂研究任务一次性完全交给模型。高成本或方向性节点需要**人工确认**，过程要保留任务状态、关键字段和产物链路，便于发现计划跑偏、资料不足或报告无法追溯。\n\n因此我对多 Agent 的理解是：先用轻量工作流验证闭环，只有职责和评价标准确实不同才拆 Agent，并用**人审与可观测性**换取可控的自主执行。",
     next: ["agent_collaboration", "project_contribution", "enterprise_ai"],
@@ -472,8 +480,8 @@ export function frameFromContract(contract: QuestionContract): QuestionFrame {
 }
 
 const topicKnowledge: Record<QuestionTopic, string[]> = {
-  profile: ["K1", "K2", "K3", "K27", "K22"], role_fit: ["K2", "K3", "K27", "K19", "K22", "K8"], baidu: ["K22", "K23", "K24", "K25", "K26"], rag: ["K4", "K27", "K28", "K29", "K30", "K31"],
-  deepflow: ["K5", "K16", "K18", "K19", "K20", "K21"], ask_me: ["K12"], local_tools: ["K6"], audit: ["K7", "K8", "K9", "K10"],
+  profile: ["K1", "K2", "K3", "K8", "K27", "K22", "K37", "K39"], role_fit: ["K2", "K3", "K8", "K27", "K19", "K22", "K12", "K5", "K37"], baidu: ["K22", "K23", "K24", "K25", "K26", "K32", "K33", "K34"], rag: ["K4", "K27", "K28", "K29", "K30", "K31", "K35", "K36"],
+  deepflow: ["K5", "K16", "K18", "K19", "K20", "K21"], ask_me: ["K12", "K38"], local_tools: ["K6", "K39"], audit: ["K7", "K8", "K9", "K10"],
   statistics: ["K3", "K17", "K31"], skills: ["K3", "K4", "K29", "K31", "K5", "K21"], enterprise_ai: ["K8", "K28", "K29", "K21"], agent: ["K18", "K19", "K21"], unknown: [],
 };
 
@@ -587,7 +595,7 @@ export function buildLocalQuestionFrame(question: string, history: { role: "user
     activeProject: inferredTopic === "baidu" ? "baidu-ai-coding-evaluation" : inferredTopic === "rag" ? "rag-knowledge-base" : inferredTopic === "deepflow" || inferredTopic === "agent" ? "deepflow" : inferredTopic === "ask_me" ? "ask-me" : undefined,
     useHistory: reference,
     confidence: ["career_transition", "role_fit"].includes(answerIntent) ? 0.92 : interviewReasoning ? 0.86 : hasStrongLocalIntent ? 0.88 : explicitTopic && facet !== "overview" ? 0.86 : explicitTopic ? 0.72 : facet !== "overview" ? 0.58 : 0.35,
-    requiredKnowledgeIds: ["career_transition", "experience_value"].includes(answerIntent) ? ["K1", "K2", "K3", "K8", "K27", "K22"] : topicKnowledge[inferredTopic],
+    requiredKnowledgeIds: ["career_transition", "experience_value"].includes(answerIntent) ? ["K1", "K2", "K3", "K8", "K27", "K22", "K37"] : topicKnowledge[inferredTopic],
     allowedStoryIds: facet === "example" ? (inferredTopic === "baidu" ? ["ST9"] : inferredTopic === "audit" ? ["ST4", "ST6"] : inferredTopic === "rag" ? ["ST1"] : inferredTopic === "deepflow" || inferredTopic === "agent" ? ["ST2"] : []) : [],
     forbiddenTopics: forbiddenFor(inferredTopic),
     responseShape: answerIntent === "career_transition" ? "narrative" : responseShapeFor(facet),
@@ -633,7 +641,7 @@ export function mergePlannedFrame(local: QuestionFrame, planned: z.infer<typeof 
     activeProject: planned.activeProject ?? (topic === "baidu" ? "baidu-ai-coding-evaluation" : topic === "rag" ? "rag-knowledge-base" : topic === "deepflow" || topic === "agent" ? "deepflow" : undefined),
     useHistory: planned.useHistory,
     confidence: planned.confidence,
-    requiredKnowledgeIds: ["career_transition", "experience_value"].includes(answerIntent) ? ["K1", "K2", "K3", "K8", "K27", "K22"] : topicKnowledge[topic],
+    requiredKnowledgeIds: ["career_transition", "experience_value"].includes(answerIntent) ? ["K1", "K2", "K3", "K8", "K27", "K22", "K37"] : topicKnowledge[topic],
     allowedStoryIds: facet === "example" || facet === "transfer"
       ? (topic === "baidu" ? ["ST9"] : topic === "audit" ? ["ST4", "ST6"] : topic === "rag" ? ["ST1"] : topic === "deepflow" || topic === "agent" ? ["ST2"] : [])
       : [],
