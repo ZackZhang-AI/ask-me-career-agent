@@ -258,7 +258,8 @@ export function evaluateAnswerQuality(
     opening: openingOf(text),
     closing: closingOf(text),
     thirdPersonVoice: /(?:张倬玮|(?<!其)他|候选人)(?:的|在|能|会|适合|负责)/.test(text),
-    unpromptedLimitation: !fixture.boundaryExpected && /(?:当前阶段|尚未|暂未|还没有|能力限制|项目限制|短板)/.test(text),
+    unpromptedLimitation: !fixture.boundaryExpected
+      && /(?:能力限制|项目限制|主要短板|当前阶段(?:还|仍)?(?:存在|有).{0,12}(?:不足|限制))/.test(text),
   };
 }
 
@@ -373,14 +374,16 @@ async function deepSeekAnswer(testCase: Pick<InterviewCase, "question" | "roleNa
 
 async function answerForCase(testCase: Pick<InterviewCase, "question" | "roleName" | "roleFocus">, mode: EvaluationMode, history: Array<{ role: "user" | "assistant"; content: string }> = []): Promise<EvaluationAnswer> {
   if (mode === "deepseek") {
-    for (let attempt = 0; attempt < 3; attempt += 1) {
+    const maxAttempts = 4;
+    for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
       try {
         const result = await deepSeekAnswer(testCase, history);
-        if (result.responseStatus !== "upstream_error" || attempt === 2) return result;
+        if (result.responseStatus !== "upstream_error" || attempt === maxAttempts - 1) return result;
       } catch {
-        if (attempt === 2) break;
+        if (attempt === maxAttempts - 1) break;
       }
-      await new Promise((resolve) => setTimeout(resolve, 300 * (attempt + 1)));
+      const retryDelayMs = Math.min(4_000, 1_000 * 2 ** attempt);
+      await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
     }
     return { text: serviceUnavailableMessage(), responseStatus: "upstream_error", claimIds: [], sourceIds: [], answerMode: "guardrail" };
   }

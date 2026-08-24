@@ -28,6 +28,7 @@ const ANSWER_DISPOSITIONS = new Set(["answer", "scoped_answer", "clarify", "decl
 const BOUNDARY_REASONS = new Set(["none", "ambiguous_role", "ambiguous_project", "missing_personal_evidence", "outside_supported_scope", "unrelated_to_interview", "unsafe_request", "quality_review_failed", "upstream_unavailable"]);
 const REVIEW_PATHS = new Set(["none", "pro_pass", "pro_rewrite", "pro_reject"]);
 const DELIVERY_MODES = new Set(["local_reveal", "realtime_stream", "reviewed_buffer"]);
+const MODEL_PATHS = new Set(["flash", "pro", "local_fallback"]);
 const QUESTION_TOPICS = new Set(["profile", "role_fit", "rag", "deepflow", "ask_me", "local_tools", "audit", "statistics", "skills", "enterprise_ai", "agent", "unknown"]);
 const QUESTION_FACETS = new Set(["overview", "problem", "method", "contribution", "architecture", "collaboration", "evaluation", "transfer", "example", "result", "boundary", "fit"]);
 const DELIVERY_PATHS = new Set(["preset", "api"]);
@@ -62,6 +63,7 @@ export interface AnalyticsEventInput {
   checkingEvidenceLatencyMs?: number;
   reviewingAnswerLatencyMs?: number;
   deliveryMode?: string;
+  modelPath?: string;
 }
 
 export interface SanitizedAnalyticsEvent {
@@ -91,6 +93,7 @@ export interface SanitizedAnalyticsEvent {
   checkingEvidenceLatencyMs: number | null;
   reviewingAnswerLatencyMs: number | null;
   deliveryMode: string | null;
+  modelPath: string | null;
 }
 
 interface NeonQuery {
@@ -180,6 +183,7 @@ export function sanitizeAnalyticsEvent(value: unknown): SanitizedAnalyticsEvent 
     checkingEvidenceLatencyMs: safeCount(input.checkingEvidenceLatencyMs, 300_000),
     reviewingAnswerLatencyMs: safeCount(input.reviewingAnswerLatencyMs, 300_000),
     deliveryMode: typeof input.deliveryMode === "string" && DELIVERY_MODES.has(input.deliveryMode) ? input.deliveryMode : null,
+    modelPath: typeof input.modelPath === "string" && MODEL_PATHS.has(input.modelPath) ? input.modelPath : null,
   };
 }
 
@@ -229,6 +233,7 @@ async function ensureSchema(sql: NeonQuery): Promise<void> {
           checking_evidence_latency_ms INTEGER,
           reviewing_answer_latency_ms INTEGER,
           delivery_mode TEXT,
+          model_path TEXT,
           occurred_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         )
       `;
@@ -249,6 +254,7 @@ async function ensureSchema(sql: NeonQuery): Promise<void> {
       await sql`ALTER TABLE ask_me_events ADD COLUMN IF NOT EXISTS checking_evidence_latency_ms INTEGER`;
       await sql`ALTER TABLE ask_me_events ADD COLUMN IF NOT EXISTS reviewing_answer_latency_ms INTEGER`;
       await sql`ALTER TABLE ask_me_events ADD COLUMN IF NOT EXISTS delivery_mode TEXT`;
+      await sql`ALTER TABLE ask_me_events ADD COLUMN IF NOT EXISTS model_path TEXT`;
       await sql`CREATE INDEX IF NOT EXISTS ask_me_events_occurred_at_idx ON ask_me_events (occurred_at)`;
       await sql`CREATE INDEX IF NOT EXISTS ask_me_events_funnel_idx ON ask_me_events (event_name, occurred_at)`;
     })().catch((error) => {
@@ -271,12 +277,12 @@ export async function persistEvent(value: unknown): Promise<boolean> {
         event_name, session_hash, response_status, claim_ids, source_ids,
         latency_ms, first_token_latency_ms, delivery_path, question_category, target_type, target_id
         , contract_id, topic, facet, answer_mode, answer_path, rewrite_count, retrieval_count, quality_trigger_count
-        , disposition, boundary_reason, review_path, first_stage_latency_ms, checking_evidence_latency_ms, reviewing_answer_latency_ms, delivery_mode
+        , disposition, boundary_reason, review_path, first_stage_latency_ms, checking_evidence_latency_ms, reviewing_answer_latency_ms, delivery_mode, model_path
       ) VALUES (
         ${event.event}, ${event.sessionHash}, ${event.responseStatus}, ${event.claimIds}, ${event.sourceIds},
         ${event.latencyMs}, ${event.firstTokenLatencyMs}, ${event.deliveryPath}, ${event.questionCategory}, ${event.targetType}, ${event.targetId}
         , ${event.contractId}, ${event.topic}, ${event.facet}, ${event.answerMode}, ${event.answerPath}, ${event.rewriteCount}, ${event.retrievalCount}, ${event.qualityTriggerCount}
-        , ${event.disposition}, ${event.boundaryReason}, ${event.reviewPath}, ${event.firstStageLatencyMs}, ${event.checkingEvidenceLatencyMs}, ${event.reviewingAnswerLatencyMs}, ${event.deliveryMode}
+        , ${event.disposition}, ${event.boundaryReason}, ${event.reviewPath}, ${event.firstStageLatencyMs}, ${event.checkingEvidenceLatencyMs}, ${event.reviewingAnswerLatencyMs}, ${event.deliveryMode}, ${event.modelPath}
       )
     `;
     return true;
@@ -304,6 +310,17 @@ interface QualityEventRow {
   boundary_reason?: string | null;
   review_path?: string | null;
   first_stage_latency_ms?: number | null;
+  topic?: string | null;
+  facet?: string | null;
+  delivery_mode?: string | null;
+  model_path?: string | null;
+}
+
+export interface QualitySegment {
+  count: number;
+  completionRate: number | null;
+  serviceUnavailableRate: number | null;
+  latencyP50Ms: number | null;
 }
 
 export interface QualityReport {
@@ -311,6 +328,7 @@ export interface QualityReport {
   sample: { questions: number; clientCompleted: number; presetCompleted: number; generated: number; feedback: number };
   outcomes: { completionRate: number | null; nonFallbackRate: number | null; insufficientEvidenceRate: number | null; answerRate: number | null; clarifyRate: number | null; declineRate: number | null; serviceUnavailableRate: number | null; helpfulRate: number | null };
   diagnostics: { repairRate: number | null; fallbackRate: number | null; proReviewRate: number | null; proRewriteRate: number | null; averageRetrievalCount: number | null; latencyP50Ms: number | null; latencyP95Ms: number | null; firstTokenP50Ms: number | null; firstTokenP95Ms: number | null; firstStageP95Ms: number | null; presetFirstTokenP95Ms: number | null };
+  segments: { byTopic: Record<string, QualitySegment>; byFacet: Record<string, QualitySegment>; byDeliveryMode: Record<string, QualitySegment>; byModelPath: Record<string, QualitySegment> };
   feedbackReasons: Record<string, number>;
   targets: { completionRate: number; nonFallbackRate: number; minimumFeedbackSample: number; firstStageP95Ms: number; presetFirstTokenP95Ms: number };
 }
@@ -323,6 +341,20 @@ function percentile(values: number[], ratio: number) {
   if (!values.length) return null;
   const sorted = [...values].sort((left, right) => left - right);
   return sorted[Math.min(sorted.length - 1, Math.ceil(sorted.length * ratio) - 1)];
+}
+
+function buildSegments(rows: QualityEventRow[], select: (row: QualityEventRow) => string | null | undefined) {
+  const keys = [...new Set(rows.map(select).filter((value): value is string => Boolean(value)))];
+  return Object.fromEntries(keys.map((key) => {
+    const group = rows.filter((row) => select(row) === key);
+    const latencies = group.flatMap((row) => typeof row.latency_ms === "number" ? [row.latency_ms] : []);
+    return [key, {
+      count: group.length,
+      completionRate: rate(group.filter((row) => row.response_status === "completed").length, group.length),
+      serviceUnavailableRate: rate(group.filter((row) => row.disposition === "service_unavailable").length, group.length),
+      latencyP50Ms: percentile(latencies, 0.5),
+    } satisfies QualitySegment];
+  }));
 }
 
 export function buildQualityReport(rows: QualityEventRow[], days: number): QualityReport {
@@ -366,6 +398,12 @@ export function buildQualityReport(rows: QualityEventRow[], days: number): Quali
       firstStageP95Ms: percentile(firstStageLatencies, 0.95),
       presetFirstTokenP95Ms: percentile(presetFirstTokenLatencies, 0.95),
     },
+    segments: {
+      byTopic: buildSegments(generatedRows, (row) => row.topic),
+      byFacet: buildSegments(generatedRows, (row) => row.facet),
+      byDeliveryMode: buildSegments(generatedRows, (row) => row.delivery_mode),
+      byModelPath: buildSegments(generatedRows, (row) => row.model_path),
+    },
     feedbackReasons,
     targets: { completionRate: 0.95, nonFallbackRate: 0.85, minimumFeedbackSample: 30, firstStageP95Ms: 100, presetFirstTokenP95Ms: 200 },
   };
@@ -377,7 +415,7 @@ export async function getQualityReport(days = 7): Promise<QualityReport | null> 
   const safeDays = Math.max(1, Math.min(Math.floor(days), 30));
   await ensureSchema(sql);
   const rows = await sql`
-    SELECT event_name, response_status, latency_ms, first_token_latency_ms, delivery_path, target_id, answer_path, rewrite_count, retrieval_count, disposition, boundary_reason, review_path, first_stage_latency_ms
+    SELECT event_name, response_status, latency_ms, first_token_latency_ms, delivery_path, target_id, answer_path, rewrite_count, retrieval_count, disposition, boundary_reason, review_path, first_stage_latency_ms, topic, facet, delivery_mode, model_path
     FROM ask_me_events
     WHERE occurred_at >= NOW() - (${safeDays} * INTERVAL '1 day')
     ORDER BY occurred_at ASC

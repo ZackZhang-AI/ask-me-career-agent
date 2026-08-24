@@ -3,18 +3,20 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 const chatSource = readFileSync(new URL("../components/chat.tsx", import.meta.url), "utf8");
+const thinkingSource = readFileSync(new URL("../components/use-thinking-status.ts", import.meta.url), "utf8");
 const appFrameSource = readFileSync(new URL("../components/app-frame.tsx", import.meta.url), "utf8");
 const actionsSource = readFileSync(new URL("../components/answer-actions.tsx", import.meta.url), "utf8");
 const globalStyles = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8");
 
 test("回答首字出现前保留可感知的加载状态", () => {
+  const loadingSources = `${chatSource}\n${thinkingSource}`;
   assert.match(chatSource, /className="thinking-state"/);
-  assert.match(chatSource, /正在检索相关经历与项目证据/);
-  assert.match(chatSource, /正在组织正式面试回答/);
-  assert.match(chatSource, /正在核验事实与表达/);
-  assert.match(chatSource, /正在理解这道面试问题/);
-  assert.match(chatSource, /正在核对相关经历与事实/);
-  assert.match(chatSource, /正在进行最终面试质量审校/);
+  assert.match(loadingSources, /正在组织面试回答/);
+  assert.match(loadingSources, /正在理解这道面试问题/);
+  assert.match(loadingSources, /正在核对相关经历与事实/);
+  assert.match(loadingSources, /正在进行最终面试质量审校/);
+  assert.match(loadingSources, /首个安全片段生成后会立即显示/);
+  assert.match(loadingSources, /完成后再展示/);
   assert.match(chatSource, /event\.type === "stage"/);
   assert.match(chatSource, /event\.disposition === "clarify"/);
   assert.match(chatSource, /shouldFocusAfterCompletion = true/);

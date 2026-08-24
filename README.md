@@ -14,9 +14,9 @@ copy .env.example .env.local
 npm run dev
 ```
 
-模型通过服务端 `DEEPSEEK_API_KEY` 直连 DeepSeek 官方 API。固定问题和精确契约使用经过验证的快速回答；其他可回答的开放题由 Flash 生成并由 Pro 强制审校。模型服务不可用时不会用低质量本地片段冒充开放题答案。
+模型通过服务端 `DEEPSEEK_API_KEY` 直连 DeepSeek 官方 API。固定问题和精确契约使用经过验证的快速回答；低风险开放题由 Flash 真实流式生成并逐片段执行事实检查，高风险事实题由 Flash 生成、Pro 审校后展示。模型服务不可用时不会用低质量本地片段冒充开放题答案。
 
-内容统一维护在 `content/`，启动和构建时由 Zod 校验状态、可见性以及 Claim-Source 引用完整性。8 个已确认 STAR 与 9 条 Obsidian 白名单知识参与公开检索，未审核内容仍保持隔离。
+内容统一维护在 `content/`，启动和构建时由 Zod 校验状态、可见性以及 Claim-Source 引用完整性。11 个已确认 STAR 与 9 条 Obsidian 白名单知识参与公开检索，未审核内容仍保持隔离。
 
 ## 环境变量
 
@@ -51,7 +51,7 @@ npm run eval:interview
 npm run quality:report -- --days 7
 ```
 
-本地 `eval:interview` 是确定性发布门禁；显式模型预演复用线上 DeepSeek、Flash 生成和 Pro 审校链路。匿名质量报告汇总回答、澄清、拒答、服务异常、Pro 审校/重写、处理阶段耗时与枚举反馈，不保存问题或回答正文。
+本地 `eval:interview` 是确定性发布门禁；显式模型预演复用线上 DeepSeek 的分级生成与审校链路。匿名质量报告按主题、回答维度、交付模式和模型路径汇总结果，并统计澄清、拒答、服务异常、阶段耗时与枚举反馈，不保存问题或回答正文。
 
 PRD 验收与完整评测设计见 `tests/prd-evaluation-draft.md`。
 
@@ -61,7 +61,7 @@ Vercel、Upstash、Neon、Blob、Cron 和 Preview 到 Production 流程见 `docs
 
 知识库已纳入候选人授权公开的教育、技能、审计经历和项目资料，并用 GitHub 仓库验证公开项目存在。GitHub 不能单独证明个人贡献比例、生产规模或业务效果，这些内容仍标记为待面试核实。联系方式独立于模型上下文，不进入检索和问题日志。
 
-当前 8 个 STAR 已采用公开面试口径；Obsidian 只发布 RAG 与 DeepFlow 的 9 条审核通过内容。AI 角色预演只作为发布回归，不包装成真人反馈，后续仍需真人软测试验证招聘转化。
+当前 11 个 STAR 已采用公开面试口径；Obsidian 只发布 RAG 与 DeepFlow 的 9 条审核通过内容。AI 角色预演只作为发布回归，不包装成真人反馈，后续仍需真人软测试验证招聘转化。
 
 ## 个人知识库
 

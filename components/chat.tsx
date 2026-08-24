@@ -18,6 +18,7 @@ import { AnswerActions } from "./answer-actions";
 import { EvidencePanel } from "./evidence-panel";
 import { FormattedAnswer } from "./formatted-answer";
 import { useConversationControl } from "./conversation-control";
+import { useThinkingStatus } from "./use-thinking-status";
 import { featuredProjects, profile } from "@/lib/profile";
 import { getBrowserSessionId } from "@/lib/client-session";
 import { isNearScrollBottom, prepareQuestionMessages, presetRevealChunks } from "@/lib/chat-session";
@@ -96,9 +97,7 @@ export function Chat({ presetAnswers }: ChatProps) {
   const [copiedAnswer, setCopiedAnswer] = useState<number | null>(null);
   const [expandedEvidence, setExpandedEvidence] = useState<Record<number, boolean>>({});
   const [showScrollToLatest, setShowScrollToLatest] = useState(false);
-  const [thinkingLabel, setThinkingLabel] = useState("正在检索相关经历与项目证据");
   const abortRef = useRef<AbortController | null>(null);
-  const thinkingTimersRef = useRef<number[]>([]);
   const conversationEpochRef = useRef(0);
   const chatScrollRef = useRef<HTMLDivElement | null>(null);
   const messageEndRef = useRef<HTMLDivElement | null>(null);
@@ -106,11 +105,7 @@ export function Chat({ presetAnswers }: ChatProps) {
   const shouldFollowRef = useRef(true);
   const handledCommandRef = useRef(0);
   const { command, persistConversation } = useConversationControl();
-
-  const clearThinkingTimers = useCallback(() => {
-    for (const timer of thinkingTimersRef.current) window.clearTimeout(timer);
-    thinkingTimersRef.current = [];
-  }, []);
+  const { thinkingLabel, startThinking, updateThinkingStage, clearThinkingTimers } = useThinkingStatus();
 
   useEffect(() => {
     if (!shouldFollowRef.current) return;
@@ -142,12 +137,7 @@ export function Chat({ presetAnswers }: ChatProps) {
     setLoading(true);
     shouldFollowRef.current = true;
     setShowScrollToLatest(false);
-    setThinkingLabel("正在检索相关经历与项目证据");
-    clearThinkingTimers();
-    thinkingTimersRef.current = [
-      window.setTimeout(() => setThinkingLabel("正在组织正式面试回答"), 1_400),
-      window.setTimeout(() => setThinkingLabel("正在核验事实与表达"), 4_000),
-    ];
+    startThinking();
     const nextMessages = baseMessages
       ? [...baseMessages, { role: "user" as const, content: clean }]
       : prepareQuestionMessages(currentMessages, clean, retry) as ConversationMessage[];
@@ -260,13 +250,7 @@ export function Chat({ presetAnswers }: ChatProps) {
           followUpQuestions: event.followUpQuestions,
         };
         if (event.type === "stage") {
-          clearThinkingTimers();
-          setThinkingLabel({
-            understanding: "正在理解这道面试问题",
-            checking_evidence: "正在核对相关经历与事实",
-            writing_answer: "正在组织面试回答",
-            reviewing_answer: "正在进行最终面试质量审校",
-          }[event.stage ?? "understanding"]);
+          updateThinkingStage(event.stage ?? "understanding");
         }
         if (event.type === "delta") {
           if (!answer) metadata = {
@@ -337,7 +321,7 @@ export function Chat({ presetAnswers }: ChatProps) {
         }
       }
     }
-  }, [clearThinkingTimers, loading, messages, persistConversation, presetAnswers]);
+  }, [clearThinkingTimers, loading, messages, persistConversation, presetAnswers, startThinking, updateThinkingStage]);
 
   const resetConversation = useCallback(() => {
     conversationEpochRef.current += 1;

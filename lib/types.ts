@@ -127,6 +127,25 @@ export interface AnswerFactSkeleton {
   forbiddenDetails: string[];
 }
 
+export interface InterviewConversationContext {
+  activeProject?: string;
+  targetRole?: string;
+  depth: ConversationDepth;
+  askedDimensions: QuestionFacet[];
+  usedKnowledgeIds: string[];
+  usedStoryIds: string[];
+}
+
+export interface AnswerBrief {
+  directThesis: string;
+  requiredDimensions: string[];
+  primaryEvidenceId?: string;
+  supportingEvidenceIds: string[];
+  newInformationGoal: string[];
+  forbiddenClaims: string[];
+  closingPurpose: string;
+}
+
 export interface AnswerPlan {
   contractId?: string;
   topic: QuestionTopic;
@@ -160,6 +179,8 @@ export interface AnswerPlan {
   targetLength: { min: number; max: number };
   followUpQuestions: string[];
   recentAnswers: string[];
+  conversationContext: InterviewConversationContext;
+  brief: AnswerBrief;
   answerableWithoutRetrievedEvidence: boolean;
   fallbackAnswer: string;
 }

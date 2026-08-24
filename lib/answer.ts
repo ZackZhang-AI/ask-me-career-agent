@@ -5,6 +5,7 @@ import type { AnswerIntent, AnswerPlan, ChatMessage, ConversationDepth, Knowledg
 import { getRelatedStarStories, getStarStoriesByIds } from "./knowledge.ts";
 import { getFollowUpQuestions } from "./question-suggestions.ts";
 import { buildLocalQuestionFrame, findQuestionContract, frameFromContract } from "./question-contracts";
+import { buildAnswerBrief, buildInterviewConversationContext } from "./interview-context";
 
 const boundaryPattern = /短板|不足|限制|边界|风险|真实性|真实数据|用户(?:数|规模|反馈|测试)|增长|留存|生产(?:状态|规模|环境)|完成(?:了吗|情况)|未完成|个人贡献(?:比例|边界)/;
 const knownOrganizations = ["东北大学", "百川智能", "百度", "德勤", "容诚", "ACCA"];
@@ -105,24 +106,11 @@ function projectFacts(items: KnowledgeItem[], intent: AnswerIntent, frame: Quest
   return facts;
 }
 
-function conversationDepth(history: ChatMessage[], items: KnowledgeItem[]): ConversationDepth {
-  const userTurns = history.filter((message) => message.role === "user").length;
-  const projects = new Set(items.map((item) => item.relatedProject).filter(Boolean));
-  const relatedTurns = history.filter((message) => {
-    const value = normalize(message.content);
-    return [...projects].some((project) => value.includes(normalize(project ?? "")))
-      || items.some((item) => contentTerms(item.title).some((term) => value.includes(normalize(term))));
-  }).length;
-  if (userTurns >= 3 || relatedTurns >= 3) return "deep_dive";
-  if (history.some((message) => message.role === "user")) return "follow_up";
-  return "overview";
-}
-
-function selectStory(items: KnowledgeItem[], stableAnswer: StableAnswer | undefined, historyText: string, allowedStoryIds: string[] = []) {
+function selectStory(items: KnowledgeItem[], stableAnswer: StableAnswer | undefined, historyText: string, allowedStoryIds: string[] = [], usedStoryIds: string[] = []) {
   const preferred = getStarStoriesByIds([...allowedStoryIds, ...(stableAnswer?.preferredStoryIds ?? [])]);
   const related = allowedStoryIds.length ? [] : getRelatedStarStories(items, 4);
   const candidates = [...new Map([...preferred, ...related].map((story) => [story.id, story])).values()];
-  const unused = candidates.find((story) => !storyUsed(story, historyText));
+  const unused = candidates.find((story) => !usedStoryIds.includes(story.id) && !storyUsed(story, historyText));
   return unused ?? candidates[0];
 }
 
@@ -273,7 +261,9 @@ function targetLengthFor(intent: AnswerIntent, responseShape: ResponseShape, dep
   if (metaIntents.includes(intent)) return { min: 120, max: 320 };
   const base = defaultLengthByShape[responseShape];
   if (depth !== "deep_dive") return base;
-  return { min: Math.min(base.max - 20, base.min + 60), max: base.max + 60 };
+  if (responseShape === "direct") return { min: 180, max: 360 };
+  if (["project_arc", "contribution", "star"].includes(responseShape)) return { min: 300, max: 500 };
+  return { min: Math.max(220, base.min - 40), max: base.max };
 }
 
 export function buildAnswerPlan(
@@ -289,9 +279,13 @@ export function buildAnswerPlan(
   const intent = intentFromFrame(frame, detectIntent(question, stableAnswer));
   const skeleton = stableAnswer?.factSkeleton;
   const historyText = history.filter((message) => message.role === "assistant").slice(-6).map((message) => message.content).join("\n");
+  const candidateStories = getRelatedStarStories(items, 4);
+  const conversationContext = buildInterviewConversationContext({ history, frame, items, stories: candidateStories });
   const storyIntent = ["challenge", "contribution", "representative_project"].includes(intent)
     || ["example", "transfer"].includes(frame.facet);
-  const relatedStory = storyIntent ? selectStory(items, stableAnswer, historyText, frame.allowedStoryIds) : undefined;
+  const relatedStory = storyIntent
+    ? selectStory(items, stableAnswer, historyText, frame.allowedStoryIds, conversationContext.usedStoryIds)
+    : undefined;
   const storyFacts = relatedStory ? [relatedStory.situation, relatedStory.task, relatedStory.action, relatedStory.result] : [];
   const composableFacts = intent === "career_transition"
     ? careerTransitionFacts()
@@ -305,7 +299,7 @@ export function buildAnswerPlan(
   const multiProjectResult = intent === "result" && projectItems.length > 1
     ? `目前公开材料能确认 ${projectItems.slice(0, 3).map((item) => item.title).join("、")} 的核心流程或可演示成果，但还没有形成可以公开说明的真实用户规模、增长或生产数据。`
     : undefined;
-  const depth = conversationDepth(history, items);
+  const depth = conversationContext.depth;
   const thesis = contract?.thesis
     ?? skeleton?.thesis
     ?? multiProjectResult
@@ -323,7 +317,7 @@ export function buildAnswerPlan(
         : unique([thesis, ...itemFacts.slice(0, 3), ...storyFacts.slice(2)]).slice(0, 3));
   const factEntries = allowedFacts.map((fact, index) => ({ id: stableAnswer ? `${stableAnswer.id}:F${index + 1}` : items[index]?.id ?? `OPEN:F${index + 1}`, fact }));
   const usedFactEntries = factEntries.filter(({ fact }) => appearsInHistory(fact, historyText));
-  const usedStoryIds = getRelatedStarStories(items, 4).filter((story) => storyUsed(story, historyText)).map((story) => story.id);
+  const usedStoryIds = conversationContext.usedStoryIds;
   const avoidPoints = unique([...(stableAnswer?.avoidRepeating ?? []), ...usedFactEntries.map(({ fact }) => fact)]);
   const newInformationGoal = exclusivePoints.filter((point) => !appearsInHistory(point, historyText));
   const shouldMentionLimitations = boundaryPattern.test(question);
@@ -334,6 +328,22 @@ export function buildAnswerPlan(
   const responseShape = contract?.frame.responseShape
     ?? stableAnswer?.responseShape
     ?? (intent === "general" ? frame.responseShape : defaultShapeByIntent[intent]);
+  const closingPurpose = stableAnswer?.closingPurpose
+    ?? (intent === "career_transition" ? "说明这是一条连续积累、逐步收敛的职业选择。" : intent === "role_fit" ? "总结已有能力如何迁移到目标岗位，不虚构岗位业绩。" : "停在与当前问题最相关的产品判断，不追加通用岗位价值。");
+  const forbiddenDetails = unique([...(skeleton?.forbiddenDetails ?? []), "资料中未出现的数字、用户反馈、调研过程、任职、组织或项目结果", "把规划中、待验证或原型阶段的能力描述为已经生产落地"]);
+  const mustInclude = unique(contract?.requiredPoints?.length ? contract.requiredPoints : skeleton?.mustInclude?.length ? skeleton.mustInclude : exclusivePoints).slice(0, 4);
+  const effectiveNewInformationGoal = newInformationGoal.length ? newInformationGoal : exclusivePoints.slice(-1);
+  const brief = buildAnswerBrief({
+    intent,
+    frame,
+    context: conversationContext,
+    items,
+    thesis,
+    requiredDimensions: mustInclude,
+    newInformationGoal: effectiveNewInformationGoal,
+    forbiddenClaims: forbiddenDetails,
+    closingPurpose,
+  });
   const partialPlan: Omit<AnswerPlan, "fallbackAnswer"> = {
     contractId: contract?.id,
     topic: frame.topic,
@@ -347,28 +357,29 @@ export function buildAnswerPlan(
     forbiddenTopics: frame.forbiddenTopics,
     intent,
     thesis,
-    mustInclude: unique(contract?.requiredPoints?.length ? contract.requiredPoints : skeleton?.mustInclude?.length ? skeleton.mustInclude : exclusivePoints).slice(0, 4),
+    mustInclude,
     allowedFacts: unique([thesis, ...allowedFacts]),
     allowedNumbers: unique([...(skeleton?.allowedNumbers ?? []), ...extractNumbers(allowedFacts)]),
     allowedOrganizations: unique([...(skeleton?.allowedOrganizations ?? []), ...knownOrganizations.filter((organization) => allowedFacts.some((fact) => fact.includes(organization)))]),
     allowedProjectStatuses: unique([...(skeleton?.allowedProjectStatuses ?? []), ...items.map((item) => item.projectStatus)]),
-    forbiddenDetails: unique([...(skeleton?.forbiddenDetails ?? []), "资料中未出现的数字、用户反馈、调研过程、任职、组织或项目结果", "把规划中、待验证或原型阶段的能力描述为已经生产落地"]),
+    forbiddenDetails,
     shouldMentionLimitations,
     limitations,
     relatedStoryId: relatedStory?.id,
     evaluationGoal: contract?.frame.answerGoal ?? stableAnswer?.evaluationGoal ?? frame.answerGoal,
     exclusivePoints,
-    newInformationGoal: newInformationGoal.length ? newInformationGoal : exclusivePoints.slice(-1),
+    newInformationGoal: effectiveNewInformationGoal,
     usedFactIds: usedFactEntries.map(({ id }) => id),
     usedStoryIds,
     avoidPoints,
     conversationDepth: depth,
     responseShape,
-    closingPurpose: stableAnswer?.closingPurpose
-      ?? (intent === "career_transition" ? "说明这是一条连续积累、逐步收敛的职业选择。" : intent === "role_fit" ? "总结已有能力如何迁移到目标岗位，不虚构岗位业绩。" : "停在与当前问题最相关的产品判断，不追加通用岗位价值。"),
+    closingPurpose,
     targetLength: contract?.frame.targetLength ?? targetLengthFor(intent, responseShape, depth, stableAnswer),
     followUpQuestions: getFollowUpQuestions(question, askedQuestions, 3, stableAnswer?.followUpQuestions),
     recentAnswers: history.filter((message) => message.role === "assistant").slice(-3).map((message) => message.content),
+    conversationContext,
+    brief,
     answerableWithoutRetrievedEvidence: frame.questionMode !== "candidate_fact" || metaIntents.includes(intent) || ["career_transition", "role_fit"].includes(intent) || Boolean(contract),
   };
   const fallbackFacts = intent === "challenge" ? [...storyFacts, ...itemFacts] : [...itemFacts, ...storyFacts];
@@ -391,6 +402,8 @@ export function buildContext(items: KnowledgeItem[], plan?: AnswerPlan) {
     `回答模式：${plan.questionMode}；证据策略：${plan.evidencePolicy}。candidate_reasoning 只能基于已经验证的能力回答方法和推演，开头要自然说明“我的处理思路”，不得暗示已经执行过；candidate_fact 不得在证据不足时补造经历。`,
     `回答结构：${plan.responseShape}；对话深度：${plan.conversationDepth}；参考长度：${plan.targetLength.min}-${plan.targetLength.max} 个中文字符。根据问题复杂度自然调整，简单事实短答，项目、贡献与复盘问题讲完整，不为凑字数重复。`,
     `本轮必须带来这些新信息：${plan.newInformationGoal.join("；")}`,
+    `本轮主证据：${plan.brief.primaryEvidenceId ?? "无"}；补充证据：${plan.brief.supportingEvidenceIds.join("、") || "无"}。优先讲主证据，补充证据只用于解释能力迁移，不要罗列所有经历。`,
+    `对话上下文：当前项目 ${plan.conversationContext.activeProject ?? "未指定"}；已讨论维度 ${plan.conversationContext.askedDimensions.join("、") || "无"}。`,
     `必须覆盖：${plan.mustInclude.join("；")}`,
     `只能使用这些事实：${plan.allowedFacts.join("；")}`,
     `最近已经使用的事实或故事：${[...plan.usedFactIds, ...plan.usedStoryIds].join("；") || "无"}`,
@@ -401,7 +414,9 @@ export function buildContext(items: KnowledgeItem[], plan?: AnswerPlan) {
     plan.shouldMentionLimitations && plan.limitations ? `需要简短说明现实阶段：${plan.limitations}` : "不要主动讨论项目限制、材料核验或候选人短板。",
     "</answer_task>",
   ].join("\n") : "";
-  const materials = items.map((item) => [
+  const focusedEvidenceIds = new Set(plan ? [plan.brief.primaryEvidenceId, ...plan.brief.supportingEvidenceIds].filter(Boolean) : []);
+  const contextItems = focusedEvidenceIds.size ? items.filter((item) => focusedEvidenceIds.has(item.id)) : items;
+  const materials = contextItems.map((item) => [
     "<material>", `主题：${item.title}`, `事实：${item.content}`, `我的工作：${item.candidateContribution}`, `AI 协作：${item.aiAssistance}`,
     item.projectStatus ? `当前状态：${item.projectStatus}` : "", plan?.shouldMentionLimitations ? `现实情况：${item.limitations}` : "", "</material>",
   ].filter(Boolean).join("\n")).join("\n\n");

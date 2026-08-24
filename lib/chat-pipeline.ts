@@ -1,5 +1,5 @@
 import { buildAnswerPlan, buildContext, systemPrompt } from "./answer";
-import { hasBlockingQualityTriggers, splitQualityTriggers, validateAnswer, validateAnswerFragment } from "./answer-quality";
+import { hasBlockingQualityTriggers, validateAnswer } from "./answer-quality";
 import { decideAnswerability, serviceUnavailableMessage, unresolvedReferenceReason } from "./answerability";
 import {
   DeepSeekPlannerError,
@@ -7,22 +7,19 @@ import {
   generateDeepSeekAnswer,
   planDeepSeekQuestion,
   reviewDeepSeekAnswer,
-  streamDeepSeekAnswer,
   type ModelPath,
 } from "./deepseek";
+import { selectDeliveryMode, StreamInterruptedError, streamInterviewAnswer } from "./chat-delivery";
 import { getClaims, getSources, matchStableAnswer, resolveRetrievalQuery, retrieveKnowledge } from "./knowledge";
 import { getFollowUpQuestions } from "./question-suggestions";
 import { buildLocalQuestionFrame, findQuestionContract, mergePlannedFrame } from "./question-contracts";
 import { reserveAdditionalModelCall } from "./rate-limit";
-import { takeStreamUnits } from "./stream-answer";
 import type {
   AnswerDisposition,
-  AnswerPlan,
   BoundaryReason,
   ChatMessage,
   DeliveryMode,
   ProcessingStage,
-  QuestionFrame,
   ResponseStatus,
   ReviewPath,
   StreamFailureType,
@@ -136,145 +133,6 @@ function emptyDelivery(input: {
   };
 }
 
-export class StreamInterruptedError extends Error {
-  constructor(
-    public readonly stage: "writing_answer" | "checking_evidence",
-    public readonly failureType: Exclude<StreamFailureType, "semantic_warning" | "service_unavailable">,
-    message = "流式回答未完整生成",
-  ) {
-    super(message);
-    this.name = "StreamInterruptedError";
-  }
-}
-
-const reviewedIntents = new Set([
-  "result",
-  "contribution",
-  "experience",
-  "education",
-  "credentials",
-  "project_overview",
-  "project_problem",
-  "ai_collaboration",
-]);
-
-function chooseDeliveryMode(input: {
-  frame: QuestionFrame;
-  plan: AnswerPlan;
-  decision: { shouldGenerate: boolean; disposition: AnswerDisposition };
-  stableAnswer?: unknown;
-  contract?: unknown;
-  hasEvidence: boolean;
-  canStream: boolean;
-}) : DeliveryMode {
-  const localContract = input.contract && (input.contract as { generationMode?: string }).generationMode !== "realtime";
-  if (input.stableAnswer || localContract || input.frame.questionMode === "agent_meta" || !input.decision.shouldGenerate) return "local_reveal";
-  if (!input.canStream || reviewedIntents.has(input.plan.intent)) return "reviewed_buffer";
-  if (input.frame.evidencePolicy === "required" && !input.hasEvidence) return "reviewed_buffer";
-  if (input.frame.questionMode === "candidate_reasoning") return "realtime_stream";
-  if (["career_transition", "experience_value", "role_fit", "skills", "challenge", "diagnosis", "limitation", "hiring_recommendation"].includes(input.plan.intent)) return "realtime_stream";
-  return "reviewed_buffer";
-}
-
-interface StreamAnswerInput {
-  messages: Array<ChatMessage | { role: "system"; content: string }>;
-  signal: AbortSignal;
-  plan: AnswerPlan;
-  userId: string;
-  startedAt: number;
-  onDelta: (chunk: string) => Promise<void> | void;
-}
-
-async function streamAnswer(input: StreamAnswerInput) {
-  for (const modelPath of ["flash", "pro"] as const) {
-    let visible = false;
-    let answer = "";
-    let pending = "";
-    let held = "";
-    let firstChunkLatencyMs: number | undefined;
-    try {
-      const generated = streamDeepSeekAnswer({ messages: input.messages, signal: input.signal, userId: input.userId }, modelPath);
-      let streamFinished = false;
-      for await (const part of generated.fullStream) {
-        if (part.type === "error") {
-          if (visible) throw new StreamInterruptedError("writing_answer", "transport_interrupted", "stream_protocol_error");
-          throw new Error("stream_protocol_error");
-        }
-        if (part.type === "finish") {
-          streamFinished = true;
-          continue;
-        }
-        if (part.type !== "text-delta") continue;
-        const rawChunk = typeof part.text === "string" ? part.text : "";
-        pending += rawChunk;
-        const extracted = takeStreamUnits(pending);
-        pending = extracted.rest;
-        for (const unit of extracted.units) {
-          if (!visible && !unit.sentenceComplete) {
-            held += unit.text;
-            continue;
-          }
-          const chunk = `${held}${unit.text}`;
-          held = "";
-          const candidate = `${answer}${chunk}`;
-          const gate = validateAnswerFragment(candidate, input.plan, unit.sentenceComplete);
-          const { hardSafety } = splitQualityTriggers(gate.triggers);
-          if (hardSafety.length) {
-            if (visible) throw new StreamInterruptedError("writing_answer", "hard_safety", hardSafety.join("；"));
-            throw new Error(`stream_safety:${hardSafety.join(",")}`);
-          }
-          answer = candidate;
-          if (!visible) {
-            visible = true;
-            firstChunkLatencyMs = Date.now() - input.startedAt;
-          }
-          await input.onDelta(chunk);
-        }
-      }
-      if (!streamFinished) {
-        if (visible) throw new StreamInterruptedError("writing_answer", "transport_interrupted", "stream_incomplete");
-        throw new Error("stream_incomplete");
-      }
-
-      const finalUnits = takeStreamUnits(`${held}${pending}`, true).units;
-      for (const unit of finalUnits) {
-        const candidate = `${answer}${unit.text}`;
-        const gate = validateAnswerFragment(candidate, input.plan, true);
-        const { hardSafety } = splitQualityTriggers(gate.triggers);
-        if (hardSafety.length) {
-          if (visible) throw new StreamInterruptedError("writing_answer", "hard_safety", hardSafety.join("；"));
-          throw new Error(`stream_safety:${hardSafety.join(",")}`);
-        }
-        answer = candidate;
-        if (!visible) {
-          visible = true;
-          firstChunkLatencyMs = Date.now() - input.startedAt;
-        }
-        await input.onDelta(unit.text);
-      }
-      if (!answer.trim()) throw new Error("stream_empty");
-      const finalGate = validateAnswer(answer, input.plan);
-      const finalTriggers = splitQualityTriggers(finalGate.triggers);
-      if (finalTriggers.hardSafety.length) {
-        if (visible) throw new StreamInterruptedError("writing_answer", "hard_safety", finalTriggers.hardSafety.join("；"));
-        throw new Error(`stream_safety:${finalTriggers.hardSafety.join(",")}`);
-      }
-      const usage = await generated.usage;
-      return {
-        answer,
-        totalTokens: Number(usage.totalTokens ?? 0),
-        modelPath,
-        firstChunkLatencyMs: firstChunkLatencyMs ?? Date.now() - input.startedAt,
-        semanticWarnings: finalTriggers.semantic,
-      };
-    } catch (error) {
-      if (error instanceof StreamInterruptedError || (error instanceof Error && error.name === "AbortError")) throw error;
-      if (visible || modelPath === "pro") throw error;
-    }
-  }
-  throw new Error("stream_unavailable");
-}
-
 export async function buildChatDelivery(input: PipelineInput): Promise<ChatDelivery> {
   const history = input.messages.slice(0, -1).slice(-12);
   const recentModelMessages = input.messages.slice(-10);
@@ -344,12 +202,12 @@ export async function buildChatDelivery(input: PipelineInput): Promise<ChatDeliv
     contract,
   });
   const retrievalTrace = resolveRetrievalQuery(input.question, history);
-  const deliveryMode = chooseDeliveryMode({
+  const localContract = Boolean(contract && contract.generationMode !== "realtime");
+  const deliveryMode = selectDeliveryMode({
     frame,
     plan,
-    decision,
-    stableAnswer,
-    contract,
+    shouldGenerate: decision.shouldGenerate,
+    hasLocalResponse: Boolean(stableAnswer) || localContract,
     hasEvidence,
     canStream: Boolean(input.onPrepared && input.onDelta),
   });
@@ -489,7 +347,7 @@ export async function buildChatDelivery(input: PipelineInput): Promise<ChatDeliv
       deliveryMode,
     });
     try {
-      const streamed = await streamAnswer({
+      const streamed = await streamInterviewAnswer({
         messages: [
           { role: "system", content: systemPrompt },
           { role: "system", content: contextMessage },

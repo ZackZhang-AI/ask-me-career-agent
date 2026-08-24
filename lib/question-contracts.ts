@@ -192,7 +192,7 @@ export const questionContracts: QuestionContract[] = [
     dimensions: ["工作主线", "重点项目", "结果边界"], knowledge: ["K22", "K23", "K24", "K25", "K26", "K32", "K33", "K34"], stories: ["ST9"], shape: "narrative", length: { min: 360, max: 540 },
     goal: "让面试官快速确认百度实习的真实性、工作主线与项目深度。", thesis: "我在百度实习的工作主线是模型与 AI Coding 产品评测，重点参与 WebDev E2E Bench 和多模型 Pilot。",
     required: ["模型评测与 Bad Case 归因", "六类任务七维指标与 Gate", "36 次 Pilot 与结论边界"], direct: ["百度", "评测", "Pilot"],
-    fallback: "2026 年 6 月到 8 月，我在百度参与 AI 产品经理实习，核心工作是把**模型评测**与 Bad Case 归因从“得到一个分数”推进到“能支持产品选型和迭代判断”。\n\n我先参与调研 13 项 Coding Benchmark，再参与设计 WebDev E2E Bench，用六类任务覆盖页面生成、功能实现、组件、重设计、轻全栈和 Bugfix+UX，并以七维指标与 Gate 同时保护工程可用性和用户体验。随后参与把确定性工作流、Agent 判断和人工校准组合成 Evaluator。\n\n**正式 Pilot**覆盖 6 个模型、6 类任务和 36 次运行，并完成 18 份盲评。我的工作不止是记录总分，而是把结果拆成场景优势、共同弱项、根因证据和下一步动作。边界是这些结论只适用于本次冻结版本和任务集，不是行业权威排名或生产平台成果。",
+    fallback: "2026 年 6 月到 8 月，我在百度参与 AI 产品经理实习，核心工作是把**模型评测**与 Bad Case 归因从“得到一个分数”推进到“能支持产品选型和迭代判断”。\n\n我先参与调研 13 项 Coding Benchmark，再参与设计 WebDev E2E Bench，用六类任务覆盖页面生成、功能实现、组件、重设计、轻全栈和 Bugfix+UX，并以七维指标与 Gate 同时保护工程可用性和用户体验。随后参与把确定性工作流、Agent 判断和人工校准组合成 **Evaluator Agent**。\n\n**正式 Pilot**覆盖 6 个模型、6 类任务和 36 次运行，并完成 18 份盲评。我的工作不止是记录总分，而是把结果拆成场景优势、共同弱项、根因证据和下一步动作。边界是这些结论只适用于本次冻结版本和任务集，不是行业权威排名或生产平台成果。",
     next: ["baidu_contribution", "baidu_project", "baidu_metrics"],
   }),
   define({
@@ -200,7 +200,7 @@ export const questionContracts: QuestionContract[] = [
     dimensions: ["项目问题", "产品判断", "验证边界"], knowledge: ["K4", "K28", "K29", "K31", "K35", "K36"], stories: ["ST10", "ST1"], shape: "project_arc", length: { min: 390, max: 540 }, forbidden: ["baidu", "deepflow", "local_tools", "audit"],
     goal: "用 RAG 项目证明候选人的问题定义、方案取舍、评测设计与工程落地能力。", thesis: "最能代表我 AI 产品能力的是 RAG Knowledge Base System。",
     required: ["医疗私有文档可信问答", "四层架构和评测闭环", "公开脱敏与未完成边界"], direct: ["RAG", "百川", "Rerank", "评测"],
-    fallback: "最能代表我 AI 产品能力的是百川智能实习中的 RAG Knowledge Base System。它面向**医疗私有文档可信问答**，帮助使用者从指南、共识和论文等资料中获得有来源、可核验的答案，同时只辅助资料查阅，不替代诊断。\n\n我参与把产品拆成文档处理、知识库管理、检索问答和评测四层，并把 P0 收敛为知识入库、问答、来源返回和失败状态。公开脱敏项目已跑通 Dense Retrieval、Rerank、来源片段、Redis 短期记忆、多助手基础配置和四维自动评测。\n\n我的工作覆盖需求与 MVP 梳理、功能和配置边界、跨角色协作以及 QA 评测闭环。公开仓库不是百川生产代码；BM25 混合检索、长期记忆、完整 Agent、版本对比和生产级 RBAC 尚未完整落地，也没有可公开的真实客户效果。这个项目体现了我把高风险行业需求转成**可运行、可核验、可迭代**产品闭环的能力。",
+    fallback: "最能代表我 AI 产品能力的是百川智能实习中的 RAG Knowledge Base System。它面向**医疗私有文档可信问答**，帮助使用者从指南、共识和论文等资料中获得有来源、可核验的答案，同时只辅助资料查阅，不替代诊断。\n\n我参与把产品拆成文档处理、知识库管理、检索问答和评测四层，并把 P0 收敛为知识入库、问答、来源返回和失败状态。公开脱敏项目先建立**质量基线**，再通过控制变量验证 Dense Retrieval、Rerank、来源片段与基础引用溯源，并用四维自动评测让 Bad Case 回流到召回、排序或生成环节。\n\n我的工作覆盖需求与 MVP 梳理、功能和配置边界、跨角色协作以及 QA 评测闭环。公开仓库不是百川生产代码；BM25 混合检索、长期记忆、完整 Agent、版本对比和生产级 RBAC 尚未完整落地，也没有可公开的真实客户效果。这个项目体现了我把高风险行业需求转成**可运行、可核验、可迭代**产品闭环的能力。",
     next: ["project_contribution", "rag_methods", "evaluation"],
   }),
   define({
@@ -216,7 +216,7 @@ export const questionContracts: QuestionContract[] = [
     dimensions: ["任务指标", "执行链路", "工具 Judge 与人工分工"], knowledge: ["K23", "K24", "K25", "K32"], stories: ["ST9"], length: { min: 340, max: 520 },
     goal: "解释 Evaluator Agent 的产品目标、执行链路与当前完成边界。", thesis: "Evaluator Agent 把 Task Spec、候选项目和 Rubric 转成可执行的端到端评测与证据报告。",
     required: ["六类任务与七维 Gate", "确定性执行和开放判断", "36 次 Pilot 与人工校准"], direct: ["Evaluator Agent", "Pilot", "报告"],
-    fallback: "Evaluator Agent 的目标，是把 Task Spec、候选项目、运行配置和 Rubric 转成一条**评测执行链路**。六类任务覆盖页面、功能、组件、重设计、轻全栈和 Bugfix+UX；七维指标与 Gate 同时保护核心可用性和产品体验。\n\n构建、HTTP、DOM、浏览器操作、日志和 axe-core 等硬事实由确定性工具检查；视觉、交互和产品完成度由双 Judge 按 Rubric 评价，并保留截图和交互证据；**人工校准**结合 Gold、缺陷注入、重复检查和盲评。\n\n正式 Pilot 覆盖 6 个模型、6 类任务和 36 次运行，完成 18 份盲评，并输出分项证据、场景差异、共同风险和优化建议。它已经从 MVP 推进到受控 Pilot，但不是生产平台，也不是行业权威排行榜。",
+    fallback: "Evaluator Agent 的目标，是把 Task Spec、候选项目、运行配置和 Rubric 转成一条**评测执行链路**。链路按 **11 个阶段**完成环境准备、执行、证据采集、检查、Judge 评价和报告输出；六类任务覆盖页面、功能、组件、重设计、轻全栈和 Bugfix+UX，七维指标与 Gate 同时保护核心可用性和产品体验。\n\n构建、HTTP、DOM、浏览器操作、日志和 axe-core 等硬事实由确定性工具检查；视觉、交互和产品完成度由双 Judge 按 Rubric 评价，并保留截图和交互证据；**人工校准**结合 Gold、缺陷注入、重复检查和盲评。\n\n正式 Pilot 覆盖 6 个模型、6 类任务和 36 次运行，完成 18 份盲评，并输出分项证据、场景差异、共同风险和优化建议。它已经从 MVP 推进到受控 Pilot，但不是生产平台，也不是行业权威排行榜。",
     next: ["baidu_metrics", "baidu_reliability", "baidu_contribution"],
   }),
   define({
@@ -248,14 +248,14 @@ export const questionContracts: QuestionContract[] = [
     dimensions: ["当前证据", "校准方法", "失败转人工"], knowledge: ["K24", "K25"], length: { min: 310, max: 480 },
     goal: "用当前校准证据说明可靠性，同时准确解释样本边界。", thesis: "评测器已具备受控 Pilot 所需的基础可靠性，但主观判断仍需要人工校准。",
     required: ["6/6 Gold 与 10/10 确定性缺陷", "重复一致性与主观敏感度", "人工样本边界"], direct: ["Gold", "一致性", "人工"],
-    fallback: "我会把可信度拆成三层。**硬检查校准**中，6/6 个 Gold 样例通过，10/10 个确定性缺陷被检出，重复自动检查一致性为 100%；主观缺陷方向敏感度是 5/6，漏掉了较弱的信息层级问题。\n\n**人工样本边界**也必须说明：Auto-Judge Spearman 为 0.6191，Judge-Human 为 0.4599。我把它解释为初步判别力，而不是“已经和人一样可靠”，因为人工评分只有 18 份、由一人完成且抽样不均。\n\n因此，硬事实优先用确定性工具，开放体验保留证据，冲突和低置信度结果转人工，同时继续扩充均衡 Gold 和回归集。评测器可以支持当前 Pilot，但不能替代人。",
+    fallback: "我会把可信度拆成三层。**硬检查校准**中，6/6 个 Gold 样例通过，10/10 个确定性缺陷被检出，重复自动检查一致性为 100%；主观缺陷方向敏感度是 5/6，漏掉了较弱的信息层级问题。\n\n**人工样本边界**也必须说明：Auto-Judge Spearman 为 0.6191，Judge-Human 为 0.4599。我把它解释为初步判别力，而不是“已经和人一样可靠”，因为目前还没有规模足够、分布均衡的**人工黄金集**；现有人工评分只有 18 份、由一人完成且抽样不均，也需要继续观察误报和漏报。\n\n因此，硬事实优先用确定性工具，开放体验保留证据，冲突和低置信度结果转人工，同时继续扩充均衡 Gold 和回归集。评测器可以支持当前 Pilot，但尚未能替代人。",
     next: ["baidu_metrics", "baidu_badcase", "baidu_project"],
   }),
   define({
-    id: "project_contribution", question: "你在 RAG 项目中负责哪些核心工作？", aliases: ["你在代表项目中负责哪些核心工作？", "他在代表项目中负责哪些核心工作？", "你在 RAG 项目中的个人贡献是什么？", "你的核心贡献是什么？", "他在 RAG 项目中负责什么？", "你在这个项目中最关键的产品取舍是什么？", "最难的产品取舍是什么？"], topic: "rag", facet: "contribution",
+    id: "project_contribution", question: "你在 RAG 项目中负责哪些核心工作？", aliases: ["你在代表项目中负责哪些核心工作？", "他在代表项目中负责哪些核心工作？", "你在 RAG 项目中的个人贡献是什么？", "你的核心贡献是什么？", "他在 RAG 项目中负责什么？", "这个项目中你本人做了什么？", "你在这个项目中最关键的产品取舍是什么？", "最难的产品取舍是什么？"], topic: "rag", facet: "contribution",
     dimensions: ["本人判断", "核心行动", "验收责任"], knowledge: ["K27", "K28", "K29", "K31"], stories: ["ST10", "ST1"], shape: "contribution", length: { min: 330, max: 520 }, forbidden: ["deepflow", "local_tools", "audit"],
     goal: "清楚区分候选人判断与 AI 工具协作。", thesis: "我在 RAG 项目中负责的核心不是堆功能，而是决定做什么、为什么这样取舍以及如何验收。",
-    required: ["产品定位", "检索和评测取舍", "整体推进与验收"], direct: ["负责", "取舍", "验收"],
+    required: ["产品定位", "检索和评测取舍", "整体推进与验收"], direct: ["贡献", "负责", "取舍", "验收"],
     fallback: "我在百川医疗 RAG 项目中负责把业务需求、产品规则和质量验证连成闭环。**需求与 MVP**方面，我参与梳理知识库管理、幻觉风险和来源核验需求，把 P0 收敛为知识入库、检索问答、来源返回和失败状态。\n\n功能设计阶段，我参与文档处理、知识库、Dense 加 Rerank、短期记忆和多助手配置，重点定义用户入口、流程状态、配置边界、异常分支和验收标准，并与算法、研发对齐。我的职责不是独立实现检索算法，而是让技术组件服务于清楚的用户任务。\n\n**四维评测闭环**方面，我参与 QA 数据、LLM-as-Judge 打分和报告输出，让问题能回到召回、排序或生成环节。公开 Demo 使用外部模型和 AI 工具做脱敏重构，但需求取舍、评测标准和事实边界由我负责。",
     next: ["rag_methods", "evaluation", "ai_coding"],
   }),
@@ -432,7 +432,7 @@ export const questionContracts: QuestionContract[] = [
     id: "rag_architecture", question: "你的 RAG 项目如何设计混合检索和引用溯源？", aliases: ["RAG 项目的混合检索和引用溯源是怎样设计的？"], topic: "rag", facet: "architecture",
     dimensions: ["当前检索链路", "BM25 规划", "来源与评测"], knowledge: ["K29", "K31", "K4"], stories: ["ST1"], forbidden: ["deepflow", "audit", "local_tools"], length: { min: 300, max: 470 }, goal: "讲清 RAG 当前 Dense 加 Rerank 和来源片段实现，并区分 BM25 与完整引用规划。",
     thesis: "当前实现是稠密向量召回加 Rerank，并返回来源片段；BM25 混合检索与更完整的原文定位仍需实验。", required: ["Dense Retrieval 加 Rerank", "BM25 尚未落地", "来源片段和评测"], direct: ["Dense Retrieval", "Rerank", "来源片段"],
-    fallback: "当前检索链路是先用 **Dense Retrieval** 扩大候选，再通过 **Rerank 精排**，将前排证据片段交给模型生成答案并返回来源片段。产品侧重点是用固定问题集同时检查证据召回、前排精度、最终回答、延迟和成本，并把失败样本区分为召回遗漏、排序错误或生成偏离。\n\nBM25 对药名、缩写和编号等精确词有价值，但当前还没有完整落地为混合检索，需要与现有基线做单变量对照后再决定融合方式。\n\n来源方面，当前能确认的是片段和元数据返回；PDF 页码高亮与一键定位原文仍是进一步完善方向。四维评测用于发现趋势，但 Judge 不是绝对真值，仍需固定配置和人工校准。",
+    fallback: "当前检索链路是先用 **Dense Retrieval** 扩大候选，再通过 **Rerank 精排**，将前排证据片段交给模型生成答案并返回来源片段，形成基础的**引用溯源**。产品侧重点是用固定问题集同时检查证据召回、前排精度、最终回答、延迟和成本，并把失败样本区分为召回遗漏、排序错误或生成偏离。\n\nBM25 对药名、缩写和编号等精确词有价值，但当前还没有完整落地为混合检索，需要与现有基线做单变量对照后再决定融合方式。\n\n来源方面，当前能确认的是片段和元数据返回；PDF 页码高亮与一键定位原文仍是进一步完善方向。四维评测用于发现趋势，但 Judge 不是绝对真值，仍需固定配置和人工校准。",
     next: ["rag_methods", "evaluation", "project_contribution"],
   }),
   define({

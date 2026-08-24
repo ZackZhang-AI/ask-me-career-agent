@@ -130,8 +130,23 @@ test("质量门禁拒绝只有栏目作用的加黑词语", () => {
   assert.equal(validateAnswer(lowInformation, plan).triggers.includes("low_information_emphasis"), true);
 });
 
+test("主项目公开事实中允许出现关联技术主题", () => {
+  const deepFlowQuestion = "介绍 DeepFlow 多 Agent 研究项目。";
+  const deepFlow = matchStableAnswer(deepFlowQuestion);
+  assert.ok(deepFlow);
+  const deepFlowPlan = buildAnswerPlan(
+    deepFlowQuestion,
+    retrieveKnowledge(deepFlowQuestion),
+    deepFlow,
+  );
+  const triggers = validateAnswer(deepFlow.standardAnswer, deepFlowPlan).triggers;
+  assert.equal(triggers.includes("forbidden_topic:rag"), false);
+});
+
 test("长篇契约回答至少保留两个阅读重点", () => {
-  const underformatted = plan.fallbackAnswer.replace("**医疗私有文档可信问答**", "医疗私有文档可信问答");
+  const underformatted = plan.fallbackAnswer
+    .replace("**医疗私有文档可信问答**", "医疗私有文档可信问答")
+    .replace("**质量基线**", "质量基线");
   assert.equal(validateAnswer(underformatted, plan).triggers.includes("insufficient_emphasis"), true);
 });
 

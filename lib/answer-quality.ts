@@ -32,6 +32,14 @@ const TOPIC_TERMS: Partial<Record<AnswerPlan["topic"], string[]>> = {
   statistics: ["应用统计学", "统计学背景"],
 };
 
+function forbiddenTopicLeak(topic: AnswerPlan["topic"], candidate: string, allowedText: string) {
+  const terms = TOPIC_TERMS[topic] ?? [];
+  const allowedLower = allowedText.toLowerCase();
+  if (terms.some((term) => allowedLower.includes(term.toLowerCase()))) return undefined;
+  const candidateLower = candidate.toLowerCase();
+  return terms.find((term) => candidateLower.includes(term.toLowerCase()));
+}
+
 const RISKY_CLAIMS = [
   "校园数据门户",
   "满意度",
@@ -265,7 +273,7 @@ export function validateAnswer(candidate: string, plan: AnswerPlan): QualityGate
   }
 
   for (const topic of plan.forbiddenTopics) {
-    const leaked = (TOPIC_TERMS[topic] ?? []).find((term) => clean.toLowerCase().includes(term.toLowerCase()));
+    const leaked = forbiddenTopicLeak(topic, clean, allowedText);
     if (leaked) triggers.push(`forbidden_topic:${topic}`);
   }
 
@@ -355,7 +363,7 @@ export function validateAnswerFragment(candidate: string, plan: AnswerPlan, sent
     if (!allowedNumbers.has(number)) triggers.push("unsupported_number");
   }
   for (const topic of plan.forbiddenTopics) {
-    const leaked = (TOPIC_TERMS[topic] ?? []).find((term) => candidate.toLowerCase().includes(term.toLowerCase()));
+    const leaked = forbiddenTopicLeak(topic, candidate, allowedText);
     if (leaked) triggers.push(`forbidden_topic:${topic}`);
   }
   for (const detail of plan.forbiddenDetails) {
