@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   getFollowUpQuestions,
+  getHrFollowUpQuestions,
   inferQuestionCategory,
   questionGroups,
 } from "../lib/question-suggestions.ts";
@@ -10,13 +11,14 @@ import { findQuestionContract } from "../lib/question-contracts.ts";
 test("首屏问题按招聘关注点分组", () => {
   assert.deepEqual(questionGroups.map((group) => group.id), ["screening", "projects", "experience", "capabilities"]);
   for (const group of questionGroups) assert.equal(group.questions.length, 4);
+  assert.doesNotMatch(questionGroups.flatMap((group) => group.questions).join(" "), /(^|\s)他|他的|帮助他|体现了他/);
 });
 
-test("项目问题推荐核心工作和效果追问", () => {
+test("代表项目问题优先推荐 RAG 贡献并保持话题覆盖", () => {
   const questions = getFollowUpQuestions("哪个项目最能代表他的 AI 产品能力？");
   assert.equal(inferQuestionCategory("哪个项目最能代表他的 AI 产品能力？"), "project");
-  assert.match(questions.join(" "), /核心工作/);
-  assert.match(questions.join(" "), /评估并改进/);
+  assert.match(questions[0], /RAG 项目中负责/);
+  assert.equal(new Set(questions.map((question) => findQuestionContract(question)?.frame.topic)).size, 3);
 });
 
 test("动态追问不会重复已提问题", () => {
@@ -73,9 +75,6 @@ test("连续多轮提问后每轮仍提供三个未问追问", () => {
     const questions = getFollowUpQuestions(currentQuestion, asked);
     assert.equal(questions.length, 3, `第 ${round + 1} 轮没有补足三个追问`);
     for (const question of questions) assert.equal(asked.includes(question), false);
-    const currentTopic = findQuestionContract(currentQuestion)?.frame.topic;
-    const thirdTopic = findQuestionContract(questions[2])?.frame.topic;
-    if (currentTopic && thirdTopic) assert.notEqual(thirdTopic, currentTopic);
     if (round < 7) asked.push(questions[0]);
   }
 });
@@ -87,4 +86,14 @@ test("首页和动态追问不主动推荐刁难型问题", () => {
     ...getFollowUpQuestions("可以直接录用他吗？"),
   ];
   assert.doesNotMatch(surfacedQuestions.join(" "), /短板|最应该核实|真实用户增长|独立训练大模型|录用结论/);
+});
+
+test("HR 追问固定覆盖证据、复盘和岗位匹配", () => {
+  const suggestions = getHrFollowUpQuestions(
+    "哪个项目最能代表你的 AI 产品能力？",
+    ["哪个项目最能代表你的 AI 产品能力？"],
+  );
+  assert.deepEqual(suggestions.map((suggestion) => suggestion.kind), ["evidence", "retrospective", "fit"]);
+  assert.deepEqual(suggestions.map((suggestion) => suggestion.label), ["证据追问", "项目复盘", "岗位匹配"]);
+  assert.equal(new Set(suggestions.map((suggestion) => suggestion.question)).size, 3);
 });

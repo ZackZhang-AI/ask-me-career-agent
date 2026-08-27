@@ -2,8 +2,15 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { buildAnswerPlan, demoAnswer, systemPrompt } from "../lib/answer.ts";
 import { validateAnswer } from "../lib/answer-quality.ts";
+import { resolveDeepSeekBaseURL } from "../lib/deepseek.ts";
 import { assessQuestion, redactForLog } from "../lib/guardrails.ts";
 import { claims, getRelatedStarStories, knowledge, matchStableAnswer, resolveRetrievalQuery, retrieveKnowledge, sources } from "../lib/knowledge.ts";
+
+test("DeepSeek 地址为空时使用官方地址", () => {
+  assert.equal(resolveDeepSeekBaseURL(""), "https://api.deepseek.com");
+  assert.equal(resolveDeepSeekBaseURL("   "), "https://api.deepseek.com");
+  assert.equal(resolveDeepSeekBaseURL("https://example.com/v1"), "https://example.com/v1");
+});
 
 test("召回岗位匹配知识并保留证据边界", () => {
   const result = retrieveKnowledge("他与 AI 产品经理岗位的匹配证据是什么？");
@@ -63,7 +70,7 @@ test("稳定回答由回答卡自然说明完成边界，不追加机械尾注",
   const normal = demoAnswer("哪个项目最能代表他的 AI 产品能力？", [], stable);
   const boundary = demoAnswer("哪个项目最能代表他的 AI 产品能力？请说明当前完成边界。", [], stable);
   assert.doesNotMatch(normal, /\*\*当前阶段\*\*/);
-  assert.match(boundary, /Dense Retrieval|主链路/);
+  assert.match(boundary, /Dense Retrieval|持续迭代/);
   assert.doesNotMatch(boundary, /\*\*当前阶段\*\*/);
 });
 
@@ -73,8 +80,11 @@ test("招聘高频表达稳定匹配对应面试回答", () => {
   assert.equal(matchStableAnswer("你在 RAG 项目里具体做了什么？")?.id, "A05");
   assert.equal(matchStableAnswer("你是如何评测 RAG 效果的？")?.id, "A05");
   assert.equal(matchStableAnswer("AI 编程占比多少？")?.id, "A07");
+  assert.equal(matchStableAnswer("你的项目里 AI 编程工具承担了多少工作？请说明你本人判断与 AI 辅助的边界。")?.id, "A07");
+  assert.equal(matchStableAnswer("你的 RAG 项目服务什么用户、解决什么问题，目前有什么价值？")?.id, "A04");
   assert.equal(matchStableAnswer("请讲一个失败案例。")?.id, "A15");
   assert.equal(matchStableAnswer("你建议让他进入下一轮吗？")?.id, "A20");
+  assert.equal(matchStableAnswer("为什么面试官应该让你进入下一轮？请用能力和经历说明。")?.id, "A20");
 });
 
 test("只有被问到短板或边界时，回退回答才自然补充限制", () => {
@@ -89,9 +99,9 @@ test("项目挑战类问题自动调用对应公开 STAR 故事", () => {
   const stories = getRelatedStarStories(items);
   const answer = demoAnswer("RAG 项目遇到什么挑战？", items);
   assert.equal(stories[0]?.relatedProject, "rag-knowledge-base");
-  assert.match(answer, /RAG 项目早期/);
+  assert.match(answer, /医疗私有文档|医疗知识问答/);
   assert.match(answer, /\*\*我的行动\*\*/);
-  assert.match(answer, /基线|控制变量/);
+  assert.match(answer, /Rerank|四维评测/);
   assert.doesNotMatch(answer, /\[S\d+\]|证据边界/);
 });
 
@@ -210,7 +220,8 @@ test("深层指代变体继承最近项目且不误匹配固定项目介绍", ()
     const plan = buildAnswerPlan(question, items, undefined, history);
     assert.equal(plan.intent, "diagnosis", question);
     assert.match(plan.fallbackAnswer, /先查评测|再拆链路|单变量验证/, question);
-    assert.equal(validateAnswer(plan.fallbackAnswer, plan).passed, true, question);
+    const gate = validateAnswer(plan.fallbackAnswer, plan);
+    assert.equal(gate.passed, true, `${question}: ${gate.triggers.join(", ")}`);
   }
 
   const diagnosticItems = retrieveKnowledge(questions[0], { history, limit: 4 });
@@ -265,10 +276,12 @@ test("联系方式不进入模型知识库", () => {
   assert.equal(context.includes("15812106204"), false);
 });
 
-test("未确认的占位经历不进入公开知识库", () => {
+test("确认的百度经历进入公开知识库且未确认占位不进入", () => {
   const context = JSON.stringify({ knowledge, claims });
   assert.equal(context.includes("2026.X"), false);
-  assert.equal(context.includes("百度"), false);
+  assert.equal(context.includes("百度"), true);
+  assert.equal(context.includes("待本人校核"), false);
+  assert.equal(context.includes("规划口径"), false);
 });
 
 test("代表项目拥有外部可定位的 GitHub 来源", () => {

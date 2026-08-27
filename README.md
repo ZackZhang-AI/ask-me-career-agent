@@ -2,7 +2,7 @@
 
 张倬玮的 AI Career Agent。它面向 AI 产品招聘经理和业务面试官，通过静态摘要、可追问对话、事实来源与能力边界，帮助招聘方快速获得可验证的候选人信息。
 
-在线演示：[ask-me-career-agent.vercel.app](https://ask-me-career-agent.vercel.app)。Production 使用服务端 DeepSeek、Upstash、Neon 与 Vercel Blob；最新版简历始终通过 `/resume` 访问。
+在线演示：[ask-me-career-agent.vercel.app](https://ask-me-career-agent.vercel.app)。Production 使用 DeepSeek 官方 API、Upstash、Neon 与 Vercel Blob；最新版简历始终通过 `/resume` 访问。
 
 ## 产品预览
 
@@ -62,14 +62,15 @@ copy .env.example .env.local
 npm run dev
 ```
 
-未配置 `DEEPSEEK_API_KEY` 时，产品自动使用本地公开知识库的演示回答。配置后，`/api/chat` 会在服务端调用 DeepSeek，密钥不会进入浏览器。
+模型通过服务端 `DEEPSEEK_API_KEY` 直连 DeepSeek 官方 API。固定问题和精确契约使用经过验证的快速回答；低风险开放题由 Flash 真实流式生成并逐片段执行事实检查，高风险事实题由 Flash 生成、Pro 审校后展示。模型服务不可用时不会用低质量本地片段冒充开放题答案。
 
-内容统一维护在 `content/`，启动和构建时由 Zod 校验状态、可见性以及 Claim-Source 引用完整性。8 个已确认 STAR 与 9 条 Obsidian 白名单知识参与公开检索，未审核内容仍保持隔离。
+内容统一维护在 `content/`，启动和构建时由 Zod 校验状态、可见性以及 Claim-Source 引用完整性。11 个已确认 STAR 与 9 条 Obsidian 白名单知识参与公开检索，未审核内容仍保持隔离。
 
 ## 环境变量
 
-- `DEEPSEEK_API_KEY`：DeepSeek 服务端密钥。
-- `DEEPSEEK_MODEL`：默认 `deepseek-v4-flash`。
+- `DEEPSEEK_API_KEY`：DeepSeek 官方 API 服务端密钥，必须设置为 Sensitive。
+- `AI_PRIMARY_MODEL`：默认 `deepseek-v4-flash`，负责问题规划和回答生成。
+- `AI_FALLBACK_MODEL`：默认 `deepseek-v4-pro`，负责瞬时故障回退和最终强制审校。
 - `CHAT_DISABLED`：紧急关闭模型问答。
 - `DAILY_REQUEST_LIMIT`、`DAILY_TOKEN_LIMIT`：每日请求与 Token 预算。
 - `UPSTASH_REDIS_REST_URL`、`UPSTASH_REDIS_REST_TOKEN`：跨实例限流。
@@ -95,7 +96,10 @@ npm test
 npm run lint
 npm run build
 npm run eval:interview
+npm run quality:report -- --days 7
 ```
+
+本地 `eval:interview` 是确定性发布门禁；显式模型预演复用线上 DeepSeek 的分级生成与审校链路。匿名质量报告按主题、回答维度、交付模式和模型路径汇总结果，并统计澄清、拒答、服务异常、阶段耗时与枚举反馈，不保存问题或回答正文。
 
 PRD 验收与完整评测设计见 `tests/prd-evaluation-draft.md`。
 
@@ -105,7 +109,7 @@ Vercel、Upstash、Neon、Blob、Cron 和 Preview 到 Production 流程见 `docs
 
 知识库已纳入候选人授权公开的教育、技能、审计经历和项目资料，并用 GitHub 仓库验证公开项目存在。GitHub 不能单独证明个人贡献比例、生产规模或业务效果，这些内容仍标记为待面试核实。联系方式独立于模型上下文，不进入检索和问题日志。
 
-当前 8 个 STAR 已采用公开面试口径；Obsidian 只发布 RAG 与 DeepFlow 的 9 条审核通过内容。AI 角色预演只作为发布回归，不包装成真人反馈，后续仍需真人软测试验证招聘转化。
+当前 11 个 STAR 已采用公开面试口径；Obsidian 只发布 RAG 与 DeepFlow 的 9 条审核通过内容。AI 角色预演只作为发布回归，不包装成真人反馈，后续仍需真人软测试验证招聘转化。
 
 ## 个人知识库
 

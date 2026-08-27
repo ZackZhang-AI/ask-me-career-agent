@@ -10,6 +10,9 @@ export async function POST(request: NextRequest) {
     const raw = await request.text();
     if (new TextEncoder().encode(raw).byteLength > MAX_EVENT_BYTES) return new Response(null, { status: 413 });
     const body: unknown = JSON.parse(raw);
+    if (body && typeof body === "object" && "event" in body && body.event === "answer_generated") {
+      return new Response(null, { status: 204 });
+    }
     after(() => persistEvent(body));
   } catch { /* Analytics must never block the product flow. */ }
   return new Response(null, { status: 204 });

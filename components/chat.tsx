@@ -1,54 +1,69 @@
 "use client";
 
-import { FormEvent, KeyboardEvent, useEffect, useRef, useState } from "react";
+import { FormEvent, KeyboardEvent, useCallback, useEffect, useRef, useState } from "react";
 import {
+  ArrowDownIcon,
   ArrowUpIcon,
   ArrowUpRightIcon,
-  CaretDownIcon,
   CheckCircleIcon,
   EnvelopeSimpleIcon,
   FileTextIcon,
   GithubLogoIcon,
   HouseIcon,
   PhoneIcon,
+  SparkleIcon,
   StopIcon,
 } from "@phosphor-icons/react";
+import { AnswerActions } from "./answer-actions";
+import { EvidencePanel } from "./evidence-panel";
 import { FormattedAnswer } from "./formatted-answer";
+import { useConversationControl } from "./conversation-control";
+import { useThinkingStatus } from "./use-thinking-status";
+import { useStreamReveal } from "./use-stream-reveal";
 import { featuredProjects, profile } from "@/lib/profile";
 import { getBrowserSessionId } from "@/lib/client-session";
+import { isNearScrollBottom, prepareQuestionMessages } from "@/lib/chat-session";
+import type { ConversationMessage } from "@/lib/conversation-history";
 import {
-  getFollowUpQuestions,
+  getHrFollowUpQuestions,
   inferQuestionCategory,
   questionGroups,
   type QuestionGroupId,
 } from "@/lib/question-suggestions";
-import type { ChatMessage, KnowledgeItem, ResponseStatus, Source } from "@/lib/types";
+import type { PresetAnswerPacket, StreamFailureType } from "@/lib/types";
 
-interface DisplayMessage extends ChatMessage {
-  sources?: Source[];
-  items?: KnowledgeItem[];
-  mode?: "live" | "stable" | "demo" | "guardrail";
-  responseStatus?: ResponseStatus;
-  claimIds?: string[];
-  sourceIds?: string[];
-  latencyMs?: number;
-  followUpQuestions?: string[];
+interface ChatProps {
+  presetAnswers: PresetAnswerPacket[];
 }
 
-const verificationLabels = {
-  externally_verified: "外部可定位",
-  self_attested: "候选人确认",
-  unverified: "尚未验证",
-} as const;
+const feedbackReasons = [
+  { id: "not_relevant", label: "答非所问" },
+  { id: "not_specific", label: "不够具体" },
+  { id: "repetitive", label: "内容重复" },
+  { id: "missing_evidence", label: "证据不足" },
+] as const;
 
-const statusLabels = {
-  completed: "已完成",
-  in_progress: "进行中",
-  planned: "规划中",
-  archived: "已归档",
-} as const;
+const PRESET_THINKING_MS = 420;
 
-function track(event: string, sessionId: string, detail = "", metadata: Partial<DisplayMessage> & { questionCategory?: string } = {}) {
+function waitFor(ms: number, signal: AbortSignal) {
+  return new Promise<void>((resolve, reject) => {
+    if (signal.aborted) {
+      reject(new DOMException("Aborted", "AbortError"));
+      return;
+    }
+    const onAbort = () => {
+      window.clearTimeout(timer);
+      reject(new DOMException("Aborted", "AbortError"));
+    };
+    const timer = window.setTimeout(() => {
+      signal.removeEventListener("abort", onAbort);
+      resolve();
+    }, ms);
+    signal.addEventListener("abort", onAbort, { once: true });
+  });
+}
+
+function track(event: string, sessionId: string, detail = "", metadata: Partial<ConversationMessage> & { questionCategory?: string } = {}) {
   void fetch("/api/events", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -57,50 +72,127 @@ function track(event: string, sessionId: string, detail = "", metadata: Partial<
       sessionId,
       detail,
       responseStatus: metadata.responseStatus,
+      disposition: metadata.disposition,
       claimIds: metadata.claimIds,
       sourceIds: metadata.sourceIds,
       latencyMs: metadata.latencyMs,
+      firstTokenLatencyMs: metadata.firstTokenLatencyMs,
+      deliveryPath: metadata.deliveryPath,
+      contractId: metadata.contractId,
       questionCategory: metadata.questionCategory,
     }),
     keepalive: true,
   });
 }
 
-export function Chat() {
-  const [messages, setMessages] = useState<DisplayMessage[]>([]);
+export function Chat({ presetAnswers }: ChatProps) {
+  const [messages, setMessages] = useState<ConversationMessage[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [retryQuestion, setRetryQuestion] = useState("");
   const [activeQuestionGroup, setActiveQuestionGroup] = useState<QuestionGroupId>("screening");
   const [answerFeedback, setAnswerFeedback] = useState<Record<number, "helpful" | "not_helpful">>({});
+  const [answerFeedbackReason, setAnswerFeedbackReason] = useState<Record<number, string>>({});
+  const [copiedAnswer, setCopiedAnswer] = useState<number | null>(null);
+  const [expandedEvidence, setExpandedEvidence] = useState<Record<number, boolean>>({});
+  const [showScrollToLatest, setShowScrollToLatest] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   const conversationEpochRef = useRef(0);
+  const chatScrollRef = useRef<HTMLDivElement | null>(null);
   const messageEndRef = useRef<HTMLDivElement | null>(null);
+  const inputRef = useRef<HTMLTextAreaElement | null>(null);
+  const shouldFollowRef = useRef(true);
+  const handledCommandRef = useRef(0);
+  const { command, persistConversation } = useConversationControl();
+  const { thinkingLabel, startThinking, updateThinkingStage, clearThinkingTimers } = useThinkingStatus();
+  const { startReveal, enqueueReveal, finishReveal, cancelReveal } = useStreamReveal();
 
   useEffect(() => {
-    messageEndRef.current?.scrollIntoView({ block: "end" });
+    if (!shouldFollowRef.current) return;
+    const frame = requestAnimationFrame(() => messageEndRef.current?.scrollIntoView({ block: "end" }));
+    return () => cancelAnimationFrame(frame);
   }, [messages]);
 
-  useEffect(() => () => abortRef.current?.abort(), []);
+  useEffect(() => () => {
+    clearThinkingTimers();
+    abortRef.current?.abort();
+    cancelReveal();
+  }, [cancelReveal, clearThinkingTimers]);
 
-  async function send(question: string, fromSuggestion = false) {
+  const send = useCallback(async (
+    question: string,
+    fromSuggestion = false,
+    retry = false,
+    baseMessages?: ConversationMessage[],
+  ) => {
     const clean = question.trim();
     if (!clean || loading) return;
+    const currentMessages = baseMessages ?? messages;
     const sessionId = getBrowserSessionId();
     const conversationEpoch = conversationEpochRef.current;
+    const startedAt = performance.now();
 
     setInput("");
     setError("");
+    setRetryQuestion("");
     setLoading(true);
-    const userMessage: DisplayMessage = { role: "user", content: clean };
-    const nextMessages = [...messages, userMessage];
+    shouldFollowRef.current = true;
+    setShowScrollToLatest(false);
+    startThinking();
+    const nextMessages = baseMessages
+      ? [...baseMessages, { role: "user" as const, content: clean }]
+      : prepareQuestionMessages(currentMessages, clean, retry) as ConversationMessage[];
     setMessages([...nextMessages, { role: "assistant", content: "" }]);
+    persistConversation(nextMessages);
     track(fromSuggestion ? "suggestion_clicked" : "question_sent", sessionId, "", { questionCategory: inferQuestionCategory(clean) });
-    if (messages.some((message) => message.role === "user")) track("followup_sent", sessionId);
+    if (!retry && currentMessages.some((message) => message.role === "user")) track("followup_sent", sessionId);
 
     const abort = new AbortController();
     abortRef.current = abort;
+    let shouldFocusAfterCompletion = false;
+    let discardPartial = false;
+    let renderMetadata: Partial<ConversationMessage> = {};
+    startReveal((visibleText) => {
+      if (conversationEpoch !== conversationEpochRef.current) return;
+      setMessages([...nextMessages, { role: "assistant", content: visibleText, ...renderMetadata }]);
+    });
     try {
+      const preset = !retry && currentMessages.length === 0
+        ? presetAnswers.find((answer) => answer.question === clean)
+        : undefined;
+      if (preset) {
+        await waitFor(PRESET_THINKING_MS, abort.signal);
+        if (conversationEpoch !== conversationEpochRef.current) return;
+        const streamingMetadata: Partial<ConversationMessage> = {
+          mode: preset.mode,
+          disposition: preset.disposition,
+          claimIds: preset.claimIds,
+          sourceIds: preset.sourceIds,
+          contractId: preset.contractId,
+          deliveryPath: "preset",
+          firstTokenLatencyMs: Math.round(performance.now() - startedAt),
+        };
+        renderMetadata = streamingMetadata;
+        enqueueReveal(preset.content);
+        const answer = await finishReveal();
+        if (conversationEpoch !== conversationEpochRef.current) return;
+        const completedMetadata: Partial<ConversationMessage> = {
+          ...streamingMetadata,
+          sources: preset.sources,
+          responseStatus: preset.responseStatus,
+          disposition: preset.disposition,
+          citations: preset.citations,
+          followUpQuestions: preset.followUpQuestions,
+          latencyMs: Math.round(performance.now() - startedAt),
+        };
+        const completedMessages = [...nextMessages, { role: "assistant" as const, content: answer, ...completedMetadata }];
+        setMessages(completedMessages);
+        persistConversation(completedMessages);
+        track("answer_completed", sessionId, "", { ...completedMetadata, questionCategory: inferQuestionCategory(clean) });
+        return;
+      }
+
       const response = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -119,7 +211,86 @@ export function Chat() {
       const decoder = new TextDecoder();
       let buffer = "";
       let answer = "";
-      let metadata: Partial<DisplayMessage> = {};
+      let receivedDone = false;
+      let metadata: Partial<ConversationMessage> = {};
+      const consumeStreamEvent = (event: {
+        type?: string;
+        content?: string;
+        sources?: ConversationMessage["sources"];
+        items?: ConversationMessage["items"];
+        mode?: ConversationMessage["mode"];
+        responseStatus?: ConversationMessage["responseStatus"];
+        disposition?: ConversationMessage["disposition"];
+        modelPath?: ConversationMessage["modelPath"];
+        deliveryMode?: ConversationMessage["deliveryMode"];
+        degraded?: boolean;
+        claimIds?: string[];
+        sourceIds?: string[];
+        citations?: ConversationMessage["citations"];
+        followUpQuestions?: string[];
+        latencyMs?: number;
+        stage?: "understanding" | "checking_evidence" | "writing_answer" | "reviewing_answer";
+        message?: string;
+        retryable?: boolean;
+        discardPartial?: boolean;
+        failureType?: StreamFailureType;
+      }) => {
+        if (event.type === "meta") {
+          metadata = {
+            ...metadata,
+            sources: event.sources,
+            items: event.items,
+            mode: event.mode,
+            responseStatus: event.responseStatus,
+            disposition: event.disposition,
+            modelPath: event.modelPath,
+            deliveryMode: event.deliveryMode,
+            degraded: event.degraded,
+            claimIds: event.claimIds,
+            sourceIds: event.sourceIds,
+            citations: event.citations,
+            followUpQuestions: event.followUpQuestions,
+          };
+          renderMetadata = {
+            ...renderMetadata,
+            mode: event.mode,
+            disposition: event.disposition,
+            modelPath: event.modelPath,
+            deliveryMode: event.deliveryMode,
+            degraded: event.degraded,
+            claimIds: event.claimIds,
+            sourceIds: event.sourceIds,
+          };
+        }
+        if (event.type === "stage") {
+          updateThinkingStage(event.stage ?? "understanding");
+        }
+        if (event.type === "delta") {
+          if (!answer) metadata = {
+            ...metadata,
+            deliveryPath: "api",
+            firstTokenLatencyMs: Math.round(performance.now() - startedAt),
+          };
+          const content = event.content ?? "";
+          answer += content;
+          renderMetadata = {
+            ...renderMetadata,
+            deliveryPath: "api",
+            firstTokenLatencyMs: metadata.firstTokenLatencyMs,
+          };
+          enqueueReveal(content);
+        }
+        if (event.type === "done") {
+          receivedDone = true;
+          metadata = { ...metadata, responseStatus: event.responseStatus, disposition: event.disposition, latencyMs: event.latencyMs, modelPath: event.modelPath, deliveryMode: event.deliveryMode, degraded: event.degraded };
+          if (event.disposition === "clarify") shouldFocusAfterCompletion = true;
+        }
+        if (event.type === "error") {
+          discardPartial = event.discardPartial === true
+            && (event.failureType === "hard_safety" || event.failureType === "transport_interrupted");
+          throw new Error(event.message ?? "问答服务返回异常。");
+        }
+      };
       while (true) {
         const { done, value } = await reader.read();
         if (conversationEpoch !== conversationEpochRef.current) {
@@ -132,56 +303,150 @@ export function Chat() {
         buffer = rows.pop() ?? "";
         for (const row of rows) {
           if (!row.trim()) continue;
-          const event = JSON.parse(row);
-          if (event.type === "meta") metadata = {
-            sources: event.sources,
-            items: event.items,
-            mode: event.mode,
-            responseStatus: event.responseStatus,
-            claimIds: event.claimIds,
-            sourceIds: event.sourceIds,
-            followUpQuestions: event.followUpQuestions,
-          };
-          if (event.type === "delta") answer += event.content;
-          if (event.type === "done") metadata = { ...metadata, responseStatus: event.responseStatus, latencyMs: event.latencyMs };
-          if (event.type === "error") throw new Error(event.message);
-          setMessages([...nextMessages, { role: "assistant", content: answer, ...metadata }]);
+          consumeStreamEvent(JSON.parse(row));
         }
       }
+      buffer += decoder.decode();
+      if (buffer.trim()) consumeStreamEvent(JSON.parse(buffer));
+      if (!answer.trim()) throw new Error("没有收到有效回答，请重试。");
+      if (!receivedDone) throw new Error("回答连接提前结束，请重试。");
+      await finishReveal();
+      if (conversationEpoch !== conversationEpochRef.current) return;
+      const completedMessages = [...nextMessages, { role: "assistant" as const, content: answer, ...metadata }];
+      setMessages(completedMessages);
+      persistConversation(completedMessages);
       track("answer_completed", sessionId, "", { ...metadata, questionCategory: inferQuestionCategory(clean) });
     } catch (caught) {
       if (conversationEpoch !== conversationEpochRef.current) return;
+      cancelReveal();
+      setRetryQuestion(clean);
       if (caught instanceof Error && caught.name === "AbortError") {
-        setError("已停止生成，你可以修改问题后重试。");
+        setError("回答未完整生成，已按你的操作停止。");
       } else {
         const message = caught instanceof Error ? caught.message : "出现未知错误，请重试。";
-        setError(message);
+        setError(message.startsWith("抱歉") ? message : `回答未完整生成。${message}`);
         track("chat_error", sessionId, message);
       }
-      setMessages((current) => current.filter((message) => message.content));
+      setMessages((current) => {
+        const withoutPartial = discardPartial ? current.slice(0, -1) : current;
+        const completed = withoutPartial.filter((message) => message.content);
+        persistConversation(completed);
+        return completed;
+      });
     } finally {
       if (conversationEpoch === conversationEpochRef.current) {
+        clearThinkingTimers();
         setLoading(false);
         abortRef.current = null;
+        if (shouldFocusAfterCompletion) {
+          requestAnimationFrame(() => requestAnimationFrame(() => inputRef.current?.focus()));
+        }
       }
     }
-  }
+  }, [cancelReveal, clearThinkingTimers, enqueueReveal, finishReveal, loading, messages, persistConversation, presetAnswers, startReveal, startThinking, updateThinkingStage]);
 
-  function returnHome() {
+  const resetConversation = useCallback(() => {
     conversationEpochRef.current += 1;
+    clearThinkingTimers();
     abortRef.current?.abort();
+    cancelReveal();
     abortRef.current = null;
     setMessages([]);
     setInput("");
     setError("");
+    setRetryQuestion("");
     setLoading(false);
     setActiveQuestionGroup("screening");
     setAnswerFeedback({});
+    setAnswerFeedbackReason({});
+    setCopiedAnswer(null);
+    setExpandedEvidence({});
+    setShowScrollToLatest(false);
+    shouldFollowRef.current = true;
     window.history.replaceState(null, "", `${window.location.pathname}#top`);
     requestAnimationFrame(() => {
-      document.querySelector<HTMLElement>(".chat-scroll")?.scrollTo({ top: 0, behavior: "smooth" });
+      chatScrollRef.current?.scrollTo({ top: 0, behavior: "smooth" });
       document.getElementById("top")?.scrollIntoView({ behavior: "smooth", block: "start" });
     });
+  }, [cancelReveal, clearThinkingTimers]);
+
+  const loadConversation = useCallback((storedMessages: ConversationMessage[]) => {
+    conversationEpochRef.current += 1;
+    clearThinkingTimers();
+    abortRef.current?.abort();
+    cancelReveal();
+    abortRef.current = null;
+    setMessages(storedMessages);
+    setInput("");
+    setError("");
+    setRetryQuestion("");
+    setLoading(false);
+    setAnswerFeedback({});
+    setAnswerFeedbackReason({});
+    setCopiedAnswer(null);
+    setExpandedEvidence({});
+    setShowScrollToLatest(false);
+    shouldFollowRef.current = true;
+    requestAnimationFrame(() => messageEndRef.current?.scrollIntoView({ block: "end" }));
+  }, [cancelReveal, clearThinkingTimers]);
+
+  useEffect(() => {
+    if (!command || handledCommandRef.current === command.id) return;
+    if (command.type === "ask" && loading) return;
+    const frame = requestAnimationFrame(() => {
+      handledCommandRef.current = command.id;
+      if (command.type === "reset") resetConversation();
+      else if (command.type === "load") loadConversation(command.messages);
+      else void send(command.question, true);
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [command, loading, loadConversation, resetConversation, send]);
+
+  function handleScroll() {
+    const scroll = chatScrollRef.current;
+    if (!scroll) return;
+    const nearBottom = isNearScrollBottom(scroll.scrollHeight, scroll.scrollTop, scroll.clientHeight);
+    shouldFollowRef.current = nearBottom;
+    setShowScrollToLatest(!nearBottom);
+  }
+
+  function scrollToLatest() {
+    shouldFollowRef.current = true;
+    setShowScrollToLatest(false);
+    messageEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  }
+
+  async function copyAnswer(index: number, content: string) {
+    try {
+      await navigator.clipboard.writeText(content);
+      setCopiedAnswer(index);
+      window.setTimeout(() => setCopiedAnswer((current) => current === index ? null : current), 1_600);
+    } catch {
+      setError("复制失败，请选中文字后手动复制。");
+    }
+  }
+
+  function answerQuestionContext(answerIndex: number) {
+    for (let index = answerIndex - 1; index >= 0; index -= 1) {
+      if (messages[index]?.role === "user") {
+        return {
+          question: messages[index].content,
+          baseMessages: messages.slice(0, index),
+        };
+      }
+    }
+    return null;
+  }
+
+  function regenerateAnswer(answerIndex: number) {
+    const context = answerQuestionContext(answerIndex);
+    if (!context) return;
+    void send(context.question, false, true, context.baseMessages);
+  }
+
+  function condenseAnswer(answerIndex: number) {
+    const baseMessages = messages.slice(0, answerIndex + 1);
+    void send("请把上一条回答精简为 3 个重点，保留结论和关键证据。", true, false, baseMessages);
   }
 
   function submit(event: FormEvent) {
@@ -201,19 +466,20 @@ export function Chat() {
   const askedQuestions = messages.filter((message) => message.role === "user").map((message) => message.content);
   const lastQuestion = askedQuestions[askedQuestions.length - 1] ?? "";
   const latestAssistant = [...messages].reverse().find((message) => message.role === "assistant" && message.content);
-  const followUpQuestions = latestAssistant?.followUpQuestions?.filter((question) => !askedQuestions.includes(question)).slice(0, 3)
-    ?? (lastQuestion ? getFollowUpQuestions(lastQuestion, askedQuestions) : []);
-  const hasCompletedAnswer = messages.some((message) => message.role === "assistant" && message.content);
+  const followUpQuestions = lastQuestion
+    ? getHrFollowUpQuestions(lastQuestion, askedQuestions, latestAssistant?.followUpQuestions)
+    : [];
+  const hasCompletedAnswer = !error && messages.some((message) => message.role === "assistant" && message.content);
 
   return (
     <div className={`chat-shell ${isEmpty ? "is-empty" : "has-messages"}`}>
       {!isEmpty && (
-        <button className="return-home" type="button" onClick={returnHome}>
+        <button className="return-home" type="button" onClick={resetConversation}>
           <HouseIcon size={15} weight="bold" aria-hidden="true" />
           回到主页
         </button>
       )}
-      <div className="chat-scroll">
+      <div className="chat-scroll" ref={chatScrollRef} onScroll={handleScroll}>
         {isEmpty ? (
           <div className="empty-state">
             <section className="welcome" aria-labelledby="chat-title">
@@ -234,24 +500,6 @@ export function Chat() {
                 <a href={profile.github} target="_blank" rel="noreferrer" data-track-event="project_opened" data-track-detail="github"><GithubLogoIcon size={15} aria-hidden="true" />GitHub</a>
                 <a href="/resume"><FileTextIcon size={15} aria-hidden="true" />简历</a>
               </nav>
-            </section>
-
-            <section className="project-proof" aria-labelledby="project-title">
-              <div className="proof-heading">
-                <h2 id="project-title">可直接核验的项目</h2>
-                <a href={profile.github} target="_blank" rel="noreferrer" data-track-event="project_opened" data-track-detail="all-repositories"><GithubLogoIcon size={16} aria-hidden="true" />全部仓库</a>
-              </div>
-              <div className="project-grid">
-                {featuredProjects.map((project) => (
-                  <a className="project-link" href={project.url} target="_blank" rel="noreferrer" key={project.name} data-track-event="project_opened" data-track-detail={project.name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}>
-                    <span className="project-status">{project.status}</span>
-                    <strong>{project.name}</strong>
-                    <p>{project.summary}</p>
-                    <small>{project.stack}</small>
-                    <ArrowUpRightIcon className="project-arrow" size={18} aria-hidden="true" />
-                  </a>
-                ))}
-              </div>
             </section>
 
             <section className="question-start" aria-labelledby="question-title">
@@ -285,51 +533,97 @@ export function Chat() {
                 ))}
               </div>
             </section>
+
+            <section className="project-proof" aria-labelledby="project-title">
+              <div className="proof-heading">
+                <h2 id="project-title">可直接核验的项目</h2>
+                <a href={profile.github} target="_blank" rel="noreferrer" data-track-event="project_opened" data-track-detail="all-repositories"><GithubLogoIcon size={16} aria-hidden="true" />全部仓库</a>
+              </div>
+              <div className="project-grid">
+                {featuredProjects.map((project) => (
+                  <a className="project-link" href={project.url} target="_blank" rel="noreferrer" key={project.name} data-track-event="project_opened" data-track-detail={project.name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}>
+                    <span className="project-status">{project.status}</span>
+                    <strong>{project.name}</strong>
+                    <p>{project.summary}</p>
+                    <small>{project.stack}</small>
+                    <ArrowUpRightIcon className="project-arrow" size={18} aria-hidden="true" />
+                  </a>
+                ))}
+              </div>
+            </section>
           </div>
         ) : (
-          <div className="messages" aria-live="polite">
+          <div className="messages" aria-live="off" aria-busy={loading}>
             {messages.map((message, index) => (
-              <article className={`message ${message.role}`} key={`${message.role}-${index}`}>
+              <article
+                className={`message ${message.role}${message.role === "assistant" && message.content && !message.responseStatus ? " streaming" : ""}`}
+                key={`${message.role}-${index}`}
+              >
                 {message.role === "assistant" && <span className="assistant-mark" aria-hidden="true">A</span>}
                 <div className="message-body">
                   <p className={message.role === "user" ? "sr-only" : "message-role"}>
                     {message.role === "user" ? "你的问题" : "Ask Me"}
                   </p>
                   {message.role === "assistant" && !message.content ? (
-                    <div className="skeleton" aria-label="正在生成回答">
-                      <span />
-                      <span />
-                      <span />
+                    <div className="thinking-state" role="status" aria-live="polite">
+                      <span className="thinking-indicator" aria-hidden="true">
+                        <span />
+                        <span />
+                        <span />
+                      </span>
+                      <span>{thinkingLabel}</span>
                     </div>
                   ) : (
                     message.role === "assistant"
-                      ? <FormattedAnswer content={message.content} />
+                      ? (
+                          <FormattedAnswer
+                            content={message.content}
+                            streaming={!message.responseStatus}
+                            citations={message.citations}
+                            sources={message.sources}
+                            onCitationClick={(sourceId) => {
+                              setExpandedEvidence((current) => ({ ...current, [index]: true }));
+                              requestAnimationFrame(() => {
+                                const sourceElement = document.getElementById(`source-${index}-${sourceId}`) as HTMLDetailsElement | null;
+                                if (!sourceElement) return;
+                                sourceElement.open = true;
+                                sourceElement.scrollIntoView({ behavior: "smooth", block: "center" });
+                              });
+                            }}
+                          />
+                        )
                       : <div className="message-content">{message.content}</div>
                   )}
-                  {message.sources && message.sources.length > 0 && (
-                    <div className="sources">
-                      <p>进一步了解</p>
-                      {message.sources.map((source) => (
-                        <details
-                          key={source.id}
-                          onToggle={(event) => event.currentTarget.open && track("source_opened", getBrowserSessionId(), source.id)}
-                        >
-                          <summary>
-                            <span>{source.title}</span>
-                            <CaretDownIcon size={15} aria-hidden="true" />
-                          </summary>
-                          <div className="source-detail">
-                            <p>类型：{source.sourceType}</p>
-                            <p>验证状态：{verificationLabels[source.verification]}</p>
-                            {source.projectStatus && <p>项目状态：{statusLabels[source.projectStatus]}</p>}
-                            <p>最后检查：{source.lastChecked}</p>
-                            <p>相关内容：{source.supports}</p>
-                            <p>适用说明：{source.limitations}</p>
-                            {source.url && <a href={source.url} target="_blank" rel="noreferrer">查看公开来源 <ArrowUpRightIcon size={14} aria-hidden="true" /></a>}
-                          </div>
-                        </details>
-                      ))}
+                  {message.role === "assistant" && message.content && message.degraded && (
+                    <div className="answer-degraded" role="status">
+                      当前基于已公开资料回答，可重新生成
                     </div>
+                  )}
+                  {message.role === "assistant" && message.content && message.responseStatus && (
+                    <AnswerActions
+                      copied={copiedAnswer === index}
+                      evidenceExpanded={Boolean(expandedEvidence[index])}
+                      hasEvidence={Boolean(message.sources?.length)}
+                      onCopy={() => void copyAnswer(index, message.content)}
+                      onRegenerate={() => regenerateAnswer(index)}
+                      onCondense={() => condenseAnswer(index)}
+                      onToggleEvidence={() => setExpandedEvidence((current) => ({
+                        ...current,
+                        [index]: !current[index],
+                      }))}
+                    />
+                  )}
+                  {message.sources && message.sources.length > 0 && (
+                    <EvidencePanel
+                      answerIndex={index}
+                      sources={message.sources}
+                      expanded={Boolean(expandedEvidence[index])}
+                      onExpandedChange={(expanded) => setExpandedEvidence((current) => ({
+                        ...current,
+                        [index]: expanded,
+                      }))}
+                      onSourceOpen={(sourceId) => track("source_opened", getBrowserSessionId(), sourceId)}
+                    />
                   )}
                   {message.role === "assistant" && message.content && message.responseStatus === "completed" && (
                     <div className="answer-feedback" aria-label="回答反馈">
@@ -347,34 +641,72 @@ export function Chat() {
                         aria-pressed={answerFeedback[index] === "not_helpful"}
                         onClick={() => {
                           setAnswerFeedback((current) => ({ ...current, [index]: "not_helpful" }));
-                          track("answer_feedback", getBrowserSessionId(), "not_helpful");
                         }}
                       >需改进</button>
+                      {answerFeedback[index] === "not_helpful" && (
+                        <div className="feedback-reasons" aria-label="选择需要改进的原因">
+                          {feedbackReasons.map((reason) => (
+                            <button
+                              key={reason.id}
+                              type="button"
+                              aria-pressed={answerFeedbackReason[index] === reason.id}
+                              disabled={Boolean(answerFeedbackReason[index])}
+                              onClick={() => {
+                                setAnswerFeedbackReason((current) => ({ ...current, [index]: reason.id }));
+                                track("answer_feedback", getBrowserSessionId(), reason.id);
+                              }}
+                            >{reason.label}</button>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
               </article>
             ))}
             <div ref={messageEndRef} />
+            <div className="sr-only" role="status" aria-live="polite">
+              {!loading && hasCompletedAnswer ? "回答已生成" : ""}
+            </div>
           </div>
         )}
       </div>
 
       <div className="composer-dock">
         {hasCompletedAnswer && !loading && followUpQuestions.length > 0 && (
-          <div className="contextual-suggestions" aria-label="根据上一问题推荐的追问">
-            <span>接着了解</span>
-            <div>
-              {followUpQuestions.map((question) => (
-                <button key={question} type="button" onClick={() => void send(question, true)}>{question}</button>
+          <section className="contextual-suggestions" aria-labelledby="follow-up-title">
+            <div className="contextual-suggestions-heading">
+              <span className="contextual-suggestions-icon" aria-hidden="true">
+                <SparkleIcon size={15} weight="fill" />
+              </span>
+              <span>
+                <strong id="follow-up-title">继续了解张倬玮</strong>
+                <small>从证据、复盘和岗位匹配继续追问</small>
+              </span>
+            </div>
+            <div className="contextual-suggestions-list">
+              {followUpQuestions.map((suggestion) => (
+                <button key={suggestion.kind} type="button" onClick={() => void send(suggestion.question, true)}>
+                  <small>{suggestion.label}</small>
+                  <span>{suggestion.question}</span>
+                  <ArrowUpRightIcon size={14} aria-hidden="true" />
+                </button>
               ))}
             </div>
+          </section>
+        )}
+        {error && (
+          <div className="chat-error" role="alert">
+            <span>{error}</span>
+            {retryQuestion && !loading && (
+              <button type="button" onClick={() => void send(retryQuestion, false, true)}>重新生成</button>
+            )}
           </div>
         )}
-        {error && <div className="chat-error" role="alert">{error}</div>}
         <form className="composer" onSubmit={submit}>
           <label className="sr-only" htmlFor="question">向 Ask Me 提问</label>
           <textarea
+            ref={inputRef}
             id="question"
             value={input}
             onChange={(event) => setInput(event.target.value)}
@@ -388,7 +720,10 @@ export function Chat() {
             <button
               type="button"
               className="send-button stop"
-              onClick={() => abortRef.current?.abort()}
+              onClick={() => {
+                abortRef.current?.abort();
+                cancelReveal();
+              }}
               aria-label="停止生成"
               title="停止生成"
             >
@@ -408,6 +743,17 @@ export function Chat() {
         </form>
         <p className="composer-note">AI 可能会出错。重要经历与数据请在面试中进一步核实。</p>
       </div>
+      {showScrollToLatest && !isEmpty && (
+        <button
+          className="scroll-to-latest"
+          type="button"
+          aria-label="回到最新回答"
+          title="回到最新回答"
+          onClick={scrollToLatest}
+        >
+          <ArrowDownIcon size={17} weight="bold" aria-hidden="true" />
+        </button>
+      )}
     </div>
   );
 }
