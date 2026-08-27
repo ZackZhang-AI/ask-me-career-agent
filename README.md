@@ -4,6 +4,54 @@
 
 在线演示：[ask-me-career-agent.vercel.app](https://ask-me-career-agent.vercel.app)。Production 使用 DeepSeek 官方 API、Upstash、Neon 与 Vercel Blob；最新版简历始终通过 `/resume` 访问。
 
+## 产品预览
+
+![Ask Me AI Career Agent 首页](docs/images/readme-home.png)
+
+首页把候选人摘要、可验证项目、建议问题和追问对话放在同一界面中，让招聘方先快速判断，再按兴趣深入核验。
+
+## 核心能力
+
+- 将教育、项目、审计经历和能力边界整理为招聘方可快速浏览的公开资料。
+- 通过预设问题和自由追问降低了解候选人的沟通成本。
+- 回答只使用已审核的公开知识，并保留 Claim-Source 对应关系。
+- 支持无模型密钥的本地演示模式，以及服务端 DeepSeek 生产模式。
+- 使用请求预算、跨实例限流、匿名事件记录和紧急开关控制线上风险。
+- 简历通过稳定的 `/resume` 入口交付，文件版本由 Vercel Blob 管理。
+
+## 产品流程
+
+```mermaid
+flowchart LR
+    A[招聘方进入主页] --> B{选择了解方式}
+    B --> C[浏览候选人摘要与项目]
+    B --> D[点击建议问题]
+    B --> E[输入自由问题]
+    D --> F[检索已审核公开知识]
+    E --> F
+    F --> G[生成带事实边界的回答]
+    G --> H[继续追问 / 查看项目 / 下载简历]
+```
+
+## 系统架构
+
+```mermaid
+flowchart TB
+    Browser[Next.js 招聘方界面] --> ChatAPI[/api/chat 服务端路由]
+    Browser --> Resume[/resume 稳定入口]
+
+    ChatAPI --> Budget[请求与 Token 预算]
+    Budget --> RateLimit[Upstash 跨实例限流]
+    RateLimit --> Retrieval[公开知识检索]
+    Retrieval --> Content[content/ + Zod 校验<br/>Claim-Source 审核]
+    Retrieval --> DeepSeek[DeepSeek 服务端推理]
+    DeepSeek --> Guardrail[事实边界与敏感信息过滤]
+    Guardrail --> Browser
+
+    ChatAPI --> Events[Neon 匿名事件记录]
+    Resume --> Blob[Vercel Blob 最新简历]
+```
+
 ## 本地运行
 
 需要 Node.js 20.9 或更高版本。
