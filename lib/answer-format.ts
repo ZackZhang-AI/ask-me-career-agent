@@ -41,7 +41,7 @@ export function isHighSignalEmphasis(text: string) {
 }
 
 /** 只解析回答协议允许的 **重点**，不执行任意 Markdown 或 HTML。 */
-export function parseAnswerEmphasis(content: string): AnswerSegment[] {
+export function parseAnswerEmphasis(content: string, options: { hideUnclosedMarkers?: boolean } = {}): AnswerSegment[] {
   const segments: AnswerSegment[] = [];
   const pattern = /\*\*([^*\n]+)\*\*/g;
   let cursor = 0;
@@ -53,6 +53,9 @@ export function parseAnswerEmphasis(content: string): AnswerSegment[] {
     cursor = index + match[0].length;
   }
 
-  if (cursor < content.length) segments.push({ text: content.slice(cursor), emphasized: false });
+  if (cursor < content.length) {
+    const remainder = options.hideUnclosedMarkers ? content.slice(cursor).replace(/\*\*/g, "") : content.slice(cursor);
+    if (remainder) segments.push({ text: remainder, emphasized: false });
+  }
   return segments.length ? segments : [{ text: content, emphasized: false }];
 }

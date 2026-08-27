@@ -1,7 +1,7 @@
 import { candidateNarrative } from "../content/narrative.ts";
 import { agentProfile } from "../content/agent-profile.ts";
 import { interviewPersona } from "../content/interview-persona.ts";
-import type { AnswerIntent, AnswerPlan, ChatMessage, ConversationDepth, KnowledgeItem, QuestionContract, QuestionFrame, ResponseShape, StableAnswer, StarStory } from "./types";
+import type { AnswerDetailLevel, AnswerIntent, AnswerPlan, ChatMessage, ConversationDepth, KnowledgeItem, QuestionContract, QuestionFrame, ResponseShape, StableAnswer, StarStory } from "./types";
 import { getRelatedStarStories, getStarStoriesByIds } from "./knowledge.ts";
 import { getFollowUpQuestions } from "./question-suggestions.ts";
 import { buildLocalQuestionFrame, findQuestionContract, frameFromContract } from "./question-contracts";
@@ -34,6 +34,8 @@ const intentPatterns: Array<[AnswerIntent, RegExp]> = [
   ["diagnosis", /没有改善|没改善|没有效果|没效果|优先排查|先排查|先.{0,3}看什么|定位问题|(?:如何|怎么).{0,4}定位|为什么没有/],
   ["privacy", /隐私|机密|企业数据|数据边界/],
   ["experience_value", /企业级?\s*AI|企业\s*AI|企业场景|业务问题.{0,8}(?:转化|转成|变成).{0,8}(?:AI|产品)|(?:AI|产品)方案|(?:之前的?经历|过往经历).{0,20}(?:(?:求职|帮助).{0,12}(?:AI|产品)|(?:AI|产品).{0,12}(?:帮助|价值|作用|迁移))/i],
+  ["education", /学历|就读|学校|院校|什么专业|所学专业/],
+  ["credentials", /证书|ACCA|资质/],
   ["skills", /技术能力|技术栈|会什么|数据分析|(?:AI\s*)?评测|如何评估|有哪些实践/i],
   ["result", /结果|量化(?:结果|效果)|效果数据|用户规模|增长|留存|上线|生产状态|完成(?:了吗|情况)/],
   ["limitation", /短板|不足|弱点|限制|能力缺口/],
@@ -256,14 +258,28 @@ function intentFromFrame(frame: QuestionFrame, detected: AnswerIntent): AnswerIn
   return detected;
 }
 
-function targetLengthFor(intent: AnswerIntent, responseShape: ResponseShape, depth: ConversationDepth, stableAnswer?: StableAnswer) {
+function detailLevelFor(question: string, intent: AnswerIntent, frame: QuestionFrame, depth: ConversationDepth): AnswerDetailLevel {
+  if (frame.questionMode === "agent_meta" || ["education", "credentials", "privacy"].includes(intent)) return "concise";
+  if (/技术栈|采用了什么技术|使用哪些工具/i.test(question)) return "standard";
+  if (depth !== "deep_dive" && /如何(?:评估|验证|拆解)|怎么看(?:待)?企业级?\s*AI|会如何拆解/i.test(question)) return "standard";
+  if (/为什么应该录用|为什么要录用|为什么推荐|录用你的理由/.test(question)) return "deep";
+  if (depth === "deep_dive" || [
+    "career_transition", "role_fit", "representative_project", "contribution", "challenge",
+    "experience_value", "skills", "hiring_recommendation",
+  ].includes(intent)) return "deep";
+  return "standard";
+}
+
+function targetLengthFor(intent: AnswerIntent, responseShape: ResponseShape, detailLevel: AnswerDetailLevel, stableAnswer?: StableAnswer) {
   if (stableAnswer) return stableAnswer.targetLength;
   if (metaIntents.includes(intent)) return { min: 120, max: 320 };
   const base = defaultLengthByShape[responseShape];
-  if (depth !== "deep_dive") return base;
-  if (responseShape === "direct") return { min: 180, max: 360 };
-  if (["project_arc", "contribution", "star"].includes(responseShape)) return { min: 300, max: 500 };
-  return { min: Math.max(220, base.min - 40), max: base.max };
+  if (detailLevel !== "deep") return base;
+  if (responseShape === "direct") return { min: 280, max: 500 };
+  if (responseShape === "narrative") return { min: 480, max: 680 };
+  if (["project_arc", "contribution", "star"].includes(responseShape)) return { min: 420, max: 650 };
+  if (responseShape === "fit_mapping") return { min: 380, max: 600 };
+  return { min: Math.max(320, base.min), max: Math.max(520, base.max) };
 }
 
 export function buildAnswerPlan(
@@ -328,6 +344,7 @@ export function buildAnswerPlan(
   const responseShape = contract?.frame.responseShape
     ?? stableAnswer?.responseShape
     ?? (intent === "general" ? frame.responseShape : defaultShapeByIntent[intent]);
+  const detailLevel = detailLevelFor(question, intent, frame, depth);
   const closingPurpose = stableAnswer?.closingPurpose
     ?? (intent === "career_transition" ? "说明这是一条连续积累、逐步收敛的职业选择。" : intent === "role_fit" ? "总结已有能力如何迁移到目标岗位，不虚构岗位业绩。" : "停在与当前问题最相关的产品判断，不追加通用岗位价值。");
   const forbiddenDetails = unique([...(skeleton?.forbiddenDetails ?? []), "资料中未出现的数字、用户反馈、调研过程、任职、组织或项目结果", "把规划中、待验证或原型阶段的能力描述为已经生产落地"]);
@@ -343,6 +360,7 @@ export function buildAnswerPlan(
     newInformationGoal: effectiveNewInformationGoal,
     forbiddenClaims: forbiddenDetails,
     closingPurpose,
+    detailLevel,
   });
   const partialPlan: Omit<AnswerPlan, "fallbackAnswer"> = {
     contractId: contract?.id,
@@ -373,9 +391,10 @@ export function buildAnswerPlan(
     usedStoryIds,
     avoidPoints,
     conversationDepth: depth,
+    detailLevel,
     responseShape,
     closingPurpose,
-    targetLength: contract?.frame.targetLength ?? targetLengthFor(intent, responseShape, depth, stableAnswer),
+    targetLength: contract?.frame.targetLength ?? targetLengthFor(intent, responseShape, detailLevel, stableAnswer),
     followUpQuestions: getFollowUpQuestions(question, askedQuestions, 3, stableAnswer?.followUpQuestions),
     recentAnswers: history.filter((message) => message.role === "assistant").slice(-3).map((message) => message.content),
     conversationContext,
@@ -401,8 +420,9 @@ export function buildContext(items: KnowledgeItem[], plan?: AnswerPlan) {
     `本题意图：${plan.intent}；主题：${plan.topic}；回答维度：${plan.facet}。第一段必须直接回应：${plan.directAnswerTerms.join("、") || "当前问题"}。`,
     `回答模式：${plan.questionMode}；证据策略：${plan.evidencePolicy}。candidate_reasoning 只能基于已经验证的能力回答方法和推演，开头要自然说明“我的处理思路”，不得暗示已经执行过；candidate_fact 不得在证据不足时补造经历。`,
     `回答结构：${plan.responseShape}；对话深度：${plan.conversationDepth}；参考长度：${plan.targetLength.min}-${plan.targetLength.max} 个中文字符。根据问题复杂度自然调整，简单事实短答，项目、贡献与复盘问题讲完整，不为凑字数重复。`,
+    `回答厚度：${plan.detailLevel}。concise 只给直接答案；standard 讲清结论、最相关实践和方法或价值；deep 通常分成 3-4 个自然段，依次形成直接判断、2-3 层互补证据、关键机制或取舍，以及能帮助面试官形成判断的收束。每一段承担不同作用，不要罗列简历。加粗每处不超过 12 个汉字，禁止把整组经历或完整句子全部加粗。`,
     `本轮必须带来这些新信息：${plan.newInformationGoal.join("；")}`,
-    `本轮主证据：${plan.brief.primaryEvidenceId ?? "无"}；补充证据：${plan.brief.supportingEvidenceIds.join("、") || "无"}。优先讲主证据，补充证据只用于解释能力迁移，不要罗列所有经历。`,
+    `本轮主证据：${plan.brief.primaryEvidenceId ?? "无"}；补充证据：${plan.brief.supportingEvidenceIds.join("、") || "无"}。优先讲主证据，补充证据必须提供不同的能力视角，只用于解释机制、取舍或能力迁移，不要罗列所有经历。`,
     `对话上下文：当前项目 ${plan.conversationContext.activeProject ?? "未指定"}；已讨论维度 ${plan.conversationContext.askedDimensions.join("、") || "无"}。`,
     `必须覆盖：${plan.mustInclude.join("；")}`,
     `只能使用这些事实：${plan.allowedFacts.join("；")}`,

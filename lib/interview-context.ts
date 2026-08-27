@@ -1,5 +1,6 @@
 import type {
   AnswerBrief,
+  AnswerDetailLevel,
   AnswerIntent,
   ChatMessage,
   InterviewConversationContext,
@@ -82,6 +83,7 @@ export function buildAnswerBrief(input: {
   newInformationGoal: string[];
   forbiddenClaims: string[];
   closingPurpose: string;
+  detailLevel: AnswerDetailLevel;
 }): AnswerBrief {
   const focus = input.frame.focusTerms.map(normalize);
   const ranked = input.items.map((item, index) => ({
@@ -92,14 +94,23 @@ export function buildAnswerBrief(input: {
       + Math.max(0, 3 - index),
   })).sort((left, right) => right.score - left.score);
   const primary = ranked[0]?.item;
-  const supporting = ranked.find(({ item }) => item.id !== primary?.id
-    && (!primary?.relatedProject || item.relatedProject !== primary.relatedProject || item.title !== primary.title))?.item;
+  const supportingLimit = input.detailLevel === "deep" ? 2 : input.detailLevel === "standard" ? 1 : 0;
+  const supporting: KnowledgeItem[] = [];
+  for (const { item } of ranked) {
+    if (supporting.length >= supportingLimit) break;
+    if (item.id === primary?.id) continue;
+    const duplicatesExisting = [primary, ...supporting].some((selected) => selected
+      && selected.relatedProject
+      && item.relatedProject === selected.relatedProject
+      && item.title === selected.title);
+    if (!duplicatesExisting) supporting.push(item);
+  }
 
   return {
     directThesis: input.thesis,
     requiredDimensions: input.requiredDimensions.slice(0, 4),
     primaryEvidenceId: primary?.id,
-    supportingEvidenceIds: supporting ? [supporting.id] : [],
+    supportingEvidenceIds: supporting.map((item) => item.id),
     newInformationGoal: input.newInformationGoal.slice(0, 3),
     forbiddenClaims: input.forbiddenClaims,
     closingPurpose: input.closingPurpose,

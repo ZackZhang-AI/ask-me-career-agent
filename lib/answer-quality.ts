@@ -211,6 +211,14 @@ export function validateAnswer(candidate: string, plan: AnswerPlan): QualityGate
   if (emphasized.some((text) => !isHighSignalEmphasis(text))) triggers.push("low_information_emphasis");
   const paragraphs = clean.split(/\n\s*\n/).filter((item) => item.trim()).length;
   if (["project_arc", "contribution", "star"].includes(plan.responseShape) && paragraphs < 3) triggers.push("weak_structure");
+  if (!plan.contractId && plan.detailLevel === "deep") {
+    const coveredDimensions = plan.mustInclude.filter((required) => semanticallyCovered(required, clean)).length;
+    const sentences = clean.split(/[。！？!?]+/).filter((item) => item.trim()).length;
+    const hasLayeredStructure = paragraphs >= 3 || sentences >= 4;
+    if (clean.length < 240 || !hasLayeredStructure || (plan.mustInclude.length >= 2 && coveredDimensions < 2)) {
+      triggers.push("insufficient_depth");
+    }
+  }
   if (/(?:^|[，。！？；\s])他(?:的|是|能|在|具备|适合|做|有)/.test(clean)) triggers.push("third_person_voice");
 
   const currentClosing = closingSentence(clean);
@@ -388,7 +396,7 @@ export function repairInstruction(plan: AnswerPlan, triggers: string[]) {
 失败原因：${triggers.join("；")}\n
 必须遵守：\n
 1. 只能使用下方“允许事实”，不得补充合理猜测、过程细节、数字、用户反馈或完成状态。\n
-2. 使用 ${plan.responseShape} 结构；${plan.targetLength.min}–${plan.targetLength.max} 字只作为信息密度参考，根据问题复杂度自然长短，简单事实短答，项目、贡献与复盘问题讲完整，不为凑字数重复。使用 1–3 个、不超过 12 字的加粗短词组突出核心结论、个人贡献、关键取舍、可验证结果或真实边界，超过 240 字时保留 2–3 个重点。加粗内容脱离上下文也应能传递判断，不要使用“核心项目”“方案设计”“我的贡献”“第一步”这类栏目标签，不要加粗完整句子，也不要强制套三段模板。\n
+2. 使用 ${plan.responseShape} 结构；回答厚度为 ${plan.detailLevel}。${plan.targetLength.min}-${plan.targetLength.max} 字只作为信息密度参考，根据问题复杂度自然长短。deep 回答必须形成直接判断、2-3 层互补证据、关键机制或取舍与面试判断，每段承担不同作用；其他问题不为凑字数重复。使用 1-3 个、不超过 12 字的加粗短词组突出核心结论、个人贡献、关键取舍、可验证结果或真实边界，超过 240 字时保留 2-3 个重点。加粗内容脱离上下文也应能传递判断，不要使用“核心项目”“方案设计”“我的贡献”“第一步”这类栏目标签，不要加粗完整句子，也不要强制套三段模板。\n
 3. 不使用寒暄、Claim/Source、证据边界、核实提醒或免责声明。\n
 4. 第一段直接回答 ${plan.facet} 维度，并自然包含以下关键词之一：${plan.directAnswerTerms.join("、") || "当前问题关键词"}。始终使用第一人称；本轮必须带来新信息：${plan.newInformationGoal.join("；")}\n
 5. 避免重复：${plan.avoidPoints.join("；") || "无"}；结尾任务：${plan.closingPurpose}\n

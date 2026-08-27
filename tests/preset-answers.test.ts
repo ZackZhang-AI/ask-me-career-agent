@@ -27,7 +27,8 @@ test("快速通道仅用于首轮且短暂准备后再显示首字", () => {
   assert.match(chatSource, /!retry && currentMessages\.length === 0/);
   assert.match(chatSource, /const PRESET_THINKING_MS = 420/);
   assert.match(chatSource, /await waitFor\(PRESET_THINKING_MS, abort\.signal\)/);
-  assert.match(chatSource, /let answer = chunks\[0\]/);
+  assert.match(chatSource, /enqueueReveal\(preset\.content\)/);
+  assert.match(chatSource, /const answer = await finishReveal\(\)/);
   assert.match(chatSource, /className="thinking-state"/);
   assert.match(chatSource, /fetch\("\/api\/chat"/);
 });

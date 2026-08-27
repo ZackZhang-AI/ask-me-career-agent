@@ -19,9 +19,10 @@ import { EvidencePanel } from "./evidence-panel";
 import { FormattedAnswer } from "./formatted-answer";
 import { useConversationControl } from "./conversation-control";
 import { useThinkingStatus } from "./use-thinking-status";
+import { useStreamReveal } from "./use-stream-reveal";
 import { featuredProjects, profile } from "@/lib/profile";
 import { getBrowserSessionId } from "@/lib/client-session";
-import { isNearScrollBottom, prepareQuestionMessages, presetRevealChunks } from "@/lib/chat-session";
+import { isNearScrollBottom, prepareQuestionMessages } from "@/lib/chat-session";
 import type { ConversationMessage } from "@/lib/conversation-history";
 import {
   getHrFollowUpQuestions,
@@ -42,7 +43,6 @@ const feedbackReasons = [
   { id: "missing_evidence", label: "证据不足" },
 ] as const;
 
-const PRESET_REVEAL_INTERVAL_MS = 26;
 const PRESET_THINKING_MS = 420;
 
 function waitFor(ms: number, signal: AbortSignal) {
@@ -106,6 +106,7 @@ export function Chat({ presetAnswers }: ChatProps) {
   const handledCommandRef = useRef(0);
   const { command, persistConversation } = useConversationControl();
   const { thinkingLabel, startThinking, updateThinkingStage, clearThinkingTimers } = useThinkingStatus();
+  const { startReveal, enqueueReveal, finishReveal, cancelReveal } = useStreamReveal();
 
   useEffect(() => {
     if (!shouldFollowRef.current) return;
@@ -116,7 +117,8 @@ export function Chat({ presetAnswers }: ChatProps) {
   useEffect(() => () => {
     clearThinkingTimers();
     abortRef.current?.abort();
-  }, [clearThinkingTimers]);
+    cancelReveal();
+  }, [cancelReveal, clearThinkingTimers]);
 
   const send = useCallback(async (
     question: string,
@@ -150,16 +152,18 @@ export function Chat({ presetAnswers }: ChatProps) {
     abortRef.current = abort;
     let shouldFocusAfterCompletion = false;
     let discardPartial = false;
+    let renderMetadata: Partial<ConversationMessage> = {};
+    startReveal((visibleText) => {
+      if (conversationEpoch !== conversationEpochRef.current) return;
+      setMessages([...nextMessages, { role: "assistant", content: visibleText, ...renderMetadata }]);
+    });
     try {
       const preset = !retry && currentMessages.length === 0
         ? presetAnswers.find((answer) => answer.question === clean)
         : undefined;
       if (preset) {
-        const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-        const chunks = reduceMotion ? [preset.content] : presetRevealChunks(preset.content);
         await waitFor(PRESET_THINKING_MS, abort.signal);
         if (conversationEpoch !== conversationEpochRef.current) return;
-        let answer = chunks[0] ?? preset.content;
         const streamingMetadata: Partial<ConversationMessage> = {
           mode: preset.mode,
           disposition: preset.disposition,
@@ -169,13 +173,10 @@ export function Chat({ presetAnswers }: ChatProps) {
           deliveryPath: "preset",
           firstTokenLatencyMs: Math.round(performance.now() - startedAt),
         };
-        setMessages([...nextMessages, { role: "assistant", content: answer, ...streamingMetadata }]);
-        for (const chunk of chunks.slice(1)) {
-          await waitFor(PRESET_REVEAL_INTERVAL_MS, abort.signal);
-          if (conversationEpoch !== conversationEpochRef.current) return;
-          answer += chunk;
-          setMessages([...nextMessages, { role: "assistant", content: answer, ...streamingMetadata }]);
-        }
+        renderMetadata = streamingMetadata;
+        enqueueReveal(preset.content);
+        const answer = await finishReveal();
+        if (conversationEpoch !== conversationEpochRef.current) return;
         const completedMetadata: Partial<ConversationMessage> = {
           ...streamingMetadata,
           sources: preset.sources,
@@ -234,21 +235,33 @@ export function Chat({ presetAnswers }: ChatProps) {
         discardPartial?: boolean;
         failureType?: StreamFailureType;
       }) => {
-        if (event.type === "meta") metadata = {
-          ...metadata,
-          sources: event.sources,
-          items: event.items,
-          mode: event.mode,
-          responseStatus: event.responseStatus,
-          disposition: event.disposition,
-          modelPath: event.modelPath,
-          deliveryMode: event.deliveryMode,
-          degraded: event.degraded,
-          claimIds: event.claimIds,
-          sourceIds: event.sourceIds,
-          citations: event.citations,
-          followUpQuestions: event.followUpQuestions,
-        };
+        if (event.type === "meta") {
+          metadata = {
+            ...metadata,
+            sources: event.sources,
+            items: event.items,
+            mode: event.mode,
+            responseStatus: event.responseStatus,
+            disposition: event.disposition,
+            modelPath: event.modelPath,
+            deliveryMode: event.deliveryMode,
+            degraded: event.degraded,
+            claimIds: event.claimIds,
+            sourceIds: event.sourceIds,
+            citations: event.citations,
+            followUpQuestions: event.followUpQuestions,
+          };
+          renderMetadata = {
+            ...renderMetadata,
+            mode: event.mode,
+            disposition: event.disposition,
+            modelPath: event.modelPath,
+            deliveryMode: event.deliveryMode,
+            degraded: event.degraded,
+            claimIds: event.claimIds,
+            sourceIds: event.sourceIds,
+          };
+        }
         if (event.type === "stage") {
           updateThinkingStage(event.stage ?? "understanding");
         }
@@ -258,7 +271,14 @@ export function Chat({ presetAnswers }: ChatProps) {
             deliveryPath: "api",
             firstTokenLatencyMs: Math.round(performance.now() - startedAt),
           };
-          answer += event.content ?? "";
+          const content = event.content ?? "";
+          answer += content;
+          renderMetadata = {
+            ...renderMetadata,
+            deliveryPath: "api",
+            firstTokenLatencyMs: metadata.firstTokenLatencyMs,
+          };
+          enqueueReveal(content);
         }
         if (event.type === "done") {
           receivedDone = true;
@@ -284,19 +304,21 @@ export function Chat({ presetAnswers }: ChatProps) {
         for (const row of rows) {
           if (!row.trim()) continue;
           consumeStreamEvent(JSON.parse(row));
-          setMessages([...nextMessages, { role: "assistant", content: answer, ...metadata }]);
         }
       }
       buffer += decoder.decode();
       if (buffer.trim()) consumeStreamEvent(JSON.parse(buffer));
       if (!answer.trim()) throw new Error("没有收到有效回答，请重试。");
       if (!receivedDone) throw new Error("回答连接提前结束，请重试。");
+      await finishReveal();
+      if (conversationEpoch !== conversationEpochRef.current) return;
       const completedMessages = [...nextMessages, { role: "assistant" as const, content: answer, ...metadata }];
       setMessages(completedMessages);
       persistConversation(completedMessages);
       track("answer_completed", sessionId, "", { ...metadata, questionCategory: inferQuestionCategory(clean) });
     } catch (caught) {
       if (conversationEpoch !== conversationEpochRef.current) return;
+      cancelReveal();
       setRetryQuestion(clean);
       if (caught instanceof Error && caught.name === "AbortError") {
         setError("回答未完整生成，已按你的操作停止。");
@@ -321,12 +343,13 @@ export function Chat({ presetAnswers }: ChatProps) {
         }
       }
     }
-  }, [clearThinkingTimers, loading, messages, persistConversation, presetAnswers, startThinking, updateThinkingStage]);
+  }, [cancelReveal, clearThinkingTimers, enqueueReveal, finishReveal, loading, messages, persistConversation, presetAnswers, startReveal, startThinking, updateThinkingStage]);
 
   const resetConversation = useCallback(() => {
     conversationEpochRef.current += 1;
     clearThinkingTimers();
     abortRef.current?.abort();
+    cancelReveal();
     abortRef.current = null;
     setMessages([]);
     setInput("");
@@ -345,12 +368,13 @@ export function Chat({ presetAnswers }: ChatProps) {
       chatScrollRef.current?.scrollTo({ top: 0, behavior: "smooth" });
       document.getElementById("top")?.scrollIntoView({ behavior: "smooth", block: "start" });
     });
-  }, [clearThinkingTimers]);
+  }, [cancelReveal, clearThinkingTimers]);
 
   const loadConversation = useCallback((storedMessages: ConversationMessage[]) => {
     conversationEpochRef.current += 1;
     clearThinkingTimers();
     abortRef.current?.abort();
+    cancelReveal();
     abortRef.current = null;
     setMessages(storedMessages);
     setInput("");
@@ -364,7 +388,7 @@ export function Chat({ presetAnswers }: ChatProps) {
     setShowScrollToLatest(false);
     shouldFollowRef.current = true;
     requestAnimationFrame(() => messageEndRef.current?.scrollIntoView({ block: "end" }));
-  }, [clearThinkingTimers]);
+  }, [cancelReveal, clearThinkingTimers]);
 
   useEffect(() => {
     if (!command || handledCommandRef.current === command.id) return;
@@ -529,7 +553,7 @@ export function Chat({ presetAnswers }: ChatProps) {
             </section>
           </div>
         ) : (
-          <div className="messages" aria-live="polite">
+          <div className="messages" aria-live="off" aria-busy={loading}>
             {messages.map((message, index) => (
               <article
                 className={`message ${message.role}${message.role === "assistant" && message.content && !message.responseStatus ? " streaming" : ""}`}
@@ -554,6 +578,7 @@ export function Chat({ presetAnswers }: ChatProps) {
                       ? (
                           <FormattedAnswer
                             content={message.content}
+                            streaming={!message.responseStatus}
                             citations={message.citations}
                             sources={message.sources}
                             onCitationClick={(sourceId) => {
@@ -640,6 +665,9 @@ export function Chat({ presetAnswers }: ChatProps) {
               </article>
             ))}
             <div ref={messageEndRef} />
+            <div className="sr-only" role="status" aria-live="polite">
+              {!loading && hasCompletedAnswer ? "回答已生成" : ""}
+            </div>
           </div>
         )}
       </div>
@@ -692,7 +720,10 @@ export function Chat({ presetAnswers }: ChatProps) {
             <button
               type="button"
               className="send-button stop"
-              onClick={() => abortRef.current?.abort()}
+              onClick={() => {
+                abortRef.current?.abort();
+                cancelReveal();
+              }}
               aria-label="停止生成"
               title="停止生成"
             >

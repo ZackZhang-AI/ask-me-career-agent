@@ -7,6 +7,8 @@ const thinkingSource = readFileSync(new URL("../components/use-thinking-status.t
 const appFrameSource = readFileSync(new URL("../components/app-frame.tsx", import.meta.url), "utf8");
 const actionsSource = readFileSync(new URL("../components/answer-actions.tsx", import.meta.url), "utf8");
 const globalStyles = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8");
+const revealSource = readFileSync(new URL("../components/use-stream-reveal.ts", import.meta.url), "utf8");
+const revealCoreSource = readFileSync(new URL("../lib/stream-reveal.ts", import.meta.url), "utf8");
 
 test("回答首字出现前保留可感知的加载状态", () => {
   const loadingSources = `${chatSource}\n${thinkingSource}`;
@@ -48,4 +50,15 @@ test("保留首页内容并补齐历史、回答动作和回到底部", () => {
   assert.match(actionsSource, /重新回答/);
   assert.match(actionsSource, /精简一点/);
   assert.match(actionsSource, /展开证据/);
+});
+
+test("安全语义片段通过独立队列转为自适应逐字展示", () => {
+  assert.match(chatSource, /useStreamReveal/);
+  assert.match(chatSource, /await finishReveal\(\)/);
+  assert.match(chatSource, /aria-live="off" aria-busy=\{loading\}/);
+  assert.match(revealSource, /prefers-reduced-motion: reduce/);
+  assert.match(revealSource, /visibilitychange/);
+  assert.match(revealCoreSource, /Intl\.Segmenter\("zh", \{ granularity: "grapheme" \}\)/);
+  assert.match(revealCoreSource, /MAX_FINISHING_TAIL_MS = 1_500/);
+  assert.doesNotMatch(chatSource, /PRESET_REVEAL_INTERVAL_MS/);
 });

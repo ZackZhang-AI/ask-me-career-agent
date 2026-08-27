@@ -2,7 +2,6 @@ import { NextRequest } from "next/server";
 import { buildAnswerCitations } from "@/lib/answer-citations";
 import { persistEvent } from "@/lib/analytics";
 import { buildChatDelivery, type ChatDelivery, type ChatStreamMetadata } from "@/lib/chat-pipeline";
-import { presetRevealChunks } from "@/lib/chat-session";
 import { assessQuestion } from "@/lib/guardrails";
 import { getClaims, serializeKnowledgeItems } from "@/lib/knowledge";
 import { getFollowUpQuestions } from "@/lib/question-suggestions";
@@ -55,10 +54,7 @@ async function emitDelivery(
     ...(delivery.claims ? { claims: delivery.claims } : {}),
   }));
   if (!delivery.streamed) {
-    for (const chunk of presetRevealChunks(answer)) {
-      controller.enqueue(line({ type: "delta", content: chunk }));
-      await new Promise((resolve) => setTimeout(resolve, 16));
-    }
+    controller.enqueue(line({ type: "delta", content: answer }));
   }
   await recordTokenUsage({ actualTokens: delivery.actualTokens, tokenReservation: delivery.tokenReservation });
   const latencyMs = Date.now() - input.startedAt;

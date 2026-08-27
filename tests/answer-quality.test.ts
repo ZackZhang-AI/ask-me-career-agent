@@ -159,6 +159,14 @@ test("回答长度按问题弹性组织而不是机械卡字数", () => {
   assert.match(systemPrompt, /未被问到的限制不要主动展开或放大/);
 });
 
+test("深度开放题缺少证据层次时触发厚度修复", () => {
+  const question = "你的过往经历怎样支持你做 AI 产品？";
+  const deepPlan = buildAnswerPlan(question, retrieveKnowledge(question));
+  assert.equal(deepPlan.detailLevel, "deep");
+  const result = validateAnswer("我的过往经历让我形成了数据判断和产品落地能力，我认为这些能力可以支持我做好 AI 产品。", deepPlan);
+  assert.equal(result.triggers.includes("insufficient_depth"), true);
+});
+
 test("有序列表编号不会被误判为候选人的业务数字", () => {
   const numbered = `1. ${plan.fallbackAnswer}`;
   assert.equal(validateAnswer(numbered, plan).triggers.includes("unsupported_number"), false);

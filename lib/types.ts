@@ -18,6 +18,7 @@ export type ProcessingStage = "understanding" | "checking_evidence" | "writing_a
 export type ReviewPath = "none" | "pro_pass" | "pro_rewrite" | "pro_reject";
 export type DeliveryMode = "local_reveal" | "realtime_stream" | "reviewed_buffer";
 export type StreamFailureType = "hard_safety" | "transport_interrupted" | "service_unavailable" | "semantic_warning";
+export type AnswerDetailLevel = "concise" | "standard" | "deep";
 export type EvidenceBasis = "confirmed_fact" | "source_view" | "user_statement" | "inference";
 export type ResponseShape = "narrative" | "direct" | "fit_mapping" | "project_arc" | "contribution" | "star" | "shortcoming" | "recommendation";
 export type ConversationDepth = "overview" | "follow_up" | "deep_dive";
@@ -174,6 +175,7 @@ export interface AnswerPlan {
   usedStoryIds: string[];
   avoidPoints: string[];
   conversationDepth: ConversationDepth;
+  detailLevel: AnswerDetailLevel;
   responseShape: ResponseShape;
   closingPurpose: string;
   targetLength: { min: number; max: number };

@@ -19,17 +19,3 @@ export function isNearScrollBottom(
 ) {
   return scrollHeight - scrollTop - clientHeight <= threshold;
 }
-
-export function presetRevealChunks(content: string) {
-  const characters = Array.from(content);
-  const chunks: string[] = [];
-  let offset = 0;
-
-  while (offset < characters.length) {
-    const chunkSize = offset === 0 ? 1 : offset < 20 ? 2 : offset < 96 ? 3 : 5;
-    chunks.push(characters.slice(offset, offset + chunkSize).join(""));
-    offset += chunkSize;
-  }
-
-  return chunks;
-}

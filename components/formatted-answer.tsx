@@ -8,9 +8,10 @@ interface FormattedAnswerProps {
   citations?: AnswerCitation[];
   sources?: Source[];
   onCitationClick?: (sourceId: string) => void;
+  streaming?: boolean;
 }
 
-export function FormattedAnswer({ content, citations = [], sources = [], onCitationClick }: FormattedAnswerProps) {
+export function FormattedAnswer({ content, citations = [], sources = [], onCitationClick, streaming = false }: FormattedAnswerProps) {
   const sourceNumbers = new Map(sources.map((source, index) => [source.id, index + 1]));
   return (
     <div className="message-content">
@@ -20,8 +21,8 @@ export function FormattedAnswer({ content, citations = [], sources = [], onCitat
           .flatMap((citation) => citation.sourceIds))]
           .filter((sourceId) => sourceNumbers.has(sourceId));
         return (
-          <p key={`${paragraphIndex}-${paragraph.slice(0, 16)}`}>
-            {parseAnswerEmphasis(paragraph).map((segment, segmentIndex) => (
+          <p key={paragraphIndex}>
+            {parseAnswerEmphasis(paragraph, { hideUnclosedMarkers: streaming }).map((segment, segmentIndex) => (
               segment.emphasized
                 ? <strong key={segmentIndex}>{segment.text}</strong>
                 : <Fragment key={segmentIndex}>{segment.text}</Fragment>
