@@ -4,7 +4,7 @@ import { takeStreamUnits } from "./stream-answer";
 import type { AnswerPlan, ChatMessage, DeliveryMode, QuestionFrame, StreamFailureType } from "./types";
 
 const reviewedIntents = new Set([
-  "result", "contribution", "experience", "education", "credentials", "project_overview", "project_problem", "ai_collaboration",
+  "result", "contribution", "experience", "education", "credentials", "project_overview", "project_problem", "ai_collaboration", "behavioral_experience", "career_logistics",
 ]);
 
 export function selectDeliveryMode(input: {
@@ -17,9 +17,12 @@ export function selectDeliveryMode(input: {
 }): DeliveryMode {
   if (input.hasLocalResponse || input.frame.questionMode === "agent_meta" || !input.shouldGenerate) return "local_reveal";
   if (!input.canStream || reviewedIntents.has(input.plan.intent)) return "reviewed_buffer";
+  if (["career_transition", "experience_value", "role_fit", "skills", "challenge", "diagnosis", "limitation", "hiring_recommendation"].includes(input.plan.intent)
+    && (input.hasEvidence || input.frame.evidencePolicy !== "required")) return "realtime_stream";
+  if (["supported_personal", "unsupported_personal"].includes(input.frame.factRisk)) return "reviewed_buffer";
   if (input.frame.evidencePolicy === "required" && !input.hasEvidence) return "reviewed_buffer";
+  if (["situational", "product_case", "business_case", "estimation", "work_style", "current_topic"].includes(input.frame.questionFamily)) return "realtime_stream";
   if (input.frame.questionMode === "candidate_reasoning") return "realtime_stream";
-  if (["career_transition", "experience_value", "role_fit", "skills", "challenge", "diagnosis", "limitation", "hiring_recommendation"].includes(input.plan.intent)) return "realtime_stream";
   return "reviewed_buffer";
 }
 

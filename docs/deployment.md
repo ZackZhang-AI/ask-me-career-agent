@@ -46,7 +46,7 @@
 4. 检查事件接口始终返回 `204`，且 `page_viewed`、`summary_viewed`、`question_sent`、`answer_completed`、二轮提问及各类点击能异步进入 Neon。事件写入失败不得阻塞主流程。
 5. 检查 Redis：同一 IP 每分钟第 6 次模型请求被限流、单会话第 21 题被拒绝、每日请求或 Token 预算耗尽时返回明确状态。数据库仅出现加盐哈希，不得出现原始 IP、邮箱或手机号。
 6. 检查 `GET /api/cron/events`：无 Bearer 密钥时拒绝，使用 `Authorization: Bearer ${CRON_SECRET}` 时清理 30 天前事件。Vercel Cron 每日 UTC 03:00 调用一次。
-7. 使用真实 DeepSeek API 连续验证至少 30 道混合题，确认 Flash/Pro 路径无 401/402/403、可答开放题不走本地兜底；低风险题应真实流式输出，高风险事实题必须在 Pro 审校完成后展示。
+7. 每次发布先运行 12 道真实 DeepSeek 发布门禁，再在 Preview 连续验证不少于 60 道混合题；每周工作流额外运行完整 30 题流式 Smoke Test。确认 Flash/Pro 路径无 401/402/403、可答开放题不走本地兜底；低风险题应真实流式输出，高风险事实题必须在 Pro 审校完成后展示。
 8. 合并 Pull Request，由 Vercel 生成 Production 部署；不要绕过失败的 CI、密钥鉴权或 DeepSeek 余额检查直接提升 Preview。
 9. Production 冒烟测试通过后再公开仓库与域名；若问答异常，先将 `CHAT_DISABLED=true`，保留静态资料和项目证据入口。
 

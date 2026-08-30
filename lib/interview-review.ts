@@ -25,6 +25,9 @@ export function buildReviewPrompt(question: string, candidate: string, plan: Ans
 原问题：${question}
 候选回答：${candidate}
 本题意图：${plan.intent}
+题型：${plan.questionFamily}
+事实风险：${plan.factRisk}
+回答策略：${plan.answerStrategy}
 回答模式：${plan.questionMode}
 目标岗位：${plan.targetRole ?? "未指定"}
 必须覆盖：${plan.mustInclude.join("；") || "直接回答问题"}
@@ -39,6 +42,8 @@ export function buildReviewPrompt(question: string, candidate: string, plan: Ans
 5. oral_naturalness：表达自然、有层次，不机械套模板或堆砌栏目。
 6. follow_up_resilience：关键说法能够被后续追问，不使用空泛口号。
 7. reasoning_boundary：假设题明确是处理思路，不冒充已经发生的经历。
+8. 题型完整性：行为题使用真实 STAR 并准确交代结果边界；情景题有目标、约束、取舍和验证；产品题覆盖用户、问题、最小方案、指标、风险和迭代；业务题覆盖目标、用户链路、关键变量、指标和验证；估算题声明假设并保持计算一致。
+9. 边界自然度：未记录个人事实不编造；时效问题明确无法核验实时事实后给出分析框架；不要出现模型、RAG、门禁、证据 ID 等系统措辞。
 
 只有全部通过才能 decision=pass。可以在不新增事实的前提下修好时，decision=rewrite 并给出完整 revisedAnswer；事实不足、明显答非所问且无法可靠修复时 decision=reject。`;
 }

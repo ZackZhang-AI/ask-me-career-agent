@@ -31,6 +31,7 @@ import {
   type QuestionGroupId,
 } from "@/lib/question-suggestions";
 import type { PresetAnswerPacket, StreamFailureType } from "@/lib/types";
+import type { FeedbackImprovementReason } from "@/lib/feedback-improvement";
 
 interface ChatProps {
   presetAnswers: PresetAnswerPacket[];
@@ -63,7 +64,7 @@ function waitFor(ms: number, signal: AbortSignal) {
   });
 }
 
-function track(event: string, sessionId: string, detail = "", metadata: Partial<ConversationMessage> & { questionCategory?: string } = {}) {
+function track(event: string, sessionId: string, detail = "", metadata: Partial<ConversationMessage> & { questionCategory?: string; visualFinishLatencyMs?: number; streamFailureType?: StreamFailureType } = {}) {
   void fetch("/api/events", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -80,6 +81,8 @@ function track(event: string, sessionId: string, detail = "", metadata: Partial<
       deliveryPath: metadata.deliveryPath,
       contractId: metadata.contractId,
       questionCategory: metadata.questionCategory,
+      visualFinishLatencyMs: metadata.visualFinishLatencyMs,
+      streamFailureType: metadata.streamFailureType,
     }),
     keepalive: true,
   });
@@ -125,6 +128,7 @@ export function Chat({ presetAnswers }: ChatProps) {
     fromSuggestion = false,
     retry = false,
     baseMessages?: ConversationMessage[],
+    improvementReason?: FeedbackImprovementReason,
   ) => {
     const clean = question.trim();
     if (!clean || loading) return;
@@ -152,6 +156,7 @@ export function Chat({ presetAnswers }: ChatProps) {
     abortRef.current = abort;
     let shouldFocusAfterCompletion = false;
     let discardPartial = false;
+    let streamFailureType: StreamFailureType | undefined;
     let renderMetadata: Partial<ConversationMessage> = {};
     startReveal((visibleText) => {
       if (conversationEpoch !== conversationEpochRef.current) return;
@@ -189,7 +194,7 @@ export function Chat({ presetAnswers }: ChatProps) {
         const completedMessages = [...nextMessages, { role: "assistant" as const, content: answer, ...completedMetadata }];
         setMessages(completedMessages);
         persistConversation(completedMessages);
-        track("answer_completed", sessionId, "", { ...completedMetadata, questionCategory: inferQuestionCategory(clean) });
+        track("answer_completed", sessionId, "", { ...completedMetadata, questionCategory: inferQuestionCategory(clean), visualFinishLatencyMs: Math.round(performance.now() - startedAt) });
         return;
       }
 
@@ -200,6 +205,7 @@ export function Chat({ presetAnswers }: ChatProps) {
         body: JSON.stringify({
           sessionId,
           messages: nextMessages.map(({ role, content }) => ({ role, content })),
+          improvementReason,
         }),
       });
       if (!response.ok || !response.body) {
@@ -286,6 +292,7 @@ export function Chat({ presetAnswers }: ChatProps) {
           if (event.disposition === "clarify") shouldFocusAfterCompletion = true;
         }
         if (event.type === "error") {
+          streamFailureType = event.failureType;
           discardPartial = event.discardPartial === true
             && (event.failureType === "hard_safety" || event.failureType === "transport_interrupted");
           throw new Error(event.message ?? "问答服务返回异常。");
@@ -315,7 +322,7 @@ export function Chat({ presetAnswers }: ChatProps) {
       const completedMessages = [...nextMessages, { role: "assistant" as const, content: answer, ...metadata }];
       setMessages(completedMessages);
       persistConversation(completedMessages);
-      track("answer_completed", sessionId, "", { ...metadata, questionCategory: inferQuestionCategory(clean) });
+      track("answer_completed", sessionId, "", { ...metadata, questionCategory: inferQuestionCategory(clean), visualFinishLatencyMs: Math.round(performance.now() - startedAt) });
     } catch (caught) {
       if (conversationEpoch !== conversationEpochRef.current) return;
       cancelReveal();
@@ -325,7 +332,7 @@ export function Chat({ presetAnswers }: ChatProps) {
       } else {
         const message = caught instanceof Error ? caught.message : "出现未知错误，请重试。";
         setError(message.startsWith("抱歉") ? message : `回答未完整生成。${message}`);
-        track("chat_error", sessionId, message);
+        track("chat_error", sessionId, message, { streamFailureType });
       }
       setMessages((current) => {
         const withoutPartial = discardPartial ? current.slice(0, -1) : current;
@@ -447,6 +454,12 @@ export function Chat({ presetAnswers }: ChatProps) {
   function condenseAnswer(answerIndex: number) {
     const baseMessages = messages.slice(0, answerIndex + 1);
     void send("请把上一条回答精简为 3 个重点，保留结论和关键证据。", true, false, baseMessages);
+  }
+
+  function improveAnswer(answerIndex: number, reason: FeedbackImprovementReason) {
+    const context = answerQuestionContext(answerIndex);
+    if (!context) return;
+    void send(context.question, false, true, context.baseMessages, reason);
   }
 
   function submit(event: FormEvent) {
@@ -657,6 +670,13 @@ export function Chat({ presetAnswers }: ChatProps) {
                               }}
                             >{reason.label}</button>
                           ))}
+                          {answerFeedbackReason[index] && (
+                            <button
+                              className="feedback-retry"
+                              type="button"
+                              onClick={() => improveAnswer(index, answerFeedbackReason[index] as FeedbackImprovementReason)}
+                            >按此改进重答</button>
+                          )}
                         </div>
                       )}
                     </div>

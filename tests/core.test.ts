@@ -99,7 +99,7 @@ test("项目挑战类问题自动调用对应公开 STAR 故事", () => {
   const stories = getRelatedStarStories(items);
   const answer = demoAnswer("RAG 项目遇到什么挑战？", items);
   assert.equal(stories[0]?.relatedProject, "rag-knowledge-base");
-  assert.match(answer, /医疗私有文档|医疗知识问答/);
+  assert.match(answer, /医疗私有文档|医疗知识问答|医疗 RAG/);
   assert.match(answer, /\*\*我的行动\*\*/);
   assert.match(answer, /Rerank|四维评测/);
   assert.doesNotMatch(answer, /\[S\d+\]|证据边界/);

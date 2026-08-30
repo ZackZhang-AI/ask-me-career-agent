@@ -19,6 +19,21 @@ export type ReviewPath = "none" | "pro_pass" | "pro_rewrite" | "pro_reject";
 export type DeliveryMode = "local_reveal" | "realtime_stream" | "reviewed_buffer";
 export type StreamFailureType = "hard_safety" | "transport_interrupted" | "service_unavailable" | "semantic_warning";
 export type AnswerDetailLevel = "concise" | "standard" | "deep";
+export type InterviewQuestionFamily =
+  | "candidate_fact"
+  | "behavioral"
+  | "situational"
+  | "product_case"
+  | "business_case"
+  | "estimation"
+  | "motivation"
+  | "work_style"
+  | "career_logistics"
+  | "current_topic"
+  | "agent_meta"
+  | "unrelated";
+export type FactRisk = "low" | "supported_personal" | "unsupported_personal" | "freshness_sensitive";
+export type AnswerStrategy = "evidence_answer" | "reasoned_answer" | "clarify_then_answer" | "boundary_bridge" | "decline";
 export type EvidenceBasis = "confirmed_fact" | "source_view" | "user_statement" | "inference";
 export type ResponseShape = "narrative" | "direct" | "fit_mapping" | "project_arc" | "contribution" | "star" | "shortcoming" | "recommendation";
 export type ConversationDepth = "overview" | "follow_up" | "deep_dive";
@@ -59,6 +74,9 @@ export interface QuestionFrame {
   answerIntent: AnswerIntent;
   questionMode: QuestionMode;
   evidencePolicy: EvidencePolicy;
+  questionFamily: InterviewQuestionFamily;
+  factRisk: FactRisk;
+  answerStrategy: AnswerStrategy;
   focusTerms: string[];
   targetRole?: string;
   requestedDimensions: string[];
@@ -114,7 +132,25 @@ export type AnswerIntent =
   | "education"
   | "credentials"
   | "hiring_recommendation"
+  | "behavioral_experience"
+  | "situational_judgment"
+  | "product_design"
+  | "business_analysis"
+  | "estimation"
+  | "work_style"
+  | "career_planning"
+  | "company_motivation"
+  | "career_logistics"
+  | "industry_view"
   | "general";
+
+export interface AnswerBlueprint {
+  directConclusion: string;
+  requiredFacts: string[];
+  reasoningSteps: string[];
+  keyTradeoffs: string[];
+  interviewConclusion: string;
+}
 
 export interface AnswerFactSkeleton {
   intent: AnswerIntent;
@@ -155,6 +191,9 @@ export interface AnswerPlan {
   targetRole?: string;
   questionMode: QuestionMode;
   evidencePolicy: EvidencePolicy;
+  questionFamily: InterviewQuestionFamily;
+  factRisk: FactRisk;
+  answerStrategy: AnswerStrategy;
   directAnswerTerms: string[];
   forbiddenTopics: QuestionTopic[];
   intent: AnswerIntent;
@@ -183,6 +222,7 @@ export interface AnswerPlan {
   recentAnswers: string[];
   conversationContext: InterviewConversationContext;
   brief: AnswerBrief;
+  blueprint: AnswerBlueprint;
   answerableWithoutRetrievedEvidence: boolean;
   fallbackAnswer: string;
 }

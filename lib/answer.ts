@@ -1,7 +1,7 @@
 import { candidateNarrative } from "../content/narrative.ts";
 import { agentProfile } from "../content/agent-profile.ts";
 import { interviewPersona } from "../content/interview-persona.ts";
-import type { AnswerDetailLevel, AnswerIntent, AnswerPlan, ChatMessage, ConversationDepth, KnowledgeItem, QuestionContract, QuestionFrame, ResponseShape, StableAnswer, StarStory } from "./types";
+import type { AnswerBlueprint, AnswerDetailLevel, AnswerIntent, AnswerPlan, ChatMessage, ConversationDepth, KnowledgeItem, QuestionContract, QuestionFrame, ResponseShape, StableAnswer, StarStory } from "./types";
 import { getRelatedStarStories, getStarStoriesByIds } from "./knowledge.ts";
 import { getFollowUpQuestions } from "./question-suggestions.ts";
 import { buildLocalQuestionFrame, findQuestionContract, frameFromContract } from "./question-contracts";
@@ -22,6 +22,16 @@ const diagnosticFallback = [
 ].join("\n\n");
 const agentIdentityFacts = [agentProfile.identity, ...agentProfile.capabilities, agentProfile.boundary];
 const capabilityScopeFacts = [...agentProfile.capabilities, agentProfile.boundary];
+const reasoningFactsByIntent: Partial<Record<AnswerIntent, string[]>> = {
+  situational_judgment: ["先确认目标和约束，再拆出关键假设、备选方案、取舍标准与最小验证。", "方案推进时先控制最大风险，用可回滚的小范围验证换取下一步信息。"],
+  product_design: ["先明确目标用户和高频痛点，再定义最小闭环、核心指标、主要风险与迭代顺序。", "功能优先级由用户价值、业务价值、验证成本与失败风险共同决定。"],
+  business_analysis: ["先把业务目标拆成用户链路、关键变量和指标树，再定位最值得验证的瓶颈。", "增长或商业化判断必须区分相关性与因果性，并设计能够验证关键假设的对照。"],
+  estimation: ["估算先声明口径和假设，再按人群、频次、渗透率或供给能力分层计算，并用另一条路径交叉校验。"],
+  work_style: ["面对协作、压力和不确定性，我会先同步目标与责任边界，再按风险和信息增益安排优先级。", "复盘重点不是归因给个人，而是找到流程、信息或判断机制中可以被下一次改进的部分。"],
+  career_planning: ["我的职业规划围绕 AI 产品的需求判断、数据评测和跨团队落地持续加深，而不是追逐短期岗位标签。"],
+  company_motivation: ["在缺少具体公司信息时，我只基于岗位方向、业务场景和能力匹配说明选择逻辑，不做泛泛的公司赞美。"],
+  industry_view: ["对于需要最新信息的问题，我会先说明当前无法核验实时动态，再从用户价值、技术边界、商业可持续性和监管风险给出判断框架。"],
+};
 const metaIntents: AnswerIntent[] = ["agent_identity", "capability_scope"];
 const projectStatusLabels = { completed: "已完成", in_progress: "正在持续迭代", planned: "仍在规划中", archived: "已归档" } as const;
 
@@ -51,7 +61,10 @@ const defaultShapeByIntent: Record<AnswerIntent, ResponseShape> = {
   project_overview: "project_arc", project_problem: "direct", contribution: "contribution",
   ai_collaboration: "direct", challenge: "star", diagnosis: "direct", result: "shortcoming", limitation: "shortcoming",
   skills: "fit_mapping", experience: "direct", experience_value: "fit_mapping", privacy: "direct",
-  education: "direct", credentials: "direct", hiring_recommendation: "recommendation", general: "direct",
+  education: "direct", credentials: "direct", hiring_recommendation: "recommendation",
+  behavioral_experience: "star", situational_judgment: "direct", product_design: "direct", business_analysis: "direct",
+  estimation: "direct", work_style: "direct", career_planning: "narrative", company_motivation: "fit_mapping",
+  career_logistics: "direct", industry_view: "direct", general: "direct",
 };
 
 const defaultLengthByShape: Record<ResponseShape, { min: number; max: number }> = {
@@ -93,7 +106,7 @@ function detectIntent(question: string, stableAnswer?: StableAnswer): AnswerInte
 }
 
 function projectFacts(items: KnowledgeItem[], intent: AnswerIntent, frame: QuestionFrame) {
-  const facts = items.flatMap((item) => [item.content]);
+  const facts = [...(reasoningFactsByIntent[intent] ?? []), ...items.flatMap((item) => [item.content])];
   if (intent === "agent_identity") return agentIdentityFacts;
   if (intent === "capability_scope") return capabilityScopeFacts;
   if (intent === "diagnosis") return [...diagnosticMethodFacts, ...facts];
@@ -175,6 +188,11 @@ function openPointLabels(intent: AnswerIntent, facet: QuestionFrame["facet"]) {
   if (intent === "career_transition") return ["成长连续性", "方向验证", "长期选择"];
   if (intent === "experience_value") return ["业务判断", "方案边界", "验证方式"];
   if (intent === "privacy") return ["数据资格", "流程约束", "风险控制"];
+  if (intent === "product_design") return ["用户与问题", "最小方案", "指标与迭代"];
+  if (intent === "business_analysis") return ["业务目标", "关键变量", "验证方式"];
+  if (intent === "estimation") return ["口径假设", "分层计算", "交叉校验"];
+  if (intent === "work_style") return ["我的原则", "具体做法", "复盘方式"];
+  if (intent === "industry_view") return ["时效边界", "判断框架", "我的结论"];
   if (facet === "collaboration") return ["协作机制", "责任边界", "质量控制"];
   if (facet === "evaluation") return ["评价目标", "诊断方法", "迭代动作"];
   if (facet === "transfer") return ["可迁移能力", "形成过程", "应用场景"];
@@ -236,6 +254,16 @@ function openThesis(question: string, intent: AnswerIntent, items: KnowledgeItem
   if (intent === "diagnosis") {
     return "如果同一组 Bad Case 没有改善，我会先验证测量是否可信，再定位链路哪里失真，而不是立刻换模型或继续堆功能。";
   }
+  if (intent === "product_design") return "如果让我做这道产品设计题，我会先锁定目标用户和最值得解决的问题，再用最小方案验证核心价值，而不是先堆功能。";
+  if (intent === "business_analysis") return "我的处理思路是先把业务目标拆成用户链路、关键变量和指标，再通过验证定位真正的增长或效率瓶颈。";
+  if (intent === "estimation") return "这类估算题我会先声明口径和关键假设，再分层计算并做交叉校验，重点保证推理过程可解释。";
+  if (intent === "situational_judgment") return "面对这个情景，我会先明确目标和约束，再比较方案取舍，用最小验证降低决策风险。";
+  if (intent === "work_style") return "我的工作方式是先对齐目标和责任边界，再按风险与信息增益安排优先级，并把分歧转化成可以验证的问题。";
+  if (intent === "career_planning") return "我的职业规划是持续深耕 AI 产品，把需求判断、数据评测和跨团队落地三项能力做得更扎实。";
+  if (intent === "company_motivation") return frame?.targetRole
+    ? `我选择这个机会，核心不是泛泛认可公司，而是${frame.targetRole}的工作内容与我的能力积累能够形成具体匹配。`
+    : "要准确回答选择动机，我需要先了解具体公司、岗位和当前业务重点；在此基础上，我会从业务方向、岗位任务和能力匹配三个维度判断。";
+  if (intent === "industry_view") return "这个问题涉及最新动态，我目前不能核验实时事实，因此不会把可能过时的信息当作结论；我可以从用户价值、技术边界、商业可持续性和风险四个维度说明判断。";
   if (intent === "challenge" && story) return `我遇到的核心挑战是：${story.situation}`;
   if (intent === "skills" && /数据|评测|指标|分析/.test(question)) {
     return "我会把数据分析和 AI 评测放在同一条产品迭代链路里：先定义效果，再定位问题，最后用失败样本决定下一轮动作。";
@@ -265,7 +293,7 @@ function detailLevelFor(question: string, intent: AnswerIntent, frame: QuestionF
   if (/为什么应该录用|为什么要录用|为什么推荐|录用你的理由/.test(question)) return "deep";
   if (depth === "deep_dive" || [
     "career_transition", "role_fit", "representative_project", "contribution", "challenge",
-    "experience_value", "skills", "hiring_recommendation",
+    "experience_value", "skills", "hiring_recommendation", "behavioral_experience", "product_design", "business_analysis", "estimation", "career_planning", "company_motivation",
   ].includes(intent)) return "deep";
   return "standard";
 }
@@ -280,6 +308,30 @@ function targetLengthFor(intent: AnswerIntent, responseShape: ResponseShape, det
   if (["project_arc", "contribution", "star"].includes(responseShape)) return { min: 420, max: 650 };
   if (responseShape === "fit_mapping") return { min: 380, max: 600 };
   return { min: Math.max(320, base.min), max: Math.max(520, base.max) };
+}
+
+function buildBlueprint(input: {
+  thesis: string;
+  frame: QuestionFrame;
+  facts: string[];
+  mustInclude: string[];
+  closingPurpose: string;
+}): AnswerBlueprint {
+  const reasoningByFamily = {
+    behavioral: ["交代真实情境和任务", "突出本人行动与取舍", "准确说明结果边界和复盘"],
+    situational: ["明确目标与约束", "比较方案与关键取舍", "设计最小验证"],
+    product_case: ["识别目标用户和核心问题", "定义最小方案与指标", "说明风险和迭代"],
+    business_case: ["拆解业务目标和用户链路", "建立关键变量与指标树", "验证主要假设"],
+    estimation: ["声明口径和假设", "分层计算", "交叉校验数量级"],
+  } as const;
+  const familySteps = reasoningByFamily[input.frame.questionFamily as keyof typeof reasoningByFamily];
+  return {
+    directConclusion: input.thesis,
+    requiredFacts: input.facts.slice(0, 3),
+    reasoningSteps: familySteps ? [...familySteps] : input.mustInclude.slice(0, 3),
+    keyTradeoffs: ["用户或业务价值与实现成本", "短期验证与长期扩展"],
+    interviewConclusion: input.closingPurpose,
+  };
 }
 
 export function buildAnswerPlan(
@@ -297,7 +349,7 @@ export function buildAnswerPlan(
   const historyText = history.filter((message) => message.role === "assistant").slice(-6).map((message) => message.content).join("\n");
   const candidateStories = getRelatedStarStories(items, 4);
   const conversationContext = buildInterviewConversationContext({ history, frame, items, stories: candidateStories });
-  const storyIntent = ["challenge", "contribution", "representative_project"].includes(intent)
+  const storyIntent = ["challenge", "contribution", "representative_project", "behavioral_experience"].includes(intent)
     || ["example", "transfer"].includes(frame.facet);
   const relatedStory = storyIntent
     ? selectStory(items, stableAnswer, historyText, frame.allowedStoryIds, conversationContext.usedStoryIds)
@@ -370,6 +422,9 @@ export function buildAnswerPlan(
     targetRole: frame.targetRole,
     questionMode: frame.questionMode,
     evidencePolicy: frame.evidencePolicy,
+    questionFamily: frame.questionFamily,
+    factRisk: frame.factRisk,
+    answerStrategy: frame.answerStrategy,
     directAnswerTerms: contract?.directAnswerTerms
       ?? (intent === "career_transition" ? ["转", "产品"] : intent === "experience_value" ? ["经历", "AI", "产品"] : intent === "role_fit" ? [frame.targetRole ?? "岗位", "匹配"] : []),
     forbiddenTopics: frame.forbiddenTopics,
@@ -399,6 +454,7 @@ export function buildAnswerPlan(
     recentAnswers: history.filter((message) => message.role === "assistant").slice(-3).map((message) => message.content),
     conversationContext,
     brief,
+    blueprint: buildBlueprint({ thesis, frame, facts: allowedFacts, mustInclude, closingPurpose }),
     answerableWithoutRetrievedEvidence: frame.questionMode !== "candidate_fact" || metaIntents.includes(intent) || ["career_transition", "role_fit"].includes(intent) || Boolean(contract),
   };
   const fallbackFacts = intent === "challenge" ? [...storyFacts, ...itemFacts] : [...itemFacts, ...storyFacts];
@@ -417,8 +473,9 @@ export function buildContext(items: KnowledgeItem[], plan?: AnswerPlan) {
     "<answer_task>",
     `候选人定位：${candidateNarrative.positioning}`,
     `本题要帮助面试官判断：${plan.evaluationGoal}`,
-    `本题意图：${plan.intent}；主题：${plan.topic}；回答维度：${plan.facet}。第一段必须直接回应：${plan.directAnswerTerms.join("、") || "当前问题"}。`,
-    `回答模式：${plan.questionMode}；证据策略：${plan.evidencePolicy}。candidate_reasoning 只能基于已经验证的能力回答方法和推演，开头要自然说明“我的处理思路”，不得暗示已经执行过；candidate_fact 不得在证据不足时补造经历。`,
+    `本题意图：${plan.intent}；题型：${plan.questionFamily}；事实风险：${plan.factRisk}；回答策略：${plan.answerStrategy}；主题：${plan.topic}；回答维度：${plan.facet}。第一段必须直接回应：${plan.directAnswerTerms.join("、") || "当前问题"}。`,
+    `内部回答蓝图：直接结论=${plan.blueprint.directConclusion}；所需事实=${plan.blueprint.requiredFacts.join("；") || "无"}；推理步骤=${plan.blueprint.reasoningSteps.join("→") || "直接回答"}；关键取舍=${plan.blueprint.keyTradeoffs.join("；")}；面试收束=${plan.blueprint.interviewConclusion}。不要在正文中展示“蓝图”或这些字段名。`,
+    `回答模式：${plan.questionMode}；证据策略：${plan.evidencePolicy}。candidate_reasoning 只能回答方法和推演，开头要自然说明这是“我的处理思路”，不得暗示已经执行过；behavioral 必须使用真实 STAR，没有完全对应案例时明确说“最接近的一段经历”；candidate_fact 不得在证据不足时补造经历。`,
     `回答结构：${plan.responseShape}；对话深度：${plan.conversationDepth}；参考长度：${plan.targetLength.min}-${plan.targetLength.max} 个中文字符。根据问题复杂度自然调整，简单事实短答，项目、贡献与复盘问题讲完整，不为凑字数重复。`,
     `回答厚度：${plan.detailLevel}。concise 只给直接答案；standard 讲清结论、最相关实践和方法或价值；deep 通常分成 3-4 个自然段，依次形成直接判断、2-3 层互补证据、关键机制或取舍，以及能帮助面试官形成判断的收束。每一段承担不同作用，不要罗列简历。加粗每处不超过 12 个汉字，禁止把整组经历或完整句子全部加粗。`,
     `本轮必须带来这些新信息：${plan.newInformationGoal.join("；")}`,

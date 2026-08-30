@@ -34,9 +34,13 @@ const questions = [
   "当前项目已经正式商业化了吗？",
 ] as const;
 const selectedIndex = Number(process.env.SMOKE_INDEX);
+const requestedLimit = Number(process.env.SMOKE_LIMIT);
+const smokeLimit = Number.isInteger(requestedLimit) && requestedLimit >= 1
+  ? Math.min(requestedLimit, questions.length)
+  : questions.length;
 const questionEntries = Number.isInteger(selectedIndex) && selectedIndex >= 1 && selectedIndex <= questions.length
   ? [[selectedIndex - 1, questions[selectedIndex - 1]] as const]
-  : questions.map((question, index) => [index, question] as const);
+  : questions.slice(0, smokeLimit).map((question, index) => [index, question] as const);
 
 async function readEvents(response: Response) {
   const reader = response.body?.getReader();

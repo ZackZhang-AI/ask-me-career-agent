@@ -260,6 +260,41 @@ export function validateAnswer(candidate: string, plan: AnswerPlan): QualityGate
     if (!/(?:逐步|连续|积累|迁移|收敛|确认)/.test(clean)) triggers.push("missing_transition_continuity");
     if (!/(?:更适合|更擅长|愿意|选择|因为|符合|一致)/.test(clean)) triggers.push("missing_transition_motivation");
   }
+  if (!plan.contractId && plan.intent === "behavioral_experience") {
+    if (!plan.relatedStoryId) triggers.push("missing_real_story");
+    if (!/(?:当时|背景|情境|项目|实习)/.test(clean)) triggers.push("missing_behavior_context");
+    if (!/(?:我先|我负责|我推动|我选择|我的行动|具体做法|我把)/.test(clean)) triggers.push("missing_behavior_action");
+    if (!/(?:结果|最终|验证|复盘|后来|边界)/.test(clean)) triggers.push("missing_behavior_result_review");
+  }
+  if (!plan.contractId && plan.intent === "situational_judgment") {
+    if (!/(?:目标|约束)/.test(clean)) triggers.push("missing_situation_constraints");
+    if (!/(?:取舍|权衡|优先级|比较)/.test(clean)) triggers.push("missing_situation_tradeoff");
+    if (!/(?:验证|试点|小范围|指标)/.test(clean)) triggers.push("missing_situation_validation");
+  }
+  if (!plan.contractId && plan.intent === "product_design") {
+    if (!/(?:用户|使用者|人群)/.test(clean)) triggers.push("missing_product_user");
+    if (!/(?:痛点|问题|需求)/.test(clean)) triggers.push("missing_product_problem");
+    if (!/(?:MVP|最小|首版|核心功能)/i.test(clean)) triggers.push("missing_product_mvp");
+    if (!/(?:指标|验证|成功标准)/.test(clean)) triggers.push("missing_product_metric");
+    if (!/(?:风险|取舍|迭代)/.test(clean)) triggers.push("missing_product_tradeoff");
+  }
+  if (!plan.contractId && plan.intent === "business_analysis") {
+    if (!/(?:业务目标|增长目标|效率|收入|成本)/.test(clean)) triggers.push("missing_business_goal");
+    if (!/(?:用户链路|漏斗|路径|环节)/.test(clean)) triggers.push("missing_business_journey");
+    if (!/(?:指标|变量|转化|留存)/.test(clean)) triggers.push("missing_business_metrics");
+    if (!/(?:验证|对照|实验|试点)/.test(clean)) triggers.push("missing_business_validation");
+  }
+  if (!plan.contractId && plan.intent === "estimation") {
+    if (!/(?:假设|口径)/.test(clean)) triggers.push("missing_estimation_assumption");
+    if (!/(?:分层|拆成|乘以|除以|计算|数量级)/.test(clean)) triggers.push("missing_estimation_calculation");
+    if (!/(?:交叉校验|反推|校验|敏感性)/.test(clean)) triggers.push("missing_estimation_check");
+  }
+  if (!plan.contractId && plan.intent === "industry_view" && !/(?:无法核验|不能核验|不掌握.{0,8}实时|知识时效|基于.{0,8}(?:框架|已知信息))/.test(clean)) {
+    triggers.push("missing_freshness_boundary");
+  }
+  if (plan.intent === "company_motivation" && !plan.targetRole && /(?:贵公司|你们公司|这家公司)/.test(clean) && /领先|优秀|非常认可|行业头部/.test(clean)) {
+    triggers.push("generic_company_flattery");
+  }
 
   const enforceRequiredSemantics = Boolean(plan.contractId)
     || plan.evidencePolicy === "required"

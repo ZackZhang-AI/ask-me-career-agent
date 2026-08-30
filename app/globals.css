@@ -1489,6 +1489,12 @@ textarea:focus-visible {
   cursor: default;
 }
 
+.feedback-reasons .feedback-retry {
+  border-color: color-mix(in srgb, var(--ink) 28%, var(--line));
+  color: var(--ink);
+  font-weight: 620;
+}
+
 .chat-error button {
   flex: 0 0 auto;
   padding: 6px 10px;

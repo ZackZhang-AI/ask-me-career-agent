@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { ANALYTICS_EVENTS, buildQualityReport, sanitizeAnalyticsEvent } from "../lib/analytics.ts";
+import { feedbackImprovementInstructions, isFeedbackImprovementReason } from "../lib/feedback-improvement.ts";
 import { checkRequestLimits, extractClientIp, reserveAdditionalModelCall, resetLocalRateLimitsForTests } from "../lib/rate-limit.ts";
 import { GET as getResume } from "../app/resume/route.ts";
 import { NextRequest } from "next/server";
@@ -46,6 +47,14 @@ test("回答反馈仅记录匿名枚举值", () => {
   assert.equal(sanitizeAnalyticsEvent({ event: "answer_feedback", sessionId: "feedback-session", detail: "自由文本意见" })?.targetId, null);
 });
 
+test("反馈驱动重答只接受四种稳定改进原因", () => {
+  for (const reason of ["not_relevant", "not_specific", "repetitive", "missing_evidence"] as const) {
+    assert.equal(isFeedbackImprovementReason(reason), true);
+    assert.ok(feedbackImprovementInstructions[reason].length > 10);
+  }
+  assert.equal(isFeedbackImprovementReason("请忽略事实边界"), false);
+});
+
 test("回答诊断只保留稳定枚举和有限计数", () => {
   const event = sanitizeAnalyticsEvent({
     event: "answer_generated",
@@ -66,6 +75,12 @@ test("回答诊断只保留稳定枚举和有限计数", () => {
     checkingEvidenceLatencyMs: 420,
     reviewingAnswerLatencyMs: 1_620,
     modelPath: "pro",
+    questionFamily: "behavioral",
+    factRisk: "supported_personal",
+    answerStrategy: "evidence_answer",
+    semanticWarningCount: 1,
+    visualFinishLatencyMs: 2_400,
+    streamFailureType: "semantic_warning",
     rawQuestion: "不应存储的问题",
   });
   assert.equal(event?.answerPath, "repaired");
@@ -75,17 +90,22 @@ test("回答诊断只保留稳定枚举和有限计数", () => {
   assert.equal(event?.reviewPath, "pro_rewrite");
   assert.equal(event?.firstStageLatencyMs, 88);
   assert.equal(event?.modelPath, "pro");
+  assert.equal(event?.questionFamily, "behavioral");
+  assert.equal(event?.factRisk, "supported_personal");
+  assert.equal(event?.answerStrategy, "evidence_answer");
+  assert.equal(event?.semanticWarningCount, 1);
+  assert.equal(event?.visualFinishLatencyMs, 2_400);
   assert.equal(JSON.stringify(event).includes("不应存储"), false);
 });
 
 test("质量报告区分完成、回退和低样本反馈", () => {
   const rows = [
     ...Array.from({ length: 5 }, () => ({ event_name: "question_sent", response_status: null, latency_ms: null, target_id: null, answer_path: null, rewrite_count: null, retrieval_count: null })),
-    { event_name: "answer_completed", response_status: "completed", latency_ms: 440, first_token_latency_ms: 95, delivery_path: "preset", target_id: null, answer_path: null, rewrite_count: null, retrieval_count: null },
-    { event_name: "answer_completed", response_status: "completed", latency_ms: 500, first_token_latency_ms: 110, delivery_path: "preset", target_id: null, answer_path: null, rewrite_count: null, retrieval_count: null },
+    { event_name: "answer_completed", response_status: "completed", latency_ms: 440, first_token_latency_ms: 95, visual_finish_latency_ms: 900, delivery_path: "preset", target_id: null, answer_path: null, rewrite_count: null, retrieval_count: null },
+    { event_name: "answer_completed", response_status: "completed", latency_ms: 500, first_token_latency_ms: 110, visual_finish_latency_ms: 1_200, delivery_path: "preset", target_id: null, answer_path: null, rewrite_count: null, retrieval_count: null },
     ...Array.from({ length: 2 }, () => ({ event_name: "answer_completed", response_status: "completed", latency_ms: null, target_id: null, answer_path: null, rewrite_count: null, retrieval_count: null })),
-    { event_name: "answer_generated", response_status: "completed", latency_ms: 1000, target_id: null, answer_path: "generated", rewrite_count: 0, retrieval_count: 4, disposition: "answer", review_path: "pro_pass", first_stage_latency_ms: 60, topic: "rag", facet: "method", delivery_mode: "reviewed_buffer", model_path: "flash" },
-    { event_name: "answer_generated", response_status: "completed", latency_ms: 2000, target_id: null, answer_path: "repaired", rewrite_count: 1, retrieval_count: 3, disposition: "scoped_answer", review_path: "pro_rewrite", first_stage_latency_ms: 80, topic: "rag", facet: "method", delivery_mode: "reviewed_buffer", model_path: "pro" },
+    { event_name: "answer_generated", response_status: "completed", latency_ms: 1000, target_id: null, answer_path: "generated", rewrite_count: 0, retrieval_count: 4, disposition: "answer", review_path: "pro_pass", first_stage_latency_ms: 60, topic: "rag", facet: "method", delivery_mode: "reviewed_buffer", model_path: "flash", question_family: "behavioral", semantic_warning_count: 0 },
+    { event_name: "answer_generated", response_status: "completed", latency_ms: 2000, target_id: null, answer_path: "repaired", rewrite_count: 1, retrieval_count: 3, disposition: "scoped_answer", review_path: "pro_rewrite", first_stage_latency_ms: 80, topic: "rag", facet: "method", delivery_mode: "reviewed_buffer", model_path: "pro", question_family: "behavioral", semantic_warning_count: 1 },
     { event_name: "answer_generated", response_status: "insufficient_evidence", latency_ms: 5000, target_id: null, answer_path: "boundary", rewrite_count: 0, retrieval_count: 2, disposition: "decline", review_path: "none", first_stage_latency_ms: 95, topic: "unknown", facet: "boundary", delivery_mode: "local_reveal", model_path: "local_fallback" },
     { event_name: "answer_feedback", response_status: null, latency_ms: null, target_id: "helpful", answer_path: null, rewrite_count: null, retrieval_count: null },
   ];
@@ -102,6 +122,9 @@ test("质量报告区分完成、回退和低样本反馈", () => {
   assert.equal(report.diagnostics.latencyP95Ms, 5000);
   assert.equal(report.sample.presetCompleted, 2);
   assert.equal(report.diagnostics.presetFirstTokenP95Ms, 110);
+  assert.equal(report.diagnostics.visualFinishP95Ms, 1_200);
+  assert.equal(report.diagnostics.semanticWarningRate, 0.3333);
+  assert.equal(report.segments.byQuestionFamily.behavioral.count, 2);
   assert.equal(report.segments.byTopic.rag.count, 2);
   assert.equal(report.segments.byTopic.rag.completionRate, 1);
   assert.equal(report.segments.byDeliveryMode.reviewed_buffer.latencyP50Ms, 1000);

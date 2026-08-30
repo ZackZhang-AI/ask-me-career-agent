@@ -32,6 +32,15 @@ jobs:
             exit 0
           fi
           npm run eval:interview -- --mode deepseek --output output/weekly-deepseek-eval.json
+      - name: Run 30-question streaming smoke test
+        continue-on-error: true
+        shell: bash
+        run: |
+          if [[ -z "$DEEPSEEK_API_KEY" ]]; then
+            echo "DEEPSEEK_API_KEY is not configured; skipping the streaming smoke test."
+            exit 0
+          fi
+          npx tsx scripts/run-stream-smoke.ts
       - name: Upload evaluation report
         if: always()
         uses: actions/upload-artifact@v6

@@ -35,6 +35,13 @@ export const questionCategories = [
   { id: "next_round_recommendation", name: "下一轮说服力", question: "为什么面试官应该让你进入下一轮？请用能力和经历说明。", semanticGroups: [["下一轮"], ["价值", "岗位"], ["能力", "经历", "评测"]], targetLength: { min: 300, max: 460 } },
 ] as const;
 
+const releaseOpenQuestionCategories = [
+  { id: "career_transition", name: "职业动机", question: "为什么从审计与统计背景转向 AI 产品？", semanticGroups: [["转", "选择"], ["统计", "审计"], ["产品", "AI"]], targetLength: { min: 320, max: 520 } },
+  { id: "situational_judgment", name: "情景判断", question: "如果资源只够做一个功能，你会如何判断优先级？", semanticGroups: [["目标", "用户"], ["优先级", "取舍"], ["验证", "指标"]], targetLength: { min: 260, max: 480 } },
+  { id: "product_case", name: "产品设计", question: "请设计一款面向应届生的 AI 求职产品。", semanticGroups: [["用户"], ["问题", "需求"], ["MVP", "首版", "最小"], ["指标", "验证"]], targetLength: { min: 320, max: 560 } },
+  { id: "business_case", name: "业务分析", question: "如何分析一款 AI 产品的商业模式？", semanticGroups: [["业务目标", "收入", "成本"], ["用户链路", "漏斗"], ["指标", "变量"], ["验证", "实验"]], targetLength: { min: 300, max: 540 } },
+] as const;
+
 export const scoreDimensions = ["清晰度", "差异化", "可信度", "追问承受力", "面试转化意愿"] as const;
 export type ScoreDimension = typeof scoreDimensions[number];
 export type ScoreCard = Record<ScoreDimension, number> & { total: number };
@@ -181,7 +188,7 @@ export function buildInterviewCases(): InterviewCase[] {
 }
 
 export function buildReleaseCases(): InterviewCase[] {
-  return questionCategories.map((category) => ({
+  return [...questionCategories, ...releaseOpenQuestionCategories].map((category) => ({
     id: `release__${category.id}`,
     roleId: "release_gate",
     roleName: "确定性发布门禁",

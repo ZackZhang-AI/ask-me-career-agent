@@ -171,3 +171,33 @@ test("有序列表编号不会被误判为候选人的业务数字", () => {
   const numbered = `1. ${plan.fallbackAnswer}`;
   assert.equal(validateAnswer(numbered, plan).triggers.includes("unsupported_number"), false);
 });
+
+test("开放题质量门禁按题型检查关键推理结构", () => {
+  const fixtures = [
+    { question: "如果资源只够做一个功能，你会怎么选？", intent: "situational_judgment", expected: ["missing_situation_constraints", "missing_situation_tradeoff", "missing_situation_validation"] },
+    { question: "请设计一款面向应届生的 AI 求职产品。", intent: "product_design", expected: ["missing_product_user", "missing_product_mvp", "missing_product_metric"] },
+    { question: "如何分析一款 AI 产品的商业模式？", intent: "business_analysis", expected: ["missing_business_journey", "missing_business_metrics", "missing_business_validation"] },
+    { question: "估算国内 AI 求职工具市场规模。", intent: "estimation", expected: ["missing_estimation_assumption", "missing_estimation_calculation", "missing_estimation_check"] },
+  ] as const;
+
+  for (const fixture of fixtures) {
+    const frame = { ...buildLocalQuestionFrame(fixture.question), answerIntent: fixture.intent };
+    const currentPlan = buildAnswerPlan(fixture.question, retrieveKnowledge(fixture.question, { frame }), undefined, [], frame);
+    const triggers = validateAnswer("我的处理思路是先理解问题，再结合情况给出一个合适方案。", currentPlan).triggers;
+    for (const expected of fixture.expected) assert.equal(triggers.includes(expected), true, `${fixture.question}: ${expected}`);
+  }
+});
+
+test("时效问题必须声明知识范围，行为题必须落到真实行动和复盘", () => {
+  const currentQuestion = "你怎么看最近的 AI Agent 行业趋势？";
+  const currentFrame = buildLocalQuestionFrame(currentQuestion);
+  const currentPlan = buildAnswerPlan(currentQuestion, retrieveKnowledge(currentQuestion, { frame: currentFrame }), undefined, [], currentFrame);
+  assert.equal(validateAnswer("我认为 Agent 会持续发展，产品经理需要理解模型和工具协作。", currentPlan).triggers.includes("missing_freshness_boundary"), true);
+
+  const behavioralQuestion = "请讲一个你推动项目取得进展的真实经历。";
+  const behavioralFrame = buildLocalQuestionFrame(behavioralQuestion);
+  const behavioralPlan = buildAnswerPlan(behavioralQuestion, retrieveKnowledge(behavioralQuestion, { frame: behavioralFrame }), undefined, [], behavioralFrame);
+  const triggers = validateAnswer("我在项目中遇到挑战，也积累了很多经验。", behavioralPlan).triggers;
+  assert.equal(triggers.includes("missing_behavior_action"), true);
+  assert.equal(triggers.includes("missing_behavior_result_review"), true);
+});

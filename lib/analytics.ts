@@ -1,4 +1,9 @@
 import { createHash } from "node:crypto";
+import { buildQualityReport, FEEDBACK_REASONS, type QualityReport } from "./analytics-report";
+import { deleteExpiredAnalyticsEvents, loadQualityEventRows, persistSanitizedEvent, resetAnalyticsStoreForTests } from "./analytics-store";
+
+export { buildQualityReport } from "./analytics-report";
+export type { QualityReport, QualitySegment } from "./analytics-report";
 
 export const ANALYTICS_EVENTS = [
   "page_viewed",
@@ -32,7 +37,10 @@ const MODEL_PATHS = new Set(["flash", "pro", "local_fallback"]);
 const QUESTION_TOPICS = new Set(["profile", "role_fit", "rag", "deepflow", "ask_me", "local_tools", "audit", "statistics", "skills", "enterprise_ai", "agent", "unknown"]);
 const QUESTION_FACETS = new Set(["overview", "problem", "method", "contribution", "architecture", "collaboration", "evaluation", "transfer", "example", "result", "boundary", "fit"]);
 const DELIVERY_PATHS = new Set(["preset", "api"]);
-export const FEEDBACK_REASONS = ["helpful", "not_relevant", "not_specific", "repetitive", "missing_evidence"] as const;
+const INTERVIEW_FAMILIES = new Set(["candidate_fact", "behavioral", "situational", "product_case", "business_case", "estimation", "motivation", "work_style", "career_logistics", "current_topic", "agent_meta", "unrelated"]);
+const FACT_RISKS = new Set(["low", "supported_personal", "unsupported_personal", "freshness_sensitive"]);
+const ANSWER_STRATEGIES = new Set(["evidence_answer", "reasoned_answer", "clarify_then_answer", "boundary_bridge", "decline"]);
+const STREAM_FAILURE_TYPES = new Set(["hard_safety", "transport_interrupted", "service_unavailable", "semantic_warning"]);
 const FEEDBACK_REASON_SET = new Set<string>(FEEDBACK_REASONS);
 
 export interface AnalyticsEventInput {
@@ -64,6 +72,12 @@ export interface AnalyticsEventInput {
   reviewingAnswerLatencyMs?: number;
   deliveryMode?: string;
   modelPath?: string;
+  questionFamily?: string;
+  factRisk?: string;
+  answerStrategy?: string;
+  semanticWarningCount?: number;
+  visualFinishLatencyMs?: number;
+  streamFailureType?: string;
 }
 
 export interface SanitizedAnalyticsEvent {
@@ -94,18 +108,13 @@ export interface SanitizedAnalyticsEvent {
   reviewingAnswerLatencyMs: number | null;
   deliveryMode: string | null;
   modelPath: string | null;
+  questionFamily: string | null;
+  factRisk: string | null;
+  answerStrategy: string | null;
+  semanticWarningCount: number | null;
+  visualFinishLatencyMs: number | null;
+  streamFailureType: string | null;
 }
-
-interface NeonQuery {
-  (strings: TemplateStringsArray, ...values: unknown[]): Promise<unknown[]>;
-}
-
-interface NeonModule {
-  neon(url: string): NeonQuery;
-}
-
-let sqlPromise: Promise<NeonQuery | null> | null = null;
-let schemaPromise: Promise<void> | null = null;
 
 function privacyHash(value: string): string {
   const salt = process.env.PRIVACY_HASH_SALT || "ask-me-local-development";
@@ -184,263 +193,37 @@ export function sanitizeAnalyticsEvent(value: unknown): SanitizedAnalyticsEvent 
     reviewingAnswerLatencyMs: safeCount(input.reviewingAnswerLatencyMs, 300_000),
     deliveryMode: typeof input.deliveryMode === "string" && DELIVERY_MODES.has(input.deliveryMode) ? input.deliveryMode : null,
     modelPath: typeof input.modelPath === "string" && MODEL_PATHS.has(input.modelPath) ? input.modelPath : null,
+    questionFamily: typeof input.questionFamily === "string" && INTERVIEW_FAMILIES.has(input.questionFamily) ? input.questionFamily : null,
+    factRisk: typeof input.factRisk === "string" && FACT_RISKS.has(input.factRisk) ? input.factRisk : null,
+    answerStrategy: typeof input.answerStrategy === "string" && ANSWER_STRATEGIES.has(input.answerStrategy) ? input.answerStrategy : null,
+    semanticWarningCount: safeCount(input.semanticWarningCount, 50),
+    visualFinishLatencyMs: safeCount(input.visualFinishLatencyMs, 300_000),
+    streamFailureType: typeof input.streamFailureType === "string" && STREAM_FAILURE_TYPES.has(input.streamFailureType) ? input.streamFailureType : null,
   };
-}
-
-async function getSql(): Promise<NeonQuery | null> {
-  const databaseUrl = process.env.DATABASE_URL;
-  if (!databaseUrl) return null;
-  if (!sqlPromise) {
-    sqlPromise = import("@neondatabase/serverless")
-      .then((module) => (module as unknown as NeonModule).neon(databaseUrl))
-      .catch((error: unknown) => {
-        console.warn("ask-me-analytics: Neon unavailable; analytics disabled", error instanceof Error ? error.message : "unknown error");
-        return null;
-      });
-  }
-  return sqlPromise;
-}
-
-async function ensureSchema(sql: NeonQuery): Promise<void> {
-  if (!schemaPromise) {
-    schemaPromise = (async () => {
-      await sql`
-        CREATE TABLE IF NOT EXISTS ask_me_events (
-          id BIGSERIAL PRIMARY KEY,
-          event_name TEXT NOT NULL,
-          session_hash CHAR(64) NOT NULL,
-          response_status TEXT,
-          claim_ids TEXT[] NOT NULL DEFAULT '{}',
-          source_ids TEXT[] NOT NULL DEFAULT '{}',
-          latency_ms INTEGER,
-          first_token_latency_ms INTEGER,
-          delivery_path TEXT,
-          question_category TEXT,
-          target_type TEXT,
-          target_id TEXT,
-          contract_id TEXT,
-          topic TEXT,
-          facet TEXT,
-          answer_mode TEXT,
-          answer_path TEXT,
-          rewrite_count INTEGER,
-          retrieval_count INTEGER,
-          quality_trigger_count INTEGER,
-          disposition TEXT,
-          boundary_reason TEXT,
-          review_path TEXT,
-          first_stage_latency_ms INTEGER,
-          checking_evidence_latency_ms INTEGER,
-          reviewing_answer_latency_ms INTEGER,
-          delivery_mode TEXT,
-          model_path TEXT,
-          occurred_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-        )
-      `;
-      await sql`ALTER TABLE ask_me_events ADD COLUMN IF NOT EXISTS contract_id TEXT`;
-      await sql`ALTER TABLE ask_me_events ADD COLUMN IF NOT EXISTS topic TEXT`;
-      await sql`ALTER TABLE ask_me_events ADD COLUMN IF NOT EXISTS facet TEXT`;
-      await sql`ALTER TABLE ask_me_events ADD COLUMN IF NOT EXISTS answer_mode TEXT`;
-      await sql`ALTER TABLE ask_me_events ADD COLUMN IF NOT EXISTS answer_path TEXT`;
-      await sql`ALTER TABLE ask_me_events ADD COLUMN IF NOT EXISTS rewrite_count INTEGER`;
-      await sql`ALTER TABLE ask_me_events ADD COLUMN IF NOT EXISTS retrieval_count INTEGER`;
-      await sql`ALTER TABLE ask_me_events ADD COLUMN IF NOT EXISTS quality_trigger_count INTEGER`;
-      await sql`ALTER TABLE ask_me_events ADD COLUMN IF NOT EXISTS first_token_latency_ms INTEGER`;
-      await sql`ALTER TABLE ask_me_events ADD COLUMN IF NOT EXISTS delivery_path TEXT`;
-      await sql`ALTER TABLE ask_me_events ADD COLUMN IF NOT EXISTS disposition TEXT`;
-      await sql`ALTER TABLE ask_me_events ADD COLUMN IF NOT EXISTS boundary_reason TEXT`;
-      await sql`ALTER TABLE ask_me_events ADD COLUMN IF NOT EXISTS review_path TEXT`;
-      await sql`ALTER TABLE ask_me_events ADD COLUMN IF NOT EXISTS first_stage_latency_ms INTEGER`;
-      await sql`ALTER TABLE ask_me_events ADD COLUMN IF NOT EXISTS checking_evidence_latency_ms INTEGER`;
-      await sql`ALTER TABLE ask_me_events ADD COLUMN IF NOT EXISTS reviewing_answer_latency_ms INTEGER`;
-      await sql`ALTER TABLE ask_me_events ADD COLUMN IF NOT EXISTS delivery_mode TEXT`;
-      await sql`ALTER TABLE ask_me_events ADD COLUMN IF NOT EXISTS model_path TEXT`;
-      await sql`CREATE INDEX IF NOT EXISTS ask_me_events_occurred_at_idx ON ask_me_events (occurred_at)`;
-      await sql`CREATE INDEX IF NOT EXISTS ask_me_events_funnel_idx ON ask_me_events (event_name, occurred_at)`;
-    })().catch((error) => {
-      schemaPromise = null;
-      throw error;
-    });
-  }
-  await schemaPromise;
 }
 
 export async function persistEvent(value: unknown): Promise<boolean> {
   const event = sanitizeAnalyticsEvent(value);
   if (!event) return false;
-  const sql = await getSql();
-  if (!sql) return false;
-  try {
-    await ensureSchema(sql);
-    await sql`
-      INSERT INTO ask_me_events (
-        event_name, session_hash, response_status, claim_ids, source_ids,
-        latency_ms, first_token_latency_ms, delivery_path, question_category, target_type, target_id
-        , contract_id, topic, facet, answer_mode, answer_path, rewrite_count, retrieval_count, quality_trigger_count
-        , disposition, boundary_reason, review_path, first_stage_latency_ms, checking_evidence_latency_ms, reviewing_answer_latency_ms, delivery_mode, model_path
-      ) VALUES (
-        ${event.event}, ${event.sessionHash}, ${event.responseStatus}, ${event.claimIds}, ${event.sourceIds},
-        ${event.latencyMs}, ${event.firstTokenLatencyMs}, ${event.deliveryPath}, ${event.questionCategory}, ${event.targetType}, ${event.targetId}
-        , ${event.contractId}, ${event.topic}, ${event.facet}, ${event.answerMode}, ${event.answerPath}, ${event.rewriteCount}, ${event.retrievalCount}, ${event.qualityTriggerCount}
-        , ${event.disposition}, ${event.boundaryReason}, ${event.reviewPath}, ${event.firstStageLatencyMs}, ${event.checkingEvidenceLatencyMs}, ${event.reviewingAnswerLatencyMs}, ${event.deliveryMode}, ${event.modelPath}
-      )
-    `;
-    return true;
-  } catch (error) {
-    console.warn("ask-me-analytics: event write failed", error instanceof Error ? error.message : "unknown error");
-    return false;
-  }
+  return persistSanitizedEvent(event);
 }
 
 export function recordEvent(event: AnalyticsEventInput): void {
   void persistEvent(event).catch(() => undefined);
 }
 
-interface QualityEventRow {
-  event_name: string;
-  response_status: string | null;
-  latency_ms: number | null;
-  first_token_latency_ms?: number | null;
-  delivery_path?: string | null;
-  target_id: string | null;
-  answer_path: string | null;
-  rewrite_count: number | null;
-  retrieval_count: number | null;
-  disposition?: string | null;
-  boundary_reason?: string | null;
-  review_path?: string | null;
-  first_stage_latency_ms?: number | null;
-  topic?: string | null;
-  facet?: string | null;
-  delivery_mode?: string | null;
-  model_path?: string | null;
-}
-
-export interface QualitySegment {
-  count: number;
-  completionRate: number | null;
-  serviceUnavailableRate: number | null;
-  latencyP50Ms: number | null;
-}
-
-export interface QualityReport {
-  days: number;
-  sample: { questions: number; clientCompleted: number; presetCompleted: number; generated: number; feedback: number };
-  outcomes: { completionRate: number | null; nonFallbackRate: number | null; insufficientEvidenceRate: number | null; answerRate: number | null; clarifyRate: number | null; declineRate: number | null; serviceUnavailableRate: number | null; helpfulRate: number | null };
-  diagnostics: { repairRate: number | null; fallbackRate: number | null; proReviewRate: number | null; proRewriteRate: number | null; averageRetrievalCount: number | null; latencyP50Ms: number | null; latencyP95Ms: number | null; firstTokenP50Ms: number | null; firstTokenP95Ms: number | null; firstStageP95Ms: number | null; presetFirstTokenP95Ms: number | null };
-  segments: { byTopic: Record<string, QualitySegment>; byFacet: Record<string, QualitySegment>; byDeliveryMode: Record<string, QualitySegment>; byModelPath: Record<string, QualitySegment> };
-  feedbackReasons: Record<string, number>;
-  targets: { completionRate: number; nonFallbackRate: number; minimumFeedbackSample: number; firstStageP95Ms: number; presetFirstTokenP95Ms: number };
-}
-
-function rate(numerator: number, denominator: number) {
-  return denominator ? Number((numerator / denominator).toFixed(4)) : null;
-}
-
-function percentile(values: number[], ratio: number) {
-  if (!values.length) return null;
-  const sorted = [...values].sort((left, right) => left - right);
-  return sorted[Math.min(sorted.length - 1, Math.ceil(sorted.length * ratio) - 1)];
-}
-
-function buildSegments(rows: QualityEventRow[], select: (row: QualityEventRow) => string | null | undefined) {
-  const keys = [...new Set(rows.map(select).filter((value): value is string => Boolean(value)))];
-  return Object.fromEntries(keys.map((key) => {
-    const group = rows.filter((row) => select(row) === key);
-    const latencies = group.flatMap((row) => typeof row.latency_ms === "number" ? [row.latency_ms] : []);
-    return [key, {
-      count: group.length,
-      completionRate: rate(group.filter((row) => row.response_status === "completed").length, group.length),
-      serviceUnavailableRate: rate(group.filter((row) => row.disposition === "service_unavailable").length, group.length),
-      latencyP50Ms: percentile(latencies, 0.5),
-    } satisfies QualitySegment];
-  }));
-}
-
-export function buildQualityReport(rows: QualityEventRow[], days: number): QualityReport {
-  const questions = rows.filter((row) => row.event_name === "question_sent" || row.event_name === "suggestion_clicked").length;
-  const clientCompleted = rows.filter((row) => row.event_name === "answer_completed").length;
-  const presetCompletedRows = rows.filter((row) => row.event_name === "answer_completed" && row.delivery_path === "preset");
-  const generatedRows = rows.filter((row) => row.event_name === "answer_generated");
-  const modelRows = generatedRows.filter((row) => ["generated", "repaired", "fallback"].includes(row.answer_path ?? ""));
-  const feedbackRows = rows.filter((row) => row.event_name === "answer_feedback" && row.target_id);
-  const feedbackReasons = Object.fromEntries(FEEDBACK_REASONS.map((reason) => [reason, feedbackRows.filter((row) => row.target_id === reason).length]));
-  const latencies = generatedRows.flatMap((row) => typeof row.latency_ms === "number" ? [row.latency_ms] : []);
-  const firstTokenLatencies = rows.flatMap((row) => row.event_name === "answer_completed" && typeof row.first_token_latency_ms === "number" ? [row.first_token_latency_ms] : []);
-  const presetFirstTokenLatencies = presetCompletedRows.flatMap((row) => typeof row.first_token_latency_ms === "number" ? [row.first_token_latency_ms] : []);
-  const retrievalCounts = generatedRows.flatMap((row) => typeof row.retrieval_count === "number" ? [row.retrieval_count] : []);
-  const firstStageLatencies = generatedRows.flatMap((row) => typeof row.first_stage_latency_ms === "number" ? [row.first_stage_latency_ms] : []);
-  const dispositions = generatedRows.filter((row) => row.disposition);
-  const reviewedRows = generatedRows.filter((row) => row.review_path && row.review_path !== "none");
-  return {
-    days,
-    sample: { questions, clientCompleted, presetCompleted: presetCompletedRows.length, generated: generatedRows.length, feedback: feedbackRows.length },
-    outcomes: {
-      completionRate: rate(clientCompleted, questions),
-      nonFallbackRate: rate(modelRows.filter((row) => row.answer_path !== "fallback").length, modelRows.length),
-      insufficientEvidenceRate: rate(generatedRows.filter((row) => row.response_status === "insufficient_evidence").length, generatedRows.length),
-      answerRate: rate(dispositions.filter((row) => row.disposition === "answer" || row.disposition === "scoped_answer").length, dispositions.length),
-      clarifyRate: rate(dispositions.filter((row) => row.disposition === "clarify").length, dispositions.length),
-      declineRate: rate(dispositions.filter((row) => row.disposition === "decline").length, dispositions.length),
-      serviceUnavailableRate: rate(dispositions.filter((row) => row.disposition === "service_unavailable").length, dispositions.length),
-      helpfulRate: feedbackRows.length >= 30 ? rate(feedbackReasons.helpful, feedbackRows.length) : null,
-    },
-    diagnostics: {
-      repairRate: rate(modelRows.filter((row) => row.answer_path === "repaired").length, modelRows.length),
-      fallbackRate: rate(modelRows.filter((row) => row.answer_path === "fallback").length, modelRows.length),
-      proReviewRate: rate(reviewedRows.length, generatedRows.filter((row) => row.answer_path === "generated" || row.answer_path === "repaired" || row.answer_path === "service_unavailable").length),
-      proRewriteRate: rate(reviewedRows.filter((row) => row.review_path === "pro_rewrite").length, reviewedRows.length),
-      averageRetrievalCount: retrievalCounts.length ? Number((retrievalCounts.reduce((sum, value) => sum + value, 0) / retrievalCounts.length).toFixed(2)) : null,
-      latencyP50Ms: percentile(latencies, 0.5),
-      latencyP95Ms: percentile(latencies, 0.95),
-      firstTokenP50Ms: percentile(firstTokenLatencies, 0.5),
-      firstTokenP95Ms: percentile(firstTokenLatencies, 0.95),
-      firstStageP95Ms: percentile(firstStageLatencies, 0.95),
-      presetFirstTokenP95Ms: percentile(presetFirstTokenLatencies, 0.95),
-    },
-    segments: {
-      byTopic: buildSegments(generatedRows, (row) => row.topic),
-      byFacet: buildSegments(generatedRows, (row) => row.facet),
-      byDeliveryMode: buildSegments(generatedRows, (row) => row.delivery_mode),
-      byModelPath: buildSegments(generatedRows, (row) => row.model_path),
-    },
-    feedbackReasons,
-    targets: { completionRate: 0.95, nonFallbackRate: 0.85, minimumFeedbackSample: 30, firstStageP95Ms: 100, presetFirstTokenP95Ms: 200 },
-  };
-}
-
 export async function getQualityReport(days = 7): Promise<QualityReport | null> {
-  const sql = await getSql();
-  if (!sql) return null;
   const safeDays = Math.max(1, Math.min(Math.floor(days), 30));
-  await ensureSchema(sql);
-  const rows = await sql`
-    SELECT event_name, response_status, latency_ms, first_token_latency_ms, delivery_path, target_id, answer_path, rewrite_count, retrieval_count, disposition, boundary_reason, review_path, first_stage_latency_ms, topic, facet, delivery_mode, model_path
-    FROM ask_me_events
-    WHERE occurred_at >= NOW() - (${safeDays} * INTERVAL '1 day')
-    ORDER BY occurred_at ASC
-  ` as QualityEventRow[];
+  const rows = await loadQualityEventRows(safeDays);
+  if (!rows) return null;
   return buildQualityReport(rows, safeDays);
 }
 
 export async function deleteExpiredEvents(retentionDays = 30): Promise<{ deleted: number; disabled: boolean }> {
-  const sql = await getSql();
-  if (!sql) return { deleted: 0, disabled: true };
   const days = Math.max(1, Math.min(Math.floor(retentionDays), 365));
-  await ensureSchema(sql);
-  const rows = await sql`
-    WITH deleted AS (
-      DELETE FROM ask_me_events
-      WHERE occurred_at < NOW() - (${days} * INTERVAL '1 day')
-      RETURNING 1
-    )
-    SELECT COUNT(*)::INTEGER AS deleted FROM deleted
-  `;
-  const first = rows[0] as { deleted?: number | string } | undefined;
-  return { deleted: Number(first?.deleted ?? 0), disabled: false };
+  return deleteExpiredAnalyticsEvents(days);
 }
 
 export function resetAnalyticsForTests(): void {
-  sqlPromise = null;
-  schemaPromise = null;
+  resetAnalyticsStoreForTests();
 }

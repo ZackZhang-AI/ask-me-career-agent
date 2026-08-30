@@ -31,8 +31,8 @@ test("AI 面试预演覆盖 6 个模拟角色与 8 类问题", () => {
   assert.equal(new Set(cases.map((item) => item.id)).size, 48);
   assert.equal(new Set(cases.map((item) => item.question)).size, 8);
   assert.equal(new Set(cases.map((item) => `${item.roleId}:${item.categoryId}`)).size, 48);
-  assert.equal(releaseCases.length, 8);
-  assert.equal(new Set(releaseCases.map((item) => item.question)).size, 8);
+  assert.equal(releaseCases.length, 12);
+  assert.equal(new Set(releaseCases.map((item) => item.question)).size, 12);
   assert.deepEqual(questionCategories.map((item) => item.name), [
     "60 秒介绍", "岗位匹配", "代表项目", "个人贡献", "AI 编程占比", "挑战或失败", "用户与业务价值", "下一轮说服力",
   ]);
@@ -47,7 +47,7 @@ test("本地合成报告确定且不包含 API Key", async () => {
   assert.equal(first.simulation.synthetic, true);
   assert.equal(first.simulation.replacesHumanTesting, false);
   assert.match(first.simulation.label, /不能替代真人/);
-  assert.equal(first.results.length, 8);
+  assert.equal(first.results.length, 12);
   assert.equal(first.simulation.roleCount, 0);
   assert.equal(first.roleRecommendations.length, 0);
   assert.equal(JSON.stringify(first).includes("DEEPSEEK_API_KEY"), false);

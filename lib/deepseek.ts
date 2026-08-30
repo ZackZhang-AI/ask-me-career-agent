@@ -128,14 +128,17 @@ export async function planDeepSeekQuestion(input: PlanQuestionInput) {
     generated = await withProFallback((modelId) => generateText({
       model: deepSeek(modelId),
       output: Output.object({ schema: plannedQuestionFrameSchema }),
-      instructions: `你只负责把面试问题分类为 JSON，不回答问题，也不生成候选人事实。先判断提问动作 answerIntent，再判断 questionMode 和 evidencePolicy，最后识别讨论对象 topic、targetRole 与 focusTerms。不能因为“商业化”一个词就把岗位匹配题判成结果题；不能因为“问题、产品、项目”等弱词召回单个项目。
+      instructions: `你只负责把面试问题分类为 JSON，不回答问题，也不生成候选人事实。先判断真实面试题型 questionFamily，再判断提问动作 answerIntent、事实风险 factRisk 与回答策略 answerStrategy，最后识别讨论对象 topic、targetRole 与 focusTerms。不能因为“商业化”一个词就把岗位匹配题判成结果题；不能因为“问题、产品、项目”等弱词召回单个项目。
+可选 questionFamily：candidate_fact（个人事实）、behavioral（要求真实过去案例）、situational（假设场景）、product_case（产品设计）、business_case（业务分析）、estimation（估算）、motivation（动机与规划）、work_style（协作压力学习等工作方式）、career_logistics（薪资到岗地点等求职安排）、current_topic（需要最新外部事实）、agent_meta（Agent 身份能力）、unrelated（与招聘判断无关）。
+可选 factRisk：low、supported_personal（必须由公开经历支持）、unsupported_personal（公开资料没有的爱好家庭薪资到岗等）、freshness_sensitive（最新公司或行业事实）。
+可选 answerStrategy：evidence_answer（证据回答）、reasoned_answer（明确假设后给思路）、clarify_then_answer（缺一个关键对象）、boundary_bridge（说明未知边界后承接）、decline（隐私、诱导虚构或完全无关）。
 可选 questionMode：agent_meta（询问 Agent 能力或质疑回答方式）、candidate_fact（候选人的真实经历、结果或任职事实）、candidate_reasoning（面试中的方法、动机、假设和判断）。
 可选 evidencePolicy：required（必须有公开事实）、supporting（事实用于增强但不限制方法论）、none（Agent 能力说明或通用回答）。
-可选 answerIntent：agent_identity, capability_scope, introduction, career_transition, role_fit, representative_project, project_overview, project_problem, contribution, ai_collaboration, challenge, diagnosis, result, limitation, skills, experience, experience_value, privacy, education, credentials, hiring_recommendation, general。
+可选 answerIntent：agent_identity, capability_scope, introduction, career_transition, role_fit, representative_project, project_overview, project_problem, contribution, ai_collaboration, challenge, diagnosis, result, limitation, skills, experience, experience_value, privacy, education, credentials, hiring_recommendation, behavioral_experience, situational_judgment, product_design, business_analysis, estimation, work_style, career_planning, company_motivation, career_logistics, industry_view, general。
 可选 topic：profile, role_fit, baidu, rag, deepflow, ask_me, local_tools, audit, statistics, skills, enterprise_ai, agent, unknown。
 可选 facet：overview, problem, method, contribution, architecture, collaboration, evaluation, transfer, example, result, boundary, fit。
 activeProject 只能省略或选择 baidu-ai-coding-evaluation, rag-knowledge-base, deepflow, ask-me, local-first-tools, audit-tools。focusTerms 与 requestedDimensions 各写本题需要的 1-4 项；targetRole 仅在问题明确提到岗位时填写；confidence 是 0-1。必须输出完整 JSON。`,
-      prompt: `最近问题：${recentQuestions.length ? recentQuestions.join("｜") : "无"}\n当前问题：${input.question}\n结构示例：{"topic":"profile","facet":"transfer","answerIntent":"career_transition","questionMode":"candidate_fact","evidencePolicy":"required","focusTerms":["职业转型动机","能力连续性"],"requestedDimensions":["选择原因","经历迁移"],"useHistory":true,"confidence":0.92}`,
+      prompt: `最近问题：${recentQuestions.length ? recentQuestions.join("｜") : "无"}\n当前问题：${input.question}\n结构示例：{"topic":"profile","facet":"transfer","answerIntent":"career_transition","questionMode":"candidate_fact","evidencePolicy":"required","questionFamily":"motivation","factRisk":"supported_personal","answerStrategy":"evidence_answer","focusTerms":["职业转型动机","能力连续性"],"requestedDimensions":["选择原因","经历迁移"],"useHistory":true,"confidence":0.92}`,
       providerOptions: deepSeekProviderOptions("fast"),
       temperature: 0.1,
       maxOutputTokens: 520,

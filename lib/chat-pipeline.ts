@@ -13,7 +13,9 @@ import { selectDeliveryMode, StreamInterruptedError, streamInterviewAnswer } fro
 import { getClaims, getSources, matchStableAnswer, resolveRetrievalQuery, retrieveKnowledge } from "./knowledge";
 import { getFollowUpQuestions } from "./question-suggestions";
 import { buildLocalQuestionFrame, findQuestionContract, mergePlannedFrame } from "./question-contracts";
+import { classifyInterviewQuestion, shouldPlanWithModel } from "./interview-question";
 import { reserveAdditionalModelCall } from "./rate-limit";
+import { feedbackImprovementInstructions, type FeedbackImprovementReason } from "./feedback-improvement";
 import type {
   AnswerDisposition,
   BoundaryReason,
@@ -84,6 +86,9 @@ export interface ChatDelivery {
     plannedIntent?: string;
     resolvedIntent?: string;
     intentConflictReason?: string;
+    questionFamily: string;
+    factRisk: string;
+    answerStrategy: string;
   };
 }
 
@@ -99,6 +104,7 @@ interface PipelineInput {
   onPrepared?: (metadata: ChatStreamMetadata) => void;
   onDelta?: (chunk: string) => Promise<void> | void;
   startedAt?: number;
+  improvementReason?: FeedbackImprovementReason;
 }
 
 function emptyDelivery(input: {
@@ -139,6 +145,7 @@ export async function buildChatDelivery(input: PipelineInput): Promise<ChatDeliv
   const contract = findQuestionContract(input.question);
   const localFrame = buildLocalQuestionFrame(input.question, history);
   const localStableAnswer = matchStableAnswer(input.question, history, localFrame);
+  const localClassification = classifyInterviewQuestion(input.question, localFrame.answerIntent, localFrame.questionMode);
   const hasUnresolvedReference = Boolean(unresolvedReferenceReason({ question: input.question, history, frame: localFrame, contract }));
   let frame = localFrame;
   let plannerUsed = false;
@@ -147,7 +154,11 @@ export async function buildChatDelivery(input: PipelineInput): Promise<ChatDeliv
   let plannerReservation = 0;
   let plannerModelPath: ModelPath | undefined;
 
-  if (!contract && !localStableAnswer && !hasUnresolvedReference && localFrame.confidence < 0.82 && localFrame.questionMode !== "agent_meta" && input.modelConfigured) {
+  if (!hasUnresolvedReference && input.modelConfigured && shouldPlanWithModel({
+    hasContract: Boolean(contract),
+    hasStableAnswer: Boolean(localStableAnswer),
+    classification: localClassification,
+  })) {
     const plannerBudget = await reserveAdditionalModelCall(1_200);
     if (!plannerBudget.ok) {
       plannerFallbackReason = "planner_budget_exhausted";
@@ -203,11 +214,12 @@ export async function buildChatDelivery(input: PipelineInput): Promise<ChatDeliv
   });
   const retrievalTrace = resolveRetrievalQuery(input.question, history);
   const localContract = Boolean(contract && contract.generationMode !== "realtime");
+  const hasLocalResponse = localContract || Boolean(stableAnswer && contract?.generationMode !== "realtime");
   const deliveryMode = selectDeliveryMode({
     frame,
     plan,
     shouldGenerate: decision.shouldGenerate,
-    hasLocalResponse: Boolean(stableAnswer) || localContract,
+    hasLocalResponse,
     hasEvidence,
     canStream: Boolean(input.onPrepared && input.onDelta),
   });
@@ -230,16 +242,22 @@ export async function buildChatDelivery(input: PipelineInput): Promise<ChatDeliv
     plannedIntent: frame.intentResolution?.plannedIntent,
     resolvedIntent: frame.answerIntent,
     intentConflictReason: frame.intentResolution?.conflictReason,
+    questionFamily: frame.questionFamily,
+    factRisk: frame.factRisk,
+    answerStrategy: frame.answerStrategy,
   };
 
   console.info("ask-me-retrieval", JSON.stringify({
-    version: "answerability-v2",
+    version: "answerability-v3",
     contractId: contract?.id,
     topic: frame.topic,
     facet: frame.facet,
     answerIntent: frame.answerIntent,
     questionMode: frame.questionMode,
     evidencePolicy: frame.evidencePolicy,
+    questionFamily: frame.questionFamily,
+    factRisk: frame.factRisk,
+    answerStrategy: frame.answerStrategy,
     disposition: decision.disposition,
     boundaryReason: decision.boundaryReason,
     capabilityIds: decision.capabilityIds,
@@ -330,7 +348,10 @@ export async function buildChatDelivery(input: PipelineInput): Promise<ChatDeliv
     });
   }
 
-  const contextMessage = `以下是本轮回答计划和公开事实，只能据此回答：\n${buildContext(items, plan)}`;
+  const improvementInstruction = input.improvementReason
+    ? `\n\n<feedback_improvement>用户要求按上一轮反馈改进：${feedbackImprovementInstructions[input.improvementReason]}。仍需服从全部事实边界和质量规则。</feedback_improvement>`
+    : "";
+  const contextMessage = `以下是本轮回答计划和公开事实，只能据此回答：\n${buildContext(items, plan)}${improvementInstruction}`;
   if (deliveryMode === "realtime_stream") {
     input.onStage("writing_answer");
     input.onPrepared?.({

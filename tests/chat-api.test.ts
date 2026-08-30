@@ -31,6 +31,26 @@ function reviewResult(decision: "pass" | "rewrite" | "reject", revisedAnswer?: s
   return { decision, ...(revisedAnswer ? { revisedAnswer } : {}), failedDimensions: decision === "reject" ? ["relevance"] : [] };
 }
 
+function plannerResponse(question: string, history: Array<{ role: "user" | "assistant"; content: string }> = []) {
+  const frame = buildLocalQuestionFrame(question, history);
+  return deepSeekStream(JSON.stringify({
+    topic: frame.topic,
+    facet: frame.facet,
+    answerIntent: frame.answerIntent,
+    questionMode: frame.questionMode,
+    evidencePolicy: frame.evidencePolicy,
+    questionFamily: frame.questionFamily,
+    factRisk: frame.factRisk,
+    answerStrategy: frame.answerStrategy,
+    focusTerms: frame.focusTerms,
+    ...(frame.targetRole ? { targetRole: frame.targetRole } : {}),
+    requestedDimensions: frame.requestedDimensions,
+    ...(frame.activeProject ? { activeProject: frame.activeProject } : {}),
+    useHistory: frame.useHistory,
+    confidence: Math.max(frame.confidence, 0.86),
+  }));
+}
+
 function deepSeekStream(content: string, totalTokens = 100) {
   return new Response(JSON.stringify({
     id: "chatcmpl-test",
@@ -186,15 +206,15 @@ test("深层方法指代沿用上一轮 RAG 语境", async () => {
   let calls = 0;
   globalThis.fetch = async () => {
     calls += 1;
-    if (calls === 1) return deepSeekSse(answer);
-    return deepSeekStream(JSON.stringify(reviewResult("pass")));
+    if (calls === 1) return plannerResponse(question, history);
+    return deepSeekSse(answer);
   };
   const responseEvents = await events(await POST(request({
     sessionId: "api-deep-reference",
     messages: [...history, { role: "user", content: question }],
   })));
 
-  assert.equal(calls, 1);
+  assert.equal(calls, 2);
   assert.equal(metaEvent(responseEvents).mode, "live");
   assert.equal(metaEvent(responseEvents).responseStatus, "completed");
   assert.equal(metaEvent(responseEvents).disposition, "scoped_answer");
@@ -291,14 +311,15 @@ test("Flash 首包失败时切换 Pro 后继续真实流式输出", async () => 
   let calls = 0;
   globalThis.fetch = async () => {
     calls += 1;
-    return calls === 1 ? new Response(null, { status: 503 }) : deepSeekSse(answer);
+    if (calls === 1) return plannerResponse(question);
+    return calls === 2 ? new Response(null, { status: 503 }) : deepSeekSse(answer);
   };
 
   const responseEvents = await events(await POST(request({
     sessionId: "api-realtime-pro-fallback",
     messages: [{ role: "user", content: question }],
   })));
-  assert.equal(calls, 2);
+  assert.equal(calls, 3);
   assert.equal(responseEvents.at(-1)?.modelPath, "pro");
   assert.equal(responseEvents.at(-1)?.responseStatus, "completed");
   assert.ok(responseEvents.some((event) => event.type === "delta" && String(event.content).trim()));

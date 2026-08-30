@@ -8,6 +8,7 @@ import { getFollowUpQuestions } from "@/lib/question-suggestions";
 import { checkRequestLimits, extractClientIp, recordTokenUsage } from "@/lib/rate-limit";
 import { serviceUnavailableMessage } from "@/lib/answerability";
 import type { ChatMessage, ProcessingStage, ResponseStatus } from "@/lib/types";
+import { isFeedbackImprovementReason, type FeedbackImprovementReason } from "@/lib/feedback-improvement";
 
 export const runtime = "nodejs";
 
@@ -93,6 +94,10 @@ async function emitDelivery(
     reviewingAnswerLatencyMs: input.stageLatencies.reviewing_answer,
     firstTokenLatencyMs: delivery.diagnostic.firstChunkLatencyMs,
     deliveryMode: delivery.deliveryMode,
+    questionFamily: delivery.diagnostic.questionFamily,
+    factRisk: delivery.diagnostic.factRisk,
+    answerStrategy: delivery.diagnostic.answerStrategy,
+    semanticWarningCount: delivery.diagnostic.semanticWarningCount,
   });
 }
 
@@ -169,7 +174,7 @@ export async function POST(request: NextRequest) {
     return errorResponse("upstream_error", "问答服务暂时关闭，公开资料和项目链接仍可查看。", 503);
   }
 
-  let body: { sessionId?: string; messages?: unknown };
+  let body: { sessionId?: string; messages?: unknown; improvementReason?: unknown };
   try {
     body = await request.json();
   } catch {
@@ -228,6 +233,9 @@ export async function POST(request: NextRequest) {
           reviewPath: "none",
           plannerUsed: false,
           deliveryMode: "local_reveal",
+          questionFamily: "unrelated",
+          factRisk: "unsupported_personal",
+          answerStrategy: "decline",
         },
         deliveryMode: "local_reveal",
         streamed: false,
@@ -236,6 +244,7 @@ export async function POST(request: NextRequest) {
   }
 
   const modelConfigured = Boolean(process.env.DEEPSEEK_API_KEY);
+  const improvementReason: FeedbackImprovementReason | undefined = isFeedbackImprovementReason(body.improvementReason) ? body.improvementReason : undefined;
   return streamResponse({
     sessionId: body.sessionId,
     startedAt,
@@ -251,6 +260,7 @@ export async function POST(request: NextRequest) {
       onPrepared,
       onDelta,
       startedAt,
+      improvementReason,
     }),
   });
 }
