@@ -83,24 +83,25 @@ const routingCases: Array<{ question: string; intent: AnswerIntent; targetRole?:
   { question: "如果产品上线后核心指标没有达到预期，你会怎么办？", intent: "diagnosis" },
   { question: "假设需求方和研发对方案有分歧，你会怎么推进？", intent: "challenge" },
   { question: "如果只能保留一个功能，你会如何取舍？", intent: "challenge" },
-  { question: "你怎么看待 AI 产品中的人工确认环节？", intent: "general" },
+  { question: "你怎么看待 AI 产品中的人工确认环节？", intent: "situational_judgment" },
   { question: "如果没有足够数据验证方案，你会如何决策？", intent: "diagnosis" },
   { question: "你会如何判断一个 AI 功能是否值得做？", intent: "general" },
   { question: "如果模型效果和用户体验发生冲突，你会怎么处理？", intent: "diagnosis" },
-  { question: "你如何理解产品经理在跨团队协作中的作用？", intent: "general" },
+  { question: "你如何理解产品经理在跨团队协作中的作用？", intent: "work_style" },
 
   { question: "你不能回答开放问题吗？", intent: "capability_scope" },
   { question: "你能回答哪些开放题？", intent: "capability_scope" },
   { question: "这个 Agent 能不能回答没有标准答案的问题？", intent: "capability_scope" },
   { question: "你有什么作用？", intent: "capability_scope" },
   { question: "你可以干什么？", intent: "capability_scope" },
+  { question: "你可以帮面试官了解什么？", intent: "capability_scope" },
   { question: "你之前的经历都对你求职 AI 有什么帮助？", intent: "experience_value" },
   { question: "你过往经历对做产品有什么帮助？", intent: "experience_value" },
   { question: "你的专业对你做 AI 产品有什么帮助", intent: "experience_value" },
   { question: "应用统计学专业对 AI 产品有什么价值", intent: "experience_value" },
   { question: "你所学专业如何支持产品判断", intent: "experience_value" },
   { question: "如果面试官问到陌生业务，你会怎么快速理解？", intent: "diagnosis" },
-  { question: "你平时如何面对压力和不确定性？", intent: "general" },
+  { question: "你平时如何面对压力和不确定性？", intent: "work_style" },
 ];
 
 test("75 个未预写开放问题按提问动作稳定路由", () => {

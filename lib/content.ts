@@ -4,6 +4,7 @@ import { faqContent, stableAnswerContent } from "../content/qa.ts";
 import { sourceContent, claimContent } from "../content/sources-claims.ts";
 import { starStoryContent } from "../content/stories.ts";
 import { candidateNarrative } from "../content/narrative.ts";
+import { interviewClaims, interviewKnowledge, interviewSources } from "../content/interview-evidence.ts";
 import obsidianApprovedKnowledgeContent from "../content/obsidian-approved.json";
 
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "必须使用 YYYY-MM-DD 日期");
@@ -236,9 +237,9 @@ export const contentCatalogSchema = z.object({
 export const contentCatalog = contentCatalogSchema.parse({
   narrative: candidateNarrative,
   strengths: strengthContent,
-  sources: sourceContent,
-  claims: claimContent,
-  knowledge: [...knowledgeContent, ...obsidianApprovedKnowledge],
+  sources: [...sourceContent, ...interviewSources],
+  claims: [...claimContent, ...interviewClaims],
+  knowledge: [...knowledgeContent, ...interviewKnowledge, ...obsidianApprovedKnowledge],
   starStories: starStoryContent,
   faqs: faqContent,
   stableAnswers: stableAnswerContent,

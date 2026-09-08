@@ -158,11 +158,11 @@ test("最新简历成为回答主线并串联实习与全部项目", () => {
   assert.match(journey?.standardAnswer ?? "", /Ask Me/);
   assert.match(journey?.standardAnswer ?? "", /DeepFlow/);
   assert.match(journey?.standardAnswer ?? "", /Resume Autofill AI/);
-  assert.match(askMe?.standardAnswer ?? "", /163 项自动化测试/);
+  assert.match(askMe?.standardAnswer ?? "", /阶段性完成 106 项自动化测试/);
   assert.match(askMe?.standardAnswer ?? "", /48 个 AI 面试用例/);
   assert.match(deepFlow?.standardAnswer ?? "", /Hybrid 检索/);
   assert.match(deepFlow?.standardAnswer ?? "", /Agent Trace/);
-  assert.match(resumeSource?.title ?? "", /2026-08-23/);
+  assert.match(resumeSource?.title ?? "", /2026-09-07/);
 });
 
 test("项目别名和最近上下文可解析多轮指代", () => {

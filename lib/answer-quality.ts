@@ -52,19 +52,21 @@ const RISKY_CLAIMS = [
   "用户访谈",
   "用户调研",
   "真实用户反馈",
+  "客户交付",
   "生产环境",
   "生产上线",
   "正式上线",
   "大规模上线",
   "商业化",
-  "百度",
 ];
 
 const KNOWN_ORGANIZATIONS = ["东北大学", "百川智能", "德勤", "容诚", "ACCA", "百度"];
 
 const NUMBER_PATTERN = /\d+(?:\.\d+)?(?:%|％|万|亿|倍|个|人|次|天|小时|分钟|条|项|分)?/g;
 const EVENT_SIGNAL = /(?:我|本人).{0,12}(?:负责|主导|参与|完成|推动|组织|协调|交付|上线|服务|访谈|调研|获得|实现|搭建|开发|经历|遇到|发现|验证过|尝试过)|(?:已|已经).{0,12}(?:上线|交付|落地|服务|完成)|(?:用户|客户).{0,12}(?:反馈|认可|满意|使用)|(?:提升|降低|增长|节省|改善)/;
-const ORGANIZATION_PATTERN = /[\u4e00-\u9fa5A-Za-z·-]{2,24}(?:大学|公司|集团|银行|事务所|研究院|团队)/g;
+// “跨团队”“研发团队”等是协作对象，不是可核验的组织名称。具体已知雇主
+// 由 KNOWN_ORGANIZATIONS 单独检查，这里只拦截明显的命名组织后缀。
+const ORGANIZATION_PATTERN = /[\u4e00-\u9fa5A-Za-z·-]{2,24}(?:大学|公司|集团|银行|事务所|研究院)/g;
 const DOMAIN_TERMS = [
   "AI 产品", "数据", "评测", "统计", "业务", "审计", "风险", "产品", "工程", "原型", "RAG", "DeepFlow",
   "Dense Retrieval", "Rerank", "RAGAS", "Bad Case", "检索", "引用", "工作流", "Agent", "MVP", "人工确认",
@@ -341,7 +343,7 @@ export function validateAnswer(candidate: string, plan: AnswerPlan): QualityGate
   }
 
   for (const sentence of clean.split(/[。！？\n]+/).map((item) => item.trim()).filter(Boolean)) {
-    const explicitPastClaim = /我(?:之前|曾经|曾|实际|以前|过去)[^。！？\n]{0,12}(?:负责|主导|参与|完成|推动|交付|上线|遇到|发现|验证)|我[^。！？\n]{0,8}(?:负责过|主导过|参与过|做过|遇到过|发现过|验证过)/.test(sentence);
+    const explicitPastClaim = /我(?:之前|曾经|曾|实际|以前|过去)[^。！？\n]{0,12}(?:负责|主导|参与|完成|推动|协调|组织|交付|上线|遇到|发现|验证)|我[^。！？\n]{0,8}(?:负责过|主导过|参与过|协调过|组织过|做过|遇到过|发现过|验证过)/.test(sentence);
     if (EVENT_SIGNAL.test(sentence)
       && groundingScore(sentence, allowedText) < 0.3
       // Supporting-evidence answers are allowed to synthesize the supplied
@@ -414,7 +416,7 @@ export function validateAnswerFragment(candidate: string, plan: AnswerPlan, sent
   }
   if (sentenceComplete) {
     for (const sentence of candidate.split(/[。！？\n]+/).map((item) => item.trim()).filter(Boolean)) {
-      const explicitPastClaim = /我(?:之前|曾经|曾|实际|以前|过去)[^。！？\n]{0,12}(?:负责|主导|参与|完成|推动|交付|上线|遇到|发现|验证)|我[^。！？\n]{0,8}(?:负责过|主导过|参与过|做过|遇到过|发现过|验证过)/.test(sentence);
+      const explicitPastClaim = /我(?:之前|曾经|曾|实际|以前|过去)[^。！？\n]{0,12}(?:负责|主导|参与|完成|推动|协调|组织|交付|上线|遇到|发现|验证)|我[^。！？\n]{0,8}(?:负责过|主导过|参与过|协调过|组织过|做过|遇到过|发现过|验证过)/.test(sentence);
       if (EVENT_SIGNAL.test(sentence)
         && groundingScore(sentence, allowedText) < 0.3
         && explicitPastClaim) {

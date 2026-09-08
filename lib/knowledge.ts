@@ -14,10 +14,10 @@ export const suggestedQuestions = contentCatalog.suggestedQuestions;
 
 const sourceById = new Map(sources.map((source) => [source.id, source]));
 const claimById = new Map(claims.map((claim) => [claim.id, claim]));
-const referencePattern = /(这个|该项目|其中|它|上述|前者|后者|那个项目|(?:这套|这种|这些)(?:系统|方法|思路|做法|实践|能力|项目|经验))/;
-const implicitFollowupPattern = /你(?:本人)?做了什么|你负责什么|具体做了什么|你的贡献|遇到(?:什么)?(?:挑战|困难)|有什么结果|现在怎么样/;
+const referencePattern = /(这个|该项目|这里|这段(?:经历|实习|项目)?|其中|它|上述|前者|后者|那个项目|(?:这套|这种|这些)(?:系统|方法|思路|做法|实践|能力|项目|经验))/;
+const implicitFollowupPattern = /你(?:本人)?做了什么|你负责什么|具体做了什么|你的贡献|遇到(?:什么)?(?:挑战|困难)|有什么结果|现在怎么样|(?:Agent|模块|环节)之间.{0,8}(?:交接|协作|配合)/i;
 const followupPrefixes = ["如果", "要是", "那", "那么", "继续", "进一步"];
-const followupCues = ["下一步", "没有改善", "没改善", "优先排查", "先看什么", "接下来怎么", "为什么没有"];
+const followupCues = ["下一步", "没有改善", "没改善", "优先排查", "先看什么", "接下来怎么", "为什么没有", "为什么保留"];
 
 function usesRecentContext(question: string, history: ChatMessage[]) {
   if (history.length === 0) return false;
@@ -102,7 +102,7 @@ export function retrieveKnowledge(question: string, limitOrOptions: number | Ret
     return [];
   }
 
-  if (frame?.requiredKnowledgeIds.length && (frame.routeSource === "contract" || ["career_transition", "role_fit"].includes(frame.answerIntent))) {
+  if (frame?.requiredKnowledgeIds.length && (frame.routeSource === "contract" || ["career_transition", "experience_value", "role_fit"].includes(frame.answerIntent))) {
     const byId = new Map(retrievable.map((item) => [item.id, item]));
     return frame.requiredKnowledgeIds
       .map((id) => byId.get(id))

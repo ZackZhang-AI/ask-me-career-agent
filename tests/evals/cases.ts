@@ -44,7 +44,7 @@ export const coreCases: EvaluationCase[] = [
   { id: "CORE-13", category: "core", question: "Downloads Butler 的产品价值是什么？", requiredClaimIds: ["C5"], requiredSourceIds: ["S7"], forbiddenFacts: publicAnswerForbidden, expectedStatus: "answered" },
   { id: "CORE-14", category: "core", question: "他的审计工具如何完成资料归档？", requiredClaimIds: ["C7"], requiredSourceIds: ["S8"], forbiddenFacts: publicAnswerForbidden, expectedStatus: "answered" },
   { id: "CORE-15", category: "core", question: "IT 审计日志抽查助手能做什么？", requiredClaimIds: ["C7"], requiredSourceIds: ["S9"], forbiddenFacts: publicAnswerForbidden, expectedStatus: "answered" },
-  { id: "CORE-16", category: "core", question: "他的德勤 IT 审计实习涉及哪些工作？", requiredClaimIds: ["C9"], requiredSourceIds: ["S1"], forbiddenFacts: publicAnswerForbidden, expectedStatus: "answered" },
+  { id: "CORE-16", category: "core", question: "他的德勤 IT 审计实习涉及哪些工作？", requiredClaimIds: ["C9"], requiredSourceIds: ["S14"], forbiddenFacts: publicAnswerForbidden, expectedStatus: "answered" },
   { id: "CORE-17", category: "core", question: "他的容诚财务审计实习经历是什么？", requiredClaimIds: ["C10"], requiredSourceIds: ["S13"], forbiddenFacts: publicAnswerForbidden, expectedStatus: "answered" },
   { id: "CORE-18", category: "core", question: "他的主要短板和待核实边界是什么？", requiredClaimIds: ["C8"], requiredSourceIds: ["S10"], forbiddenFacts: publicAnswerForbidden, expectedStatus: "answered" },
   { id: "CORE-19", category: "core", question: "他的德勤校园大使经历体现了哪些业务能力？", requiredClaimIds: ["C11"], requiredSourceIds: ["S13"], forbiddenFacts: publicAnswerForbidden, expectedStatus: "answered" },

@@ -13,10 +13,10 @@ import {
 import { getFollowUpQuestions, recommendationQuestionCandidates } from "../lib/question-suggestions.ts";
 
 const screenshotCases = [
-  { question: "请介绍一下你的百川智能实习。", contractId: "baichuan_internship", topic: "rag", facet: "overview", requiredIds: ["K27", "K4", "K28", "K31"], forbidden: /DeepFlow|Thirty-Minute Brain/ },
+  { question: "请介绍一下你的百川智能实习。", contractId: "baichuan_internship", topic: "rag", facet: "overview", requiredIds: ["K27", "K44", "K45", "K46"], forbidden: /DeepFlow|Thirty-Minute Brain/ },
   { question: "RAG 项目体现了你哪些产品方法？", contractId: "rag_methods", topic: "rag", facet: "method", requiredIds: ["K28", "K29", "K31"], forbidden: /DeepFlow|审计|Thirty-Minute Brain/ },
-  { question: "Evaluator Agent 项目具体做了什么？", contractId: "baidu_project", topic: "baidu", facet: "architecture", requiredIds: ["K23", "K24", "K25", "K32"], forbidden: /RAG|DeepFlow|审计/ },
-  { question: "你如何证明自动评测结果可信？", contractId: "baidu_reliability", topic: "baidu", facet: "evaluation", requiredIds: ["K24", "K25"], forbidden: /RAG|DeepFlow|审计/ },
+  { question: "Evaluator Agent 项目具体做了什么？", contractId: "baidu_project", topic: "baidu", facet: "architecture", requiredIds: ["K23", "K24", "K25", "K41"], forbidden: /RAG|DeepFlow|审计/ },
+  { question: "你如何证明自动评测结果可信？", contractId: "baidu_reliability", topic: "baidu", facet: "evaluation", requiredIds: ["K24", "K25", "K42"], forbidden: /RAG|DeepFlow|审计/ },
   { question: "应用统计学背景如何帮助你做 AI 产品？", contractId: "statistics_product", topic: "statistics", facet: "transfer", requiredIds: ["K3", "K17"], forbidden: /DeepFlow|Thirty-Minute Brain/ },
   { question: "你的实习经历沉淀了哪些可迁移能力？", contractId: "internship_transfer", topic: "profile", facet: "transfer", requiredIds: ["K1", "K8", "K27", "K19"], forbidden: /Thirty-Minute Brain/ },
   { question: "举一个审计问题转成产品的例子。", contractId: "audit_product_example", topic: "audit", facet: "example", requiredIds: ["K7"], forbidden: /RAG|DeepFlow|Thirty-Minute Brain/ },

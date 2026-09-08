@@ -72,7 +72,9 @@ test("质量门禁拒绝未记录的组织协作和交付事件", () => {
   const fabricated = `${plan.fallbackAnswer}\n\n**额外成果**：我协调工程团队完成客户交付，并获得了积极反馈。`;
   const result = validateAnswer(fabricated, plan);
   assert.equal(result.passed, false);
-  assert.equal(result.triggers.includes("unsupported_event") || result.triggers.includes("unsupported_organization"), true);
+  assert.equal(result.triggers.includes("unsupported_event")
+    || result.triggers.includes("unsupported_organization")
+    || result.triggers.includes("unsupported_claim:客户交付"), true);
 });
 
 test("实时流只将事实安全问题视为可撤回失败", () => {

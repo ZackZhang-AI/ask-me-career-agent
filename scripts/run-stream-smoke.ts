@@ -69,7 +69,7 @@ async function readEvents(response: Response) {
 }
 
 const boundaryIndexes = new Set([10]);
-const realtimeIndexes = new Set([0, 3, 4, 5, 6, 7, 8, 9, 18, 19, 22, 24, 25, 26, 27, 28]);
+const realtimeIndexes = new Set([0, 3, 4, 5, 6, 7, 8, 9, 19, 22, 24, 25, 26, 27, 28]);
 let failures = 0;
 const failureDetails: Array<Record<string, unknown>> = [];
 const modes = new Map<string, number>();
