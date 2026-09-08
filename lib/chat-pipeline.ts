@@ -16,6 +16,7 @@ import { buildLocalQuestionFrame, findQuestionContract, mergePlannedFrame } from
 import { classifyInterviewQuestion, shouldPlanWithModel } from "./interview-question";
 import { reserveAdditionalModelCall } from "./rate-limit";
 import { feedbackImprovementInstructions, type FeedbackImprovementReason } from "./feedback-improvement";
+import { reviewedInterviewAnswerVersion } from "../content/reviewed-interview-answers";
 import type {
   AnswerDisposition,
   BoundaryReason,
@@ -64,6 +65,7 @@ export interface ChatDelivery {
   streamed: boolean;
   diagnostic: {
     contractId?: string;
+    reviewedAnswerId?: string;
     topic: string;
     facet: string;
     answerPath: AnswerPath;
@@ -165,7 +167,7 @@ export async function buildChatDelivery(input: PipelineInput): Promise<ChatDeliv
     } else {
       plannerReservation = plannerBudget.tokenReservation;
       const plannerController = new AbortController();
-      const plannerTimeout = setTimeout(() => plannerController.abort(), 8_000);
+      const plannerTimeout = setTimeout(() => plannerController.abort(), 2_500);
       input.signal.addEventListener("abort", () => plannerController.abort(), { once: true });
       try {
         const planned = await planDeepSeekQuestion({
@@ -225,6 +227,7 @@ export async function buildChatDelivery(input: PipelineInput): Promise<ChatDeliv
   });
   const diagnosticBase = {
     contractId: plan.contractId,
+    reviewedAnswerId: plan.reviewedAnswerId,
     topic: plan.topic,
     facet: plan.facet,
     rewriteCount: 0,
@@ -249,6 +252,7 @@ export async function buildChatDelivery(input: PipelineInput): Promise<ChatDeliv
 
   console.info("ask-me-retrieval", JSON.stringify({
     version: "answerability-v3",
+    contentVersion: reviewedInterviewAnswerVersion,
     contractId: contract?.id,
     topic: frame.topic,
     facet: frame.facet,
@@ -275,6 +279,53 @@ export async function buildChatDelivery(input: PipelineInput): Promise<ChatDeliv
     itemIds: items.map((item) => item.id),
     stableAnswerId: stableAnswer?.id,
   }));
+
+  const approvedFallbackDelivery = (input: {
+    tokenReservation: number;
+    actualTokens: number;
+    reason: string;
+    reviewPath?: ReviewPath;
+  }): ChatDelivery | undefined => {
+    if (!stableAnswer && !contract) return undefined;
+    const gate = validateAnswer(plan.fallbackAnswer, plan);
+    if (hasBlockingQualityTriggers(gate.triggers)) return undefined;
+    console.warn("ask-me-approved-fallback", JSON.stringify({
+      contentVersion: reviewedInterviewAnswerVersion,
+      contractId: contract?.id,
+      reviewedAnswerId: stableAnswer?.id,
+      reason: input.reason,
+      deliveryMode: "local_reveal",
+    }));
+    return {
+      answer: plan.fallbackAnswer,
+      mode: "stable",
+      responseStatus: "completed",
+      disposition: decision.disposition,
+      boundaryReason: "none",
+      claimIds,
+      sourceIds,
+      sources,
+      items,
+      claims: getClaims(claimIds),
+      followUpQuestions,
+      tokenReservation: input.tokenReservation,
+      actualTokens: input.actualTokens,
+      modelPath: "local_fallback",
+      degraded: true,
+      deliveryMode: "local_reveal",
+      streamed: false,
+      diagnostic: {
+        ...diagnosticBase,
+        answerPath: "fallback",
+        qualityTriggerCount: gate.triggers.length,
+        modelPath: "local_fallback",
+        degraded: true,
+        boundaryReason: "none",
+        reviewPath: input.reviewPath ?? "none",
+        deliveryMode: "local_reveal",
+      },
+    };
+  };
 
   const baseReservation = input.initialTokenReservation + plannerReservation;
   if (!decision.shouldGenerate && decision.disposition !== "answer") {
@@ -336,6 +387,8 @@ export async function buildChatDelivery(input: PipelineInput): Promise<ChatDeliv
   }
 
   if (!input.modelConfigured) {
+    const fallback = approvedFallbackDelivery({ tokenReservation: baseReservation, actualTokens: plannerTokens, reason: "model_not_configured" });
+    if (fallback) return fallback;
     return emptyDelivery({
       message: serviceUnavailableMessage(),
       disposition: "service_unavailable",
@@ -439,6 +492,8 @@ export async function buildChatDelivery(input: PipelineInput): Promise<ChatDeliv
         boundaryReason: "upstream_unavailable",
         reason: error instanceof DeepSeekUpstreamError ? `upstream_${error.status}` : error instanceof Error ? error.message.slice(0, 120) : "unknown",
       }));
+      const fallback = approvedFallbackDelivery({ tokenReservation: baseReservation, actualTokens: plannerTokens, reason: error instanceof DeepSeekUpstreamError ? `upstream_${error.status}` : "stream_unavailable" });
+      if (fallback) return fallback;
       return emptyDelivery({
         message: serviceUnavailableMessage(),
         disposition: "service_unavailable",
@@ -455,6 +510,8 @@ export async function buildChatDelivery(input: PipelineInput): Promise<ChatDeliv
 
   const reviewBudget = await reserveAdditionalModelCall(input.estimatedTokens);
   if (!reviewBudget.ok) {
+    const fallback = approvedFallbackDelivery({ tokenReservation: baseReservation, actualTokens: plannerTokens, reason: "review_budget_exhausted" });
+    if (fallback) return fallback;
     return emptyDelivery({
       message: serviceUnavailableMessage(),
       disposition: "service_unavailable",
@@ -535,6 +592,8 @@ export async function buildChatDelivery(input: PipelineInput): Promise<ChatDeliv
     }));
 
     if (!accepted) {
+      const fallback = approvedFallbackDelivery({ tokenReservation: totalReservation, actualTokens: totalTokens, reason: "quality_review_failed", reviewPath });
+      if (fallback) return fallback;
       return emptyDelivery({
         message: serviceUnavailableMessage(),
         disposition: "service_unavailable",
@@ -589,6 +648,12 @@ export async function buildChatDelivery(input: PipelineInput): Promise<ChatDeliv
       boundaryReason: "upstream_unavailable",
       reason: error instanceof DeepSeekUpstreamError ? `upstream_${error.status}` : error instanceof Error ? error.message.slice(0, 120) : "unknown",
     }));
+    const fallback = approvedFallbackDelivery({
+      tokenReservation: totalReservation,
+      actualTokens: totalTokens,
+      reason: error instanceof DeepSeekUpstreamError ? `upstream_${error.status}` : error instanceof Error ? error.name : "review_unavailable",
+    });
+    if (fallback) return fallback;
     return emptyDelivery({
       message: serviceUnavailableMessage(),
       disposition: "service_unavailable",

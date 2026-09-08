@@ -269,6 +269,29 @@ test("专业价值精确契约保留 DeepSeek 实时生成而非本地固定答�
   assert.equal(responseEvents.at(-1)?.responseStatus, "completed");
 });
 
+test("实时模型不可用时回退到同题已审核契约答案", async () => {
+  process.env.DEEPSEEK_API_KEY = "test-only-placeholder";
+  let calls = 0;
+  globalThis.fetch = async () => {
+    calls += 1;
+    return new Response(null, { status: 503 });
+  };
+
+  const responseEvents = await events(await POST(request({
+    sessionId: "api-reviewed-contract-fallback",
+    messages: [{ role: "user", content: "你的专业对你做 AI 产品有什么帮助？" }],
+  })));
+  const answer = responseEvents.filter((event) => event.type === "delta").map((event) => event.content).join("");
+
+  assert.equal(calls, 2);
+  assert.equal(metaEvent(responseEvents).mode, "stable");
+  assert.equal(metaEvent(responseEvents).responseStatus, "completed");
+  assert.equal(responseEvents.at(-1)?.modelPath, "local_fallback");
+  assert.equal(responseEvents.at(-1)?.degraded, true);
+  assert.match(answer, /应用统计学|数据与实验意识|可验证的产品判断/);
+  assert.doesNotMatch(answer, /没有成功生成/);
+});
+
 test("实时流全文只有语义结构警告时保留正文并正常完成", async () => {
   process.env.DEEPSEEK_API_KEY = "test-only-placeholder";
   const answer = "我的专业是应用统计学，它让我习惯用数据和实验支撑 AI 产品判断。我会先建立基线，再控制变量，通过指标和 Bad Case 定位问题，最后结合业务流程和风险确定下一步。";
@@ -466,7 +489,7 @@ test("缺少岗位上下文时优先澄清而不套用稳定答案", async () =>
   assert.equal(responseEvents.at(-1).responseStatus, "needs_clarification");
 });
 
-test("事实敏感开放题由 Flash 生成并经 Pro 强制审校", async () => {
+test("已审核的百度职责问法直接复用面试稿答案", async () => {
   process.env.DEEPSEEK_API_KEY = "test-only-placeholder";
   let calls = 0;
   globalThis.fetch = async () => {
@@ -481,14 +504,17 @@ test("事实敏感开放题由 Flash 生成并经 Pro 强制审校", async () =>
 
   const responseEvents = await events(await POST(request({
     sessionId: "api-pro-repair",
-    messages: [{ role: "user", content: "你在百度实习中具体负责了哪些工作？" }],
+    messages: [{ role: "user", content: "你在百度实习中具体负责什么？ ”" }],
   })));
   const answer = responseEvents.filter((event) => event.type === "delta").map((event) => event.content).join("");
-  assert.equal(calls, 2);
-  assert.equal(responseEvents.at(-1)?.modelPath, "pro");
+  assert.equal(calls, 0);
+  assert.equal(metaEvent(responseEvents).mode, "stable");
+  assert.equal(responseEvents.at(-1)?.modelPath, "local_fallback");
   assert.equal(responseEvents.at(-1)?.degraded, false);
   assert.match(answer, /百度|评测/);
   assert.match(answer, /工作主线|贡献|负责/);
+  assert.match(answer, /Qwen 写入协议诊断/);
+  assert.match(answer, /日常业务评测/);
 });
 
 test("开放题双模型失败时显示服务不可用而不冒充成功", async () => {
@@ -506,7 +532,7 @@ test("开放题双模型失败时显示服务不可用而不冒充成功", async
   assert.equal(responseEvents.at(-1)?.disposition, "service_unavailable");
 });
 
-test("Pro 审校预算不足时不生成未经审校的开放题答案", async () => {
+test("审校预算不足时使用语义匹配的已审核答案", async () => {
   process.env.DEEPSEEK_API_KEY = "test-only-placeholder";
   process.env.DAILY_REQUEST_LIMIT = "1";
   let calls = 0;
@@ -520,8 +546,8 @@ test("Pro 审校预算不足时不生成未经审校的开放题答案", async (
   })));
   const answer = responseEvents.filter((event) => event.type === "delta").map((event) => event.content).join("");
   assert.equal(calls, 0);
-  assert.equal(metaEvent(responseEvents).mode, "boundary");
-  assert.equal(metaEvent(responseEvents).disposition, "service_unavailable");
-  assert.match(answer, /抱歉，这次回答没有成功生成/);
+  assert.equal(metaEvent(responseEvents).mode, "stable");
+  assert.equal(metaEvent(responseEvents).disposition, "answer");
+  assert.match(answer, /百度|评测|WebDev/);
   assert.doesNotMatch(answer, /工程团队|客户交付|积极反馈/);
 });

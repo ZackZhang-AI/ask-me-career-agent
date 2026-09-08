@@ -21,7 +21,7 @@ export function takeStreamUnits(input: string, flush = false): { units: StreamUn
     if (SOFT_BOUNDARY.test(character)) lastSoftBoundary = index;
     const length = index - start + 1;
     const strong = STRONG_BOUNDARY.test(character);
-    const soft = length >= 72 && lastSoftBoundary >= start && index - lastSoftBoundary <= 12;
+    const soft = length >= 40 && lastSoftBoundary >= start && index - lastSoftBoundary <= 12;
     const forced = length >= 140;
     if (!strong && !soft && !forced) continue;
 
@@ -40,4 +40,3 @@ export function takeStreamUnits(input: string, flush = false): { units: StreamUn
   }
   return { units, rest };
 }
-

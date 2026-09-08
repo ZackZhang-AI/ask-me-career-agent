@@ -1,6 +1,8 @@
 import { contentCatalog } from "./content.ts";
+import { matchReviewedInterviewAnswerId } from "../content/reviewed-interview-answers.ts";
 import { buildLocalQuestionFrame, findQuestionContract, frameFromContract } from "./question-contracts.ts";
 import { normalizeSearchText, rankKnowledge } from "./retrieval.ts";
+import { normalizeInterviewQuestion } from "./question-normalization.ts";
 import type { ChatMessage, Claim, FAQ, KnowledgeItem, QuestionFrame, Source, StableAnswer, StarStory } from "./types.ts";
 
 export const strengths = contentCatalog.strengths;
@@ -133,6 +135,8 @@ export function retrieveKnowledge(question: string, limitOrOptions: number | Ret
 
 export function matchStableAnswer(question: string, history: ChatMessage[] = [], frame?: QuestionFrame) {
   const normalizedQuestion = normalizeSearchText(question);
+  const normalizedExactQuestion = normalizeInterviewQuestion(question);
+  const reviewedAnswerId = matchReviewedInterviewAnswerId(question);
   const resolved = resolveRetrievalQuery(question, history);
   const effectiveFrame = frame ?? buildLocalQuestionFrame(question, history);
   const usesReference = usesRecentContext(question, history);
@@ -144,6 +148,10 @@ export function matchStableAnswer(question: string, history: ChatMessage[] = [],
     ...(effectiveFrame.answerIntent === "project_overview" ? ["representative_project", "project_problem"] : []),
     ...(effectiveFrame.answerIntent === "experience_value" ? ["experience"] : []),
   ]);
+  if (reviewedAnswerId) {
+    const reviewed = stableAnswers.find((item) => item.id === reviewedAnswerId && isStableAnswerRetrievable(item));
+    if (reviewed) return reviewed;
+  }
   const ranked = stableAnswers
     .filter(isStableAnswerRetrievable)
     .map((item) => {
@@ -156,7 +164,7 @@ export function matchStableAnswer(question: string, history: ChatMessage[] = [],
         return { item, score: 0, hasAnswerMatch: false };
       }
       if (usesReference && item.relatedProject && !resolved.matchedProjects.includes(item.relatedProject)) return { item, score: 0 };
-      const exact = normalizeSearchText(item.question) === normalizedQuestion ? 100 : 0;
+      const exact = normalizeInterviewQuestion(item.question) === normalizedExactQuestion ? 100 : 0;
       if (!exact && effectiveFrame.routeSource !== "contract" && effectiveFrame.answerIntent !== "general" && !compatibleIntents.has(item.factSkeleton.intent)) {
         return { item, score: 0, hasAnswerMatch: false };
       }

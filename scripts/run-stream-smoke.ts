@@ -11,10 +11,10 @@ const questions = [
   "你平时如何面对压力和不确定性？",
   "如果资源突然减半，你会怎么排优先级？",
   "你如何理解产品经理在跨团队协作中的作用？",
-  "假设需求方和研发对方案有分歧，你会如何推进？",
+  "说服不了别人怎么办？",
   "你有什么兴趣爱好？",
   "你有经过验证的商业化结果吗？",
-  "你在百度实习中具体负责了哪些工作？",
+  "你在百度实习中具体负责什么？ ”",
   "RAG 项目最难的取舍是什么？",
   "你能回答没有标准答案的问题吗？",
   "你是谁？",
@@ -35,6 +35,7 @@ const questions = [
 ] as const;
 const selectedIndex = Number(process.env.SMOKE_INDEX);
 const requestedLimit = Number(process.env.SMOKE_LIMIT);
+const smokeBaseUrl = process.env.SMOKE_BASE_URL?.trim().replace(/\/$/, "");
 const smokeLimit = Number.isInteger(requestedLimit) && requestedLimit >= 1
   ? Math.min(requestedLimit, questions.length)
   : questions.length;
@@ -68,7 +69,17 @@ async function readEvents(response: Response) {
   return { events, firstDeltaMs };
 }
 
-const boundaryIndexes = new Set([10]);
+async function requestChat(index: number, attempt: number, question: string) {
+  const init = {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "x-forwarded-for": `198.51.100.${index + 1}` },
+    body: JSON.stringify({ sessionId: `stream-smoke-${index}-${attempt}-${Date.now()}`, messages: [{ role: "user", content: question }] }),
+  };
+  if (smokeBaseUrl) return fetch(`${smokeBaseUrl}/api/chat`, init);
+  return POST(new NextRequest("http://localhost/api/chat", init));
+}
+
+const boundaryIndexes = new Set([10, 23]);
 const realtimeIndexes = new Set([0, 3, 4, 5, 6, 7, 8, 9, 19, 22, 24, 25, 26, 27, 28]);
 let failures = 0;
 const failureDetails: Array<Record<string, unknown>> = [];
@@ -78,11 +89,7 @@ const firstDeltaLatencies: number[] = [];
 for (const [index, question] of questionEntries) {
   let result = { events: [] as Array<Record<string, unknown>>, firstDeltaMs: null as number | null };
   for (let attempt = 0; attempt < 2; attempt += 1) {
-    const response = await POST(new NextRequest("http://localhost/api/chat", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "x-forwarded-for": `198.51.100.${index + 1}` },
-      body: JSON.stringify({ sessionId: `stream-smoke-${index}-${attempt}`, messages: [{ role: "user", content: question }] }),
-    }));
+    const response = await requestChat(index, attempt, question);
     result = await readEvents(response);
     const done = result.events.at(-1);
     const retryable = done?.type === "error" || done?.responseStatus === "upstream_error";

@@ -4,7 +4,11 @@ import { takeStreamUnits } from "./stream-answer";
 import type { AnswerPlan, ChatMessage, DeliveryMode, QuestionFrame, StreamFailureType } from "./types";
 
 const reviewedIntents = new Set([
-  "result", "contribution", "experience", "education", "credentials", "project_overview", "project_problem", "ai_collaboration", "behavioral_experience", "career_logistics",
+  "result", "education", "credentials", "behavioral_experience", "career_logistics",
+]);
+
+const groundedRealtimeIntents = new Set([
+  "contribution", "experience", "project_overview", "project_problem", "ai_collaboration", "experience_value", "skills", "challenge", "diagnosis", "limitation", "hiring_recommendation",
 ]);
 
 export function selectDeliveryMode(input: {
@@ -17,6 +21,7 @@ export function selectDeliveryMode(input: {
 }): DeliveryMode {
   if (input.hasLocalResponse || input.frame.questionMode === "agent_meta" || !input.shouldGenerate) return "local_reveal";
   if (!input.canStream || reviewedIntents.has(input.plan.intent)) return "reviewed_buffer";
+  if (input.hasEvidence && groundedRealtimeIntents.has(input.plan.intent)) return "realtime_stream";
   if (["career_transition", "experience_value", "role_fit", "skills", "challenge", "diagnosis", "limitation", "hiring_recommendation"].includes(input.plan.intent)
     && (input.hasEvidence || input.frame.evidencePolicy !== "required")) return "realtime_stream";
   if (["supported_personal", "unsupported_personal"].includes(input.frame.factRisk)) return "reviewed_buffer";
@@ -35,6 +40,12 @@ export class StreamInterruptedError extends Error {
     super(message);
     this.name = "StreamInterruptedError";
   }
+}
+
+function openingClauseCanStandAlone(value: string) {
+  const text = value.trim();
+  if (text.length < 28 || /^(?:如果|假设|假如|因为|对于|关于)/.test(text)) return false;
+  return !/(?:不|没有|并非|不是|但|但是|而|以及|包括|例如|因为|所以|如果|需要|会|可以|主要|分别)[，,、：:]?$/.test(text);
 }
 
 export async function streamInterviewAnswer(input: {
@@ -68,11 +79,14 @@ export async function streamInterviewAnswer(input: {
         const extracted = takeStreamUnits(pending);
         pending = extracted.rest;
         for (const unit of extracted.units) {
+          let chunk: string;
           if (!visible && !unit.sentenceComplete) {
             held += unit.text;
-            continue;
+            if (!openingClauseCanStandAlone(held)) continue;
+            chunk = held;
+          } else {
+            chunk = `${held}${unit.text}`;
           }
-          const chunk = `${held}${unit.text}`;
           held = "";
           const candidate = `${answer}${chunk}`;
           const { hardSafety } = splitQualityTriggers(validateAnswerFragment(candidate, input.plan, unit.sentenceComplete).triggers);

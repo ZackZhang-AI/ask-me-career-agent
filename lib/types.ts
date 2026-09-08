@@ -185,6 +185,7 @@ export interface AnswerBrief {
 
 export interface AnswerPlan {
   contractId?: string;
+  reviewedAnswerId?: string;
   topic: QuestionTopic;
   facet: QuestionFacet;
   focusTerms: string[];

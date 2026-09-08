@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { candidateNarrative } from "../content/narrative";
 import { answerStrategies, classifyInterviewQuestion, factRisks, interviewQuestionFamilies } from "./interview-question";
+import { normalizeInterviewQuestion } from "./question-normalization";
 import type { AnswerIntent, EvidencePolicy, QuestionContract, QuestionFacet, QuestionFrame, QuestionMode, QuestionTopic, ResponseShape } from "./types";
 
 const topics = ["profile", "role_fit", "baidu", "rag", "deepflow", "ask_me", "local_tools", "audit", "statistics", "skills", "enterprise_ai", "agent", "unknown"] as const;
@@ -41,15 +42,15 @@ export function inferAnswerIntent(question: string, topic: QuestionTopic = "unkn
   if (roleFitPattern.test(question)) return "role_fit";
   if (/估算|估一估|市场规模|一天有多少|数量级|费米|Fermi/i.test(question)) return "estimation";
   if (/商业模式|漏斗|用户链路|获客|定价|收费方案|指标树|增长活动|续费|评估.{0,8}增长|如何.{0,12}(?:判断|选择).{0,12}(?:收入|留存)/i.test(question)) return "business_analysis";
-  if (/设计一款|设计一个|产品设计|如何设计|如何改进|MVP|最小可行|功能优先级|需求优先级|如果让你做.{0,16}(?:产品|功能)/i.test(question)) return "product_design";
-  if (/业务分析|商业模式|漏斗|用户链路|获客|定价|指标树|如何.{0,10}(?:提升|提高|改善).{0,10}(?:增长|留存|转化)/i.test(question)) return "business_analysis";
+  if (/设计一款|设计一个|设计.{0,12}(?:产品|功能)|产品设计|如何设计|如何改进|MVP|最小可行|功能优先级|需求优先级|如果让你(?:做|设计|负责|接手).{0,20}(?:产品|功能)/i.test(question)) return "product_design";
+  if (/业务分析|(?:如何|怎么).{0,10}(?:提升|提高|改善).{0,10}(?:营收|收入|增长|留存|转化)/i.test(question)) return "business_analysis";
   if (/职业规划|未来.{0,12}(?:规划|方向|发展|成长)|三年.{0,12}(?:规划|目标|成长)/i.test(question)) return "career_planning";
   if (/为什么.{0,12}不继续.{0,16}(?:数据分析|审计|财会|会计|财务|原专业|原方向)/i.test(question)) return "career_planning";
   if (/为什么.{0,12}(?:对|会对).{0,16}(?:感兴趣|有兴趣)/i.test(question)) return "career_planning";
   if (/为什么.{0,12}(?:选择|应聘|加入).{0,12}(?:我们|这家|贵公司|公司|创业公司|企业|岗位)|为什么是我们|选择这家公司/i.test(question)) return "company_motivation";
   if (/薪资|薪酬|到岗|入职|实习多久|实习时长|工作地点|意向城市|offer/i.test(question)) return "career_logistics";
   if (/最新|最近|近期|当下|今年|当前.{0,16}(?:趋势|政策|监管|动态)|行业趋势|公司动态|新闻|热点|融资|财报|政策变化/i.test(question)) return "industry_view";
-  if (/工作风格|跨团队|团队协作|如何协作|如何沟通|沟通冲突|面对压力|处理压力|应对压力|不确定性/i.test(question)) return "work_style";
+  if (/工作风格|跨团队|团队协作|如何协作|如何沟通|沟通冲突|面对压力|处理压力|应对压力|不确定性|说服(?:不了|不动)?|无法说服|意见不一致|对方不同意|被反对|推进不动|如何推动/i.test(question)) return "work_style";
   if (/(?:如何看待|怎么看|怎样看待).{0,20}(?:人工确认|人工复核|人审|Human.?in.?the.?loop)/i.test(question)) return "situational_judgment";
   if (/AI\s*(?:编程|写|生成)|代码.*AI|AI.*占比|用了多少\s*AI/i.test(question)) return "ai_collaboration";
   if (/挑战|困难|失败|取舍|踩坑|复盘|怎么推进|如何推进/i.test(question)) return "challenge";
@@ -244,7 +245,7 @@ export const questionContracts: QuestionContract[] = [
     next: ["baidu_metrics", "baidu_reliability", "baidu_contribution"],
   }),
   define({
-    id: "baidu_contribution", question: "你在百度实习中具体负责什么？", aliases: ["你在百度实习中的个人贡献是什么？", "你个人具体做了什么，导师和研发做了什么？"], topic: "baidu", facet: "contribution",
+    id: "baidu_contribution", question: "你在百度实习中具体负责什么？", aliases: ["你在百度实习中具体负责了什么？", "你在百度实习中具体负责了哪些工作？", "你在百度实习中的个人贡献是什么？", "百度实习你具体做了什么？", "你个人具体做了什么，导师和研发做了什么？"], topic: "baidu", facet: "contribution",
     dimensions: ["确认贡献", "协作边界", "可交付产物"], knowledge: ["K22", "K26", "K40", "K42", "K41", "K43", "K25"], stories: ["ST9"], shape: "contribution", length: { min: 360, max: 620 },
     goal: "清楚说明候选人的确认贡献，并准确区分重点负责、团队协作与未负责范围。", thesis: "我参与文心日常业务评测，并重点负责推进 WebDev E2E Bench 的任务、指标、证据、归因和验收。",
     required: ["日常业务评测", "重点推进 WebDev", "底层模型训练"], direct: ["负责", "评测", "WebDev", "校准"],
@@ -485,12 +486,7 @@ export const questionContracts: QuestionContract[] = [
 const contractById = new Map(questionContracts.map((contract) => [contract.id, contract]));
 
 export function normalizeContractQuestion(value: string) {
-  return value
-    .toLowerCase()
-    .replace(/张倬玮/g, "候选人")
-    .replace(/你的|他的/g, "候选人的")
-    .replace(/你|他/g, "候选人")
-    .replace(/[\s，。！？、：；,.!?:;（）()\-_]/g, "");
+  return normalizeInterviewQuestion(value);
 }
 
 export function findQuestionContract(question: string) {
@@ -668,7 +664,7 @@ export function mergePlannedFrame(local: QuestionFrame, planned: z.input<typeof 
   const targetRole = local.targetRole ?? planned.targetRole;
   const questionMode = questionModeFor(question, answerIntent);
   const localClassification = classifyInterviewQuestion(question, answerIntent, questionMode);
-  const preserveBoundary = local.factRisk === "unsupported_personal" || local.answerStrategy === "decline" || local.questionFamily === "agent_meta";
+  const preserveBoundary = local.factRisk === "unsupported_personal" || local.questionFamily === "agent_meta";
   const resolvedFamily = preserveBoundary || keepLocalIntent || blockCareerTransition
     ? localClassification.questionFamily
     : planned.questionFamily ?? localClassification.questionFamily;
