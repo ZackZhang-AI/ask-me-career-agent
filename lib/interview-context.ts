@@ -40,6 +40,40 @@ const facetPatterns: Array<[QuestionFacet, RegExp]> = [
   ["problem", /问题|痛点|为什么做/],
 ];
 
+const projectAliases: Record<string, RegExp> = {
+  "baidu-ai-coding-evaluation": /百度|WebDev|AI\s*Coding|Evaluator/i,
+  "rag-knowledge-base": /百川|医疗\s*RAG|RAG\s*(?:知识库|项目)|知识库系统/i,
+  deepflow: /DeepFlow|多\s*Agent/i,
+  "ask-me": /Ask\s*Me|数字分身/i,
+  "local-first-tools": /ResumeAutofill|HarnessLab|Thirty-Minute|Read-Later|Downloads Butler/i,
+  "audit-tools": /德勤|容诚|审计/i,
+};
+
+function projectMention(message: string) {
+  return Object.entries(projectAliases).find(([, pattern]) => pattern.test(message))?.[0];
+}
+
+function relevantHistory(history: ChatMessage[], activeProject: string | undefined, useHistory: boolean) {
+  // Profile and cross-experience questions do not belong to a single project;
+  // recent interview turns are still relevant to whether this is a deep follow-up.
+  if (!activeProject) return history.slice(-6);
+  let lastProjectMention = -1;
+  let mentionedProject: string | undefined;
+  history.forEach((message, index) => {
+    if (message.role !== "user") return;
+    const project = projectMention(message.content);
+    if (project) {
+      lastProjectMention = index;
+      mentionedProject = project;
+    }
+  });
+  if (lastProjectMention >= 0 && mentionedProject === activeProject) return history.slice(lastProjectMention);
+  // The current question explicitly switched projects, so older project turns
+  // must not increase depth or donate stories to the new topic.
+  if (lastProjectMention >= 0 && mentionedProject !== activeProject) return [];
+  return useHistory ? history.slice(-6) : [];
+}
+
 function inferFacet(question: string): QuestionFacet {
   return facetPatterns.find(([, pattern]) => pattern.test(question))?.[0] ?? "overview";
 }
@@ -50,9 +84,12 @@ export function buildInterviewConversationContext(input: {
   items: KnowledgeItem[];
   stories: StarStory[];
 }): InterviewConversationContext {
-  const recentAnswers = input.history.filter((message) => message.role === "assistant").slice(-6).map((message) => message.content);
+  const activeProject = input.frame.activeProject
+    ?? input.items.find((item) => item.relatedProject && input.history.slice(-4).some((message) => textCovers(item.title, message.content)))?.relatedProject;
+  const topicHistory = relevantHistory(input.history, activeProject, input.frame.useHistory);
+  const recentAnswers = topicHistory.filter((message) => message.role === "assistant").slice(-6).map((message) => message.content);
   const answerText = recentAnswers.join("\n");
-  const askedDimensions = [...new Set(input.history
+  const askedDimensions = [...new Set(topicHistory
     .filter((message) => message.role === "user")
     .map((message) => inferFacet(message.content)))];
   const usedKnowledgeIds = input.items
@@ -61,14 +98,8 @@ export function buildInterviewConversationContext(input: {
   const usedStoryIds = input.stories
     .filter((story) => textCovers(story.action, answerText) || textCovers(story.result, answerText))
     .map((story) => story.id);
-  const userTurns = input.history.filter((message) => message.role === "user").length;
-  const activeProject = input.frame.activeProject
-    ?? input.items.find((item) => item.relatedProject && input.history.slice(-4).some((message) => textCovers(item.title, message.content)))?.relatedProject
-    ?? input.items.find((item) => item.relatedProject)?.relatedProject;
-  const relatedTurns = activeProject
-    ? input.history.filter((message) => normalize(message.content).includes(normalize(activeProject))).length
-    : 0;
-  const depth = userTurns >= 3 || relatedTurns >= 3 ? "deep_dive" : userTurns > 0 ? "follow_up" : "overview";
+  const relatedUserTurns = topicHistory.filter((message) => message.role === "user").length;
+  const depth = relatedUserTurns >= 3 ? "deep_dive" : relatedUserTurns > 0 ? "follow_up" : "overview";
 
   return { activeProject, targetRole: input.frame.targetRole, depth, askedDimensions, usedKnowledgeIds, usedStoryIds };
 }

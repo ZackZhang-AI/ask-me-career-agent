@@ -357,6 +357,10 @@ export function buildAnswerPlan(
     ? selectStory(items, stableAnswer, historyText, frame.allowedStoryIds, conversationContext.usedStoryIds)
     : undefined;
   const storyFacts = relatedStory ? [relatedStory.situation, relatedStory.task, relatedStory.action, relatedStory.result] : [];
+  const allowedEventFacts = unique([
+    ...storyFacts,
+    ...items.filter((item) => item.evidenceKind === "confirmed_event").flatMap((item) => [item.content, item.candidateContribution]),
+  ]);
   const composableFacts = intent === "career_transition"
     ? careerTransitionFacts()
     : intent === "role_fit" ? roleFitFacts(frame.targetRole) : [];
@@ -435,6 +439,7 @@ export function buildAnswerPlan(
     thesis,
     mustInclude,
     allowedFacts: unique([thesis, ...allowedFacts]),
+    allowedEventFacts,
     allowedNumbers: unique([...(skeleton?.allowedNumbers ?? []), ...extractNumbers(allowedFacts)]),
     allowedOrganizations: unique([...(skeleton?.allowedOrganizations ?? []), ...knownOrganizations.filter((organization) => allowedFacts.some((fact) => fact.includes(organization)))]),
     allowedProjectStatuses: unique([...(skeleton?.allowedProjectStatuses ?? []), ...items.map((item) => item.projectStatus)]),
@@ -482,6 +487,7 @@ export function buildContext(items: KnowledgeItem[], plan?: AnswerPlan) {
     `本题意图：${plan.intent}；题型：${plan.questionFamily}；事实风险：${plan.factRisk}；回答策略：${plan.answerStrategy}；主题：${plan.topic}；回答维度：${plan.facet}。第一句必须在 45 个中文字符内直接回应：${plan.directAnswerTerms.join("、") || "当前问题"}；先形成可独立理解的短句，再展开依据。`,
     `内部回答蓝图：直接结论=${plan.blueprint.directConclusion}；所需事实=${plan.blueprint.requiredFacts.join("；") || "无"}；推理步骤=${plan.blueprint.reasoningSteps.join("→") || "直接回答"}；关键取舍=${plan.blueprint.keyTradeoffs.join("；")}；面试收束=${plan.blueprint.interviewConclusion}。不要在正文中展示“蓝图”或这些字段名。`,
     `回答模式：${plan.questionMode}；证据策略：${plan.evidencePolicy}。candidate_reasoning 只能回答方法和推演，开头要自然说明这是“我的处理思路”，不得暗示已经执行过；behavioral 必须使用真实 STAR，没有完全对应案例时明确说“最接近的一段经历”；candidate_fact 不得在证据不足时补造经历。`,
+    `事件叙述边界：${plan.allowedEventFacts.length ? `只可把这些内容叙述为真实发生的具体事件：${plan.allowedEventFacts.join("；")}` : "本题没有已确认的具体事件，只能描述职责积累或处理方法，不得补写‘我遇到过一次冲突/失败/事故’等情节。"}`,
     `回答结构：${plan.responseShape}；对话深度：${plan.conversationDepth}；参考长度：${plan.targetLength.min}-${plan.targetLength.max} 个中文字符。根据问题复杂度自然调整，简单事实短答，项目、贡献与复盘问题讲完整，不为凑字数重复。`,
     `回答厚度：${plan.detailLevel}。concise 只给直接答案；standard 讲清结论、最相关实践和方法或价值；deep 通常分成 3-4 个自然段，依次形成直接判断、2-3 层互补证据、关键机制或取舍，以及能帮助面试官形成判断的收束。每一段承担不同作用，不要罗列简历。加粗每处不超过 12 个汉字，禁止把整组经历或完整句子全部加粗。`,
     `本轮必须带来这些新信息：${plan.newInformationGoal.join("；")}`,
@@ -500,7 +506,7 @@ export function buildContext(items: KnowledgeItem[], plan?: AnswerPlan) {
   const focusedEvidenceIds = new Set(plan ? [plan.brief.primaryEvidenceId, ...plan.brief.supportingEvidenceIds].filter(Boolean) : []);
   const contextItems = focusedEvidenceIds.size ? items.filter((item) => focusedEvidenceIds.has(item.id)) : items;
   const materials = contextItems.map((item) => [
-    "<material>", `主题：${item.title}`, `事实：${item.content}`, `我的工作：${item.candidateContribution}`, `AI 协作：${item.aiAssistance}`,
+    "<material>", `主题：${item.title}`, `材料用途：${item.evidenceKind === "confirmed_event" ? "可支持具体事件" : item.evidenceKind === "method" ? "只支持方法判断" : "只支持职责与能力积累，不支持补写具体事件"}`, `事实：${item.content}`, `我的工作：${item.candidateContribution}`, `AI 协作：${item.aiAssistance}`,
     item.projectStatus ? `当前状态：${item.projectStatus}` : "", plan?.shouldMentionLimitations ? `现实情况：${item.limitations}` : "", "</material>",
   ].filter(Boolean).join("\n")).join("\n\n");
   const stories = getRelatedStarStories(items, 4)

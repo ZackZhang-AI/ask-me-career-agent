@@ -85,12 +85,29 @@ let failures = 0;
 const failureDetails: Array<Record<string, unknown>> = [];
 const modes = new Map<string, number>();
 const firstDeltaLatencies: number[] = [];
+const latencyByMode = new Map<string, number[]>();
+let firstAttemptFailures = 0;
+let retryRecovered = 0;
+
+function summarizeResult(index: number, result: { events: Array<Record<string, unknown>>; firstDeltaMs: number | null }) {
+  const done = result.events.at(-1);
+  const answer = result.events.filter((event) => event.type === "delta").map((event) => String(event.content ?? "")).join("");
+  const deliveryMode = String(done?.deliveryMode ?? "unknown");
+  const completed = done?.type === "done" && String(done.responseStatus) === "completed" && answer.trim().length > 0;
+  const expectedBoundary = boundaryIndexes.has(index);
+  const validBoundary = expectedBoundary && done?.type === "done" && answer.trim().length > 0;
+  const validOpen = expectedBoundary ? validBoundary : completed;
+  const validRealtime = realtimeIndexes.has(index) ? deliveryMode === "realtime_stream" && result.firstDeltaMs !== null : true;
+  return { done, answer, deliveryMode, valid: validOpen && validRealtime };
+}
 
 for (const [index, question] of questionEntries) {
   let result = { events: [] as Array<Record<string, unknown>>, firstDeltaMs: null as number | null };
+  let firstAttemptValid = false;
   for (let attempt = 0; attempt < 2; attempt += 1) {
     const response = await requestChat(index, attempt, question);
     result = await readEvents(response);
+    if (attempt === 0) firstAttemptValid = summarizeResult(index, result).valid;
     const done = result.events.at(-1);
     const retryable = done?.type === "error" || done?.responseStatus === "upstream_error";
     if (!retryable || attempt === 1) break;
@@ -98,17 +115,15 @@ for (const [index, question] of questionEntries) {
   if (process.env.SMOKE_VERBOSE === "1" && Number(process.env.SMOKE_INDEX) === index + 1) {
     console.info(JSON.stringify({ index: index + 1, events: result.events }));
   }
-  const done = result.events.at(-1);
-  const answer = result.events.filter((event) => event.type === "delta").map((event) => String(event.content ?? "")).join("");
-  const deliveryMode = String(done?.deliveryMode ?? "unknown");
+  const { done, answer, deliveryMode, valid } = summarizeResult(index, result);
+  if (!firstAttemptValid) firstAttemptFailures += 1;
+  if (!firstAttemptValid && valid) retryRecovered += 1;
   modes.set(deliveryMode, (modes.get(deliveryMode) ?? 0) + 1);
-  if (result.firstDeltaMs !== null) firstDeltaLatencies.push(result.firstDeltaMs);
-  const completed = done?.type === "done" && String(done.responseStatus) === "completed" && answer.trim().length > 0;
-  const expectedBoundary = boundaryIndexes.has(index);
-  const validBoundary = expectedBoundary && done?.type === "done" && answer.trim().length > 0;
-  const validOpen = expectedBoundary ? validBoundary : completed;
-  const validRealtime = realtimeIndexes.has(index) ? deliveryMode === "realtime_stream" && result.firstDeltaMs !== null : true;
-  if (!validOpen || !validRealtime) {
+  if (result.firstDeltaMs !== null) {
+    firstDeltaLatencies.push(result.firstDeltaMs);
+    latencyByMode.set(deliveryMode, [...(latencyByMode.get(deliveryMode) ?? []), result.firstDeltaMs]);
+  }
+  if (!valid) {
     failures += 1;
     failureDetails.push({ index: index + 1, responseStatus: done?.responseStatus, deliveryMode, modelPath: done?.modelPath, answerLength: answer.length, firstDeltaMs: result.firstDeltaMs });
   }
@@ -117,5 +132,24 @@ for (const [index, question] of questionEntries) {
 const sortedLatencies = [...firstDeltaLatencies].sort((left, right) => left - right);
 const p50 = sortedLatencies.length ? sortedLatencies[Math.floor(sortedLatencies.length * 0.5)] : null;
 const p95 = sortedLatencies.length ? sortedLatencies[Math.min(sortedLatencies.length - 1, Math.ceil(sortedLatencies.length * 0.95) - 1)] : null;
-console.info(JSON.stringify({ total: questionEntries.length, failures, failureDetails, deliveryModes: Object.fromEntries(modes), firstDeltaP50Ms: p50, firstDeltaP95Ms: p95 }));
+const latencySummaryByDeliveryMode = Object.fromEntries([...latencyByMode.entries()].map(([mode, values]) => {
+  const sorted = [...values].sort((left, right) => left - right);
+  return [mode, {
+    samples: sorted.length,
+    p50Ms: sorted[Math.floor(sorted.length * 0.5)] ?? null,
+    p95Ms: sorted[Math.min(sorted.length - 1, Math.ceil(sorted.length * 0.95) - 1)] ?? null,
+  }];
+}));
+console.info(JSON.stringify({
+  total: questionEntries.length,
+  failures,
+  firstAttemptFailures,
+  firstAttemptSuccessRate: Number(((questionEntries.length - firstAttemptFailures) / questionEntries.length).toFixed(4)),
+  retryRecovered,
+  failureDetails,
+  deliveryModes: Object.fromEntries(modes),
+  latencySummaryByDeliveryMode,
+  firstDeltaP50Ms: p50,
+  firstDeltaP95Ms: p95,
+}));
 if (failures) process.exitCode = 1;

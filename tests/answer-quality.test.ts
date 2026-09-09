@@ -203,3 +203,14 @@ test("时效问题必须声明知识范围，行为题必须落到真实行动�
   assert.equal(triggers.includes("missing_behavior_action"), true);
   assert.equal(triggers.includes("missing_behavior_result_review"), true);
 });
+
+test("职责材料不能被开放方法题扩写成未记录的具体冲突事件", () => {
+  const question = "说服不了别人怎么办？";
+  const frame = buildLocalQuestionFrame(question);
+  const currentPlan = buildAnswerPlan(question, retrieveKnowledge(question, { frame }), undefined, [], frame);
+  assert.equal(currentPlan.questionMode, "candidate_reasoning");
+  assert.deepEqual(currentPlan.allowedEventFacts, []);
+  const fabricatedIncident = "我的处理思路是先把分歧转成可验证的问题。我在校园招聘现场遇到过面试官与候选人对流程信息理解不一致，当时我先分别沟通，再说服双方接受新的安排。之后我会继续用目标、事实和最小验证推进共识。";
+  const result = validateAnswer(fabricatedIncident, currentPlan);
+  assert.equal(result.triggers.includes("reasoning_presented_as_fact"), true);
+});

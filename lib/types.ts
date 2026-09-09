@@ -201,6 +201,8 @@ export interface AnswerPlan {
   thesis: string;
   mustInclude: string[];
   allowedFacts: string[];
+  /** Confirmed incident-level facts that may be narrated as something that actually happened. */
+  allowedEventFacts: string[];
   allowedNumbers: string[];
   allowedOrganizations: string[];
   allowedProjectStatuses: string[];
@@ -272,6 +274,8 @@ export interface KnowledgeItem extends ContentMetadata {
   id: string;
   title: string;
   content: string;
+  /** Controls whether the material supports a duty, a concrete past event, or only a method. */
+  evidenceKind?: "duty" | "confirmed_event" | "method";
   keywords: string[];
   projectStatus?: ProjectStatus;
   candidateContribution: string;

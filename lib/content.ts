@@ -63,6 +63,7 @@ export const knowledgeItemSchema = z.object({
   id: z.string().regex(/^K\d+$/),
   title: z.string().min(1),
   content: z.string().min(1),
+  evidenceKind: z.enum(["duty", "confirmed_event", "method"]).optional(),
   keywords: z.array(z.string().min(1)).min(1),
   projectStatus: projectStatus.optional(),
   candidateContribution: z.string().min(1),

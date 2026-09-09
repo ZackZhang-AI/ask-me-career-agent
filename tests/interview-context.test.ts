@@ -76,3 +76,21 @@ test("深层追问只补充新信息，不因轮次增加而机械扩写", () =>
   assert.equal(plan.targetLength.max <= 500, true);
   assert.equal(plan.newInformationGoal.length > 0, true);
 });
+
+test("明确切换项目后不会继承上一项目的深挖层级和已问维度", () => {
+  const history = [
+    { role: "user" as const, content: "介绍一下 RAG 项目。" },
+    { role: "assistant" as const, content: "我介绍了 RAG 的定位和检索链路。" },
+    { role: "user" as const, content: "你在这个项目中负责什么？" },
+    { role: "assistant" as const, content: "我介绍了 RAG 的需求、方案和评测职责。" },
+    { role: "user" as const, content: "最难的取舍是什么？" },
+    { role: "assistant" as const, content: "我介绍了 RAG 的召回与可信度取舍。" },
+  ];
+  const question = "介绍一下你在百度的 WebDev 评测工作。";
+  const items = retrieveKnowledge(question, { history });
+  const plan = buildAnswerPlan(question, items, undefined, history);
+
+  assert.equal(plan.conversationContext.activeProject, "baidu-ai-coding-evaluation");
+  assert.equal(plan.conversationContext.depth, "overview");
+  assert.deepEqual(plan.conversationContext.askedDimensions, []);
+});

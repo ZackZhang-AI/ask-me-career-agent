@@ -69,6 +69,21 @@ test("可信度不再依赖 Claim、Source 或边界词", () => {
   assert.ok(secondQuality.internalWordingHits.length > 0);
 });
 
+test("评分不再把术语堆砌和篇幅当作差异化或追问承受力", () => {
+  const testCase: InterviewCase = {
+    id: "score-quality", roleId: "unit", roleName: "unit", roleFocus: "unit", categoryId: "unit", categoryName: "unit",
+    question: "你如何推进一个评测项目？", anchors: [], semanticGroups: [],
+  };
+  const buzzwords = "数据、评测、审计、业务、RAG、Agent、产品、工程、Dense Retrieval、Rerank、RAGAS、MVP、工作流、检索、人审、引用。".repeat(4);
+  const concrete = "我会先定义用户要完成的任务和失败标准，因为没有统一口径就无法比较方案；随后拆出可复查的指标与样例，推动小范围验证，根据结果复测并决定是否继续投入。当前这只是我的处理思路，不代表已经取得业务结果。";
+  const buzzQuality = evaluateAnswerQuality(buzzwords, { anchors: [], forbiddenFacts: [], expectedStructure: "direct" });
+  const concreteQuality = evaluateAnswerQuality(concrete, { anchors: [], forbiddenFacts: [], expectedStructure: "direct" });
+  const buzzScore = scoreAnswer(testCase, { text: buzzwords, responseStatus: "completed", claimIds: [], sourceIds: [], answerMode: "deepseek" }, buzzQuality);
+  const concreteScore = scoreAnswer(testCase, { text: concrete, responseStatus: "completed", claimIds: [], sourceIds: [], answerMode: "deepseek" }, concreteQuality);
+  assert.ok(concreteScore.差异化 > buzzScore.差异化);
+  assert.ok(concreteScore.追问承受力 > buzzScore.追问承受力);
+});
+
 test("已知幻觉一律触发硬事实失败且可信度归零", () => {
   const hallucinations = [
     "我做了校园数据门户，并完成 30 次测试评审。",
@@ -102,6 +117,8 @@ test("报告包含核心覆盖、长度、结构、套话、硬事实与多轮�
   assert.equal(Array.isArray(report.qualityGates.repeatedClosingPairs), true);
   assert.equal(Array.isArray(report.qualityGates.similarDifferentIntentPairs), true);
   assert.equal(report.qualityGates.multiTurnNewInformationRate >= 0 && report.qualityGates.multiTurnNewInformationRate <= 1, true);
+  assert.equal(report.qualityGates.firstAttemptSuccessRate, 1);
+  assert.equal(report.qualityGates.recoveredRetryCount, 0);
   assert.equal(report.roleRecommendations.every((item) => item.memorablePhrase && item.suggestedNextQuestion), true);
 });
 

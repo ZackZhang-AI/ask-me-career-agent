@@ -68,6 +68,8 @@ export interface EvaluationAnswer {
   sourceIds: string[];
   answerMode: "stable" | "retrieval" | "deepseek" | "guardrail";
   storyIds?: string[];
+  attempts?: number;
+  firstAttemptPassed?: boolean;
 }
 
 export interface AnswerQuality {
@@ -134,6 +136,8 @@ export interface InterviewEvaluationReport {
     dedicatedFallbackPassRate: number;
     templateReuseRate: number;
     deepRecommendationPassed: boolean;
+    firstAttemptSuccessRate: number;
+    recoveredRetryCount: number;
   };
   summary: {
     passedCases: number;
@@ -275,19 +279,30 @@ function clampScore(value: number) {
 }
 
 export function scoreAnswer(testCase: InterviewCase, answer: EvaluationAnswer, quality: AnswerQuality): ScoreCard {
-  const normalized = normalize(answer.text);
-  const differentiationTerms = ["数据", "评测", "审计", "业务", "rag", "agent", "产品", "工程", "取舍", "验收"];
-  const specificTerms = ["dense retrieval", "rerank", "ragas", "badcase", "mvp", "工作流", "检索", "人审", "引用"];
-  const differentiationHits = differentiationTerms.filter((term) => normalized.includes(term)).length;
-  const specificHits = specificTerms.filter((term) => normalized.includes(term)).length;
+  const text = answer.text;
+  const hasCandidateAction = /我(?:先|会|负责|参与|推动|设计|定义|拆解|分析|判断|验证|复测|修正|对齐|选择|重点)/.test(text);
+  const hasDecisionBasis = /因为|所以|考虑|为了|而不是|取舍|权衡|判断依据|优先/.test(text);
+  const hasValidation = /验证|复测|对比|指标|验收|证据|回归|成功标准/.test(text);
+  const hasHonestBoundary = /范围|边界|当前|尚未|不能|不外推|不等于|只代表/.test(text);
+  const hasTransferOrValue = /迁移|岗位价值|业务价值|用户价值|这让我|这意味着|形成了/.test(text);
+  const hasConcreteEvidence = /例如|具体|一项|一轮|项目|实习|\d/.test(text);
   const clarity = clampScore((answer.responseStatus === "completed" ? 2 : 0) + (quality.contentCoverage === 1 ? 1 : 0) + (quality.structureCompliant ? 1 : 0) + (quality.lengthCompliant ? 1 : 0));
-  const differentiation = differentiationHits >= 6 ? 5 : differentiationHits >= 4 ? 4 : differentiationHits >= 2 ? 3 : 2;
+  // 差异化来自候选人的具体行动、判断依据和可迁移价值，而不是术语密度。
+  const differentiation = clampScore(1
+    + (hasCandidateAction ? 1 : 0)
+    + (hasDecisionBasis ? 1 : 0)
+    + (hasValidation ? 1 : 0)
+    + (hasTransferOrValue || hasConcreteEvidence ? 1 : 0));
   // 可信度只由事实安全、正文覆盖和表达克制决定；Claim/Source 元数据和“边界”词不参与加分。
   const credibility = quality.hardFactsPassed
     ? clampScore(2 + (answer.responseStatus === "completed" ? 1 : 0) + (quality.contentCoverage === 1 ? 1 : 0) + (quality.internalWordingHits.length === 0 ? 1 : 0))
     : 0;
   const followupResilience = quality.hardFactsPassed
-    ? clampScore(1 + Math.min(specificHits, 2) + (quality.contentCoverage === 1 ? 1 : 0) + (answer.text.length >= 220 ? 1 : 0))
+    ? clampScore(1
+      + (hasCandidateAction ? 1 : 0)
+      + (hasDecisionBasis ? 1 : 0)
+      + (hasValidation ? 1 : 0)
+      + (hasHonestBoundary ? 1 : 0))
     : 0;
   const interviewConversionIntent = clampScore(1 + (clarity >= 4 ? 1 : 0) + (differentiation >= 4 ? 1 : 0) + (credibility >= 4 ? 1 : 0) + (followupResilience >= 4 ? 1 : 0));
   return { 清晰度: clarity, 差异化: differentiation, 可信度: credibility, 追问承受力: followupResilience, 面试转化意愿: interviewConversionIntent, total: clarity + differentiation + credibility + followupResilience + interviewConversionIntent };
@@ -385,16 +400,18 @@ async function answerForCase(testCase: Pick<InterviewCase, "question" | "roleNam
     for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
       try {
         const result = await deepSeekAnswer(testCase, history);
-        if (result.responseStatus !== "upstream_error" || attempt === maxAttempts - 1) return result;
+        if (result.responseStatus !== "upstream_error" || attempt === maxAttempts - 1) {
+          return { ...result, attempts: attempt + 1, firstAttemptPassed: attempt === 0 && result.responseStatus !== "upstream_error" };
+        }
       } catch {
         if (attempt === maxAttempts - 1) break;
       }
       const retryDelayMs = Math.min(4_000, 1_000 * 2 ** attempt);
       await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
     }
-    return { text: serviceUnavailableMessage(), responseStatus: "upstream_error", claimIds: [], sourceIds: [], answerMode: "guardrail" };
+    return { text: serviceUnavailableMessage(), responseStatus: "upstream_error", claimIds: [], sourceIds: [], answerMode: "guardrail", attempts: maxAttempts, firstAttemptPassed: false };
   }
-  return localAnswer(testCase.question, history);
+  return { ...localAnswer(testCase.question, history), attempts: 1, firstAttemptPassed: true };
 }
 
 function average(values: number[]) {
@@ -604,6 +621,7 @@ export async function runInterviewEvaluation(options: { requestedMode?: "local" 
   const similarDifferentIntentPairs = similarDifferentIntents(results);
   const contractMetrics = contractQualityMetrics();
   const allQualities = [...results.map((item) => item.quality), ...coreResults.map((item) => item.quality), ...hallucinationResults.map((item) => item.quality), ...multiTurnResults.flatMap((item) => item.turns.map((turn) => turn.quality))];
+  const allAnswers = [...results.map((item) => item.answer), ...coreResults.map((item) => item.answer), ...hallucinationResults.map((item) => item.answer), ...multiTurnResults.flatMap((item) => item.turns.map((turn) => turn.answer))];
   const hardFactViolationCount = allQualities.reduce((sum, item) => sum + item.hardFactViolations.length, 0);
   const qualityGates = {
     hardFactsPassed: hardFactViolationCount === 0,
@@ -623,6 +641,8 @@ export async function runInterviewEvaluation(options: { requestedMode?: "local" 
     selfIntroductionInternalTermCount: results.filter((item) => item.categoryId === "sixty_second_intro" && /(?:Dense Retrieval|Rerank|RAGAS|Claim|Source|NDJSON|技术栈)/i.test(item.answer.text)).length,
     multiTurnNewInformationRate: newInformationRate(multiTurnResults),
     multiTurnPassed: multiTurnResults.every((item) => item.passed),
+    firstAttemptSuccessRate: Number((allAnswers.filter((answer) => answer.firstAttemptPassed !== false).length / allAnswers.length).toFixed(4)),
+    recoveredRetryCount: allAnswers.filter((answer) => answer.firstAttemptPassed === false && answer.responseStatus === "completed").length,
     ...contractMetrics,
   };
   const passedRecommendationGate = effectiveMode === "local" || recommendedRoleCount >= 5;

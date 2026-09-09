@@ -151,6 +151,14 @@ export interface QualityGateResult {
   triggers: string[];
 }
 
+const INCIDENT_PAST_CLAIM = /我[^。！？\n]{0,18}(?:遇到过|碰到过|经历过|处理过一次|解决过一次|说服过|当时[^。！？\n]{0,10}(?:分歧|冲突|失败|事故|异议))/;
+
+function isUnsupportedReasoningIncident(sentence: string, plan: AnswerPlan) {
+  if (plan.questionMode !== "candidate_reasoning" || !INCIDENT_PAST_CLAIM.test(sentence)) return false;
+  const confirmedEvents = plan.allowedEventFacts.join("\n");
+  return !confirmedEvents || groundingScore(sentence, confirmedEvents) < 0.3;
+}
+
 const HARD_SAFETY_TRIGGER_PREFIXES = [
   "unsupported_claim:",
   "unsupported_organization:",
@@ -344,7 +352,10 @@ export function validateAnswer(candidate: string, plan: AnswerPlan): QualityGate
 
   for (const sentence of clean.split(/[。！？\n]+/).map((item) => item.trim()).filter(Boolean)) {
     const explicitPastClaim = /我(?:之前|曾经|曾|实际|以前|过去)[^。！？\n]{0,12}(?:负责|主导|参与|完成|推动|协调|组织|交付|上线|遇到|发现|验证)|我[^。！？\n]{0,8}(?:负责过|主导过|参与过|协调过|组织过|做过|遇到过|发现过|验证过)/.test(sentence);
-    if (EVENT_SIGNAL.test(sentence)
+    if (isUnsupportedReasoningIncident(sentence, plan)) {
+      triggers.push("reasoning_presented_as_fact");
+      triggers.push("unsupported_event");
+    } else if (EVENT_SIGNAL.test(sentence)
       && groundingScore(sentence, allowedText) < 0.3
       // Supporting-evidence answers are allowed to synthesize the supplied
       // facts in natural language. High-risk fact answers still require an
@@ -417,7 +428,10 @@ export function validateAnswerFragment(candidate: string, plan: AnswerPlan, sent
   if (sentenceComplete) {
     for (const sentence of candidate.split(/[。！？\n]+/).map((item) => item.trim()).filter(Boolean)) {
       const explicitPastClaim = /我(?:之前|曾经|曾|实际|以前|过去)[^。！？\n]{0,12}(?:负责|主导|参与|完成|推动|协调|组织|交付|上线|遇到|发现|验证)|我[^。！？\n]{0,8}(?:负责过|主导过|参与过|协调过|组织过|做过|遇到过|发现过|验证过)/.test(sentence);
-      if (EVENT_SIGNAL.test(sentence)
+      if (isUnsupportedReasoningIncident(sentence, plan)) {
+        triggers.push("reasoning_presented_as_fact");
+        triggers.push("unsupported_event");
+      } else if (EVENT_SIGNAL.test(sentence)
         && groundingScore(sentence, allowedText) < 0.3
         && explicitPastClaim) {
         triggers.push("unsupported_event");
