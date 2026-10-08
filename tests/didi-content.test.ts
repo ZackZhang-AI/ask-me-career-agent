@@ -76,3 +76,13 @@ test("公开知识不包含原始面试稿本地路径或模拟台账", () => {
   const publicText = JSON.stringify(didiKnowledge);
   assert.doesNotMatch(publicText, /FileStorage|wxid_|Users\/didi|3108|115.*38|16 小时.*4 小时/);
 });
+
+for (const question of ["请用 60 秒介绍张倬玮。", "你为什么适合 AI 产品经理岗位？", "你的实习和项目是如何串联起来的？"]) {
+  test(`更新既有答案后契约质量检查仍兼容：${question}`, () => {
+    const frame = buildLocalQuestionFrame(question);
+    const stable = matchStableAnswer(question, [], frame);
+    assert.ok(stable);
+    const plan = buildAnswerPlan(question, retrieveKnowledge(question, { frame }), stable, [], frame);
+    assert.deepEqual(validateAnswer(stable.standardAnswer, plan).triggers, []);
+  });
+}

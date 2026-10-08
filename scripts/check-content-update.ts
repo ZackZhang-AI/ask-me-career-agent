@@ -17,6 +17,8 @@ if (!base) throw new Error("需要 CONTENT_CHECK_BASE_URL 指定本地或 Previe
 const limit = Number(process.env.CONTENT_CHECK_LIMIT) || questions.length;
 const report: Array<Record<string, unknown>> = [];
 for (const [index, question] of questions.slice(0, limit).entries()) {
+  // 默认每分钟五次；验收遵守同一限流，不伪造来源地址。
+  if (index > 0) await new Promise((resolve) => setTimeout(resolve, 16_000));
   const started = performance.now();
   const events: Array<Record<string, unknown>> = [];
   let firstDeltaMs: number | null = null;
