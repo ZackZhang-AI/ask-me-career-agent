@@ -144,7 +144,7 @@ function emptyDelivery(input: {
 export async function buildChatDelivery(input: PipelineInput): Promise<ChatDelivery> {
   const history = input.messages.slice(0, -1).slice(-12);
   const recentModelMessages = input.messages.slice(-10);
-  const contract = findQuestionContract(input.question);
+  const contract = findQuestionContract(input.question, history);
   const localFrame = buildLocalQuestionFrame(input.question, history);
   const localStableAnswer = matchStableAnswer(input.question, history, localFrame);
   const localClassification = classifyInterviewQuestion(input.question, localFrame.answerIntent, localFrame.questionMode);

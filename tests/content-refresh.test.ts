@@ -6,8 +6,8 @@ import { buildLocalQuestionFrame, findQuestionContract } from "../lib/question-c
 import type { AnswerIntent, QuestionTopic } from "../lib/types.ts";
 
 const factCases = [
-  ["S1", /2026-09-07/],
-  ["C13", /2026 年 6 月至今.*文心一言/],
+  ["S1", /2026-10/],
+  ["C13", /2026 年 6 月至 9 月.*文心一言/],
   ["C30", /BT、MA、FA、FR、PM 五门/],
   ["C28", /阶段性完成 106 项.*48 个 AI 面试用例/],
   ["C31", /30\/30 Gold.*60\/60/],

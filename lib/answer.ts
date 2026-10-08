@@ -9,7 +9,7 @@ import { buildLocalQuestionFrame, findQuestionContract, frameFromContract } from
 import { buildAnswerBrief, buildInterviewConversationContext } from "./interview-context";
 
 const boundaryPattern = /短板|不足|限制|边界|风险|真实性|真实数据|用户(?:数|规模|反馈|测试)|增长|留存|生产(?:状态|规模|环境)|完成(?:了吗|情况)|未完成|个人贡献(?:比例|边界)/;
-const knownOrganizations = ["东北大学", "百川智能", "百度", "德勤", "容诚", "ACCA"];
+const knownOrganizations = ["东北大学", "百川智能", "百度", "滴滴", "携程", "德勤", "容诚", "ACCA"];
 const diagnosticMethodFacts = [
   "如果同一组 Bad Case 没有改善，优先确认评测口径与失败分类是否稳定，避免把指标波动误判为方案变化。",
   "随后沿知识摄入、检索、回答、引用链路逐段定位：先看召回证据是否相关且完整，再看回答是否忠实使用证据，最后检查引用与评测是否正确归因。",
@@ -122,10 +122,11 @@ function projectFacts(items: KnowledgeItem[], intent: AnswerIntent, frame: Quest
   return facts;
 }
 
-function selectStory(items: KnowledgeItem[], stableAnswer: StableAnswer | undefined, historyText: string, allowedStoryIds: string[] = [], usedStoryIds: string[] = []) {
+function selectStory(items: KnowledgeItem[], stableAnswer: StableAnswer | undefined, historyText: string, allowedStoryIds: string[] = [], usedStoryIds: string[] = [], activeProject?: string) {
   const preferred = getStarStoriesByIds([...allowedStoryIds, ...(stableAnswer?.preferredStoryIds ?? [])]);
   const related = allowedStoryIds.length ? [] : getRelatedStarStories(items, 4);
-  const candidates = [...new Map([...preferred, ...related].map((story) => [story.id, story])).values()];
+  const candidates = [...new Map([...preferred, ...related].map((story) => [story.id, story])).values()]
+    .filter((story) => !activeProject?.startsWith("didi-") || story.relatedProject === activeProject);
   const unused = candidates.find((story) => !usedStoryIds.includes(story.id) && !storyUsed(story, historyText));
   return unused ?? candidates[0];
 }
@@ -283,7 +284,7 @@ function intentFromFrame(frame: QuestionFrame, detected: AnswerIntent): AnswerIn
   if (frame.facet === "fit") return "role_fit";
   if (frame.facet === "evaluation") return "skills";
   if (frame.facet === "example" || (frame.facet === "transfer" && ["audit", "statistics", "profile"].includes(frame.topic))) return "experience_value";
-  if (frame.facet !== "transfer" && (frame.topic === "rag" || frame.topic === "deepflow" || frame.topic === "ask_me")) return "representative_project";
+  if (frame.facet !== "transfer" && ["didi", "diva", "flight_compare", "rag", "deepflow", "ask_me"].includes(frame.topic)) return "representative_project";
   return detected;
 }
 
@@ -343,7 +344,7 @@ export function buildAnswerPlan(
   frameInput?: QuestionFrame,
   contractInput?: QuestionContract,
 ): AnswerPlan {
-  const contract = contractInput ?? findQuestionContract(question);
+  const contract = contractInput ?? findQuestionContract(question, history);
   const reviewedAnswerId = matchReviewedInterviewAnswerId(question);
   const frame = frameInput ?? (contract ? frameFromContract(contract) : buildLocalQuestionFrame(question, history));
   const intent = intentFromFrame(frame, detectIntent(question, stableAnswer));
@@ -354,7 +355,7 @@ export function buildAnswerPlan(
   const storyIntent = ["challenge", "contribution", "representative_project", "behavioral_experience"].includes(intent)
     || ["example", "transfer"].includes(frame.facet);
   const relatedStory = storyIntent
-    ? selectStory(items, stableAnswer, historyText, frame.allowedStoryIds, conversationContext.usedStoryIds)
+    ? selectStory(items, stableAnswer, historyText, frame.allowedStoryIds, conversationContext.usedStoryIds, frame.activeProject)
     : undefined;
   const storyFacts = relatedStory ? [relatedStory.situation, relatedStory.task, relatedStory.action, relatedStory.result] : [];
   const allowedEventFacts = unique([

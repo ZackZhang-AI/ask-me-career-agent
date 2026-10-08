@@ -91,12 +91,15 @@ export function retrieveKnowledge(question: string, limitOrOptions: number | Ret
   const resolved = resolveRetrievalQuery(question, options.history);
   const limit = Math.max(1, Math.min(options.limit ?? 4, 8));
   const frame = options.frame ?? (() => {
-    const contract = findQuestionContract(question);
+    const contract = findQuestionContract(question, options.history);
     if (contract) return frameFromContract(contract);
     const local = buildLocalQuestionFrame(question, options.history);
-    return local.topic === "unknown" ? undefined : local;
+    return local.topic === "unknown" && local.factRisk !== "unsupported_personal" ? undefined : local;
   })();
   const retrievable = knowledge.filter(isRetrievable);
+
+  // Unrecorded personal facts cannot gain evidence from incidental vocabulary overlap.
+  if (frame?.factRisk === "unsupported_personal" && !frame.requiredKnowledgeIds.length) return [];
 
   // Agent 能力说明和真正未规划的开放题不能靠“问题、产品、项目”等弱词召回一条随机材料。
   // 模型规划完成后会带回明确主题，再进入正常证据检索。

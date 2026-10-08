@@ -41,6 +41,9 @@ const facetPatterns: Array<[QuestionFacet, RegExp]> = [
 ];
 
 const projectAliases: Record<string, RegExp> = {
+  "didi-diva": /\bDiVA\b|营销素材(?:生产)?(?:工作台|工具|项目)?|多广告位|机酒国庆/i,
+  "didi-flight-compare": /(?:机票|航班|竞品)?比价\s*(?:Skill)?|航班匹配|航线分析|供给缺口|高价航班/i,
+  "didi-internship": /滴滴|\bdidi\b|(?:最近|最新|目前|当前)(?:的)?(?:一段)?实习/i,
   "baidu-ai-coding-evaluation": /百度|WebDev|AI\s*Coding|Evaluator/i,
   "rag-knowledge-base": /百川|医疗\s*RAG|RAG\s*(?:知识库|项目)|知识库系统/i,
   deepflow: /DeepFlow|多\s*Agent/i,

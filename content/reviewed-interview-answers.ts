@@ -1,12 +1,17 @@
 import { normalizeInterviewQuestion } from "../lib/question-normalization";
 
-export const reviewedInterviewAnswerVersion = "2026-09-09.1";
+export const reviewedInterviewAnswerVersion = "2026-10-07.1";
 
 /**
  * Reviewed interview-script bindings. Full answer copy remains in qa.ts so the
  * fast path, citations and dynamic evidence layer share one source of truth.
  */
 const reviewedBindings = [
+  { stableAnswerId: "A37", aliases: ["请介绍一下你目前在滴滴的实习", "介绍一下你的滴滴实习", "你目前在哪实习", "你现在在哪实习", "你现在主要做什么工作"] },
+  { stableAnswerId: "A38", aliases: ["请介绍一下DiVA营销素材工作台", "介绍一下DiVA", "DiVA解决了什么问题"] },
+  { stableAnswerId: "A39", aliases: ["请介绍一下机票竞品比价Skill", "介绍一下比价Skill", "机票比价Skill有什么价值"] },
+  { stableAnswerId: "A40", aliases: ["你在DiVA中具体负责什么", "DiVA中你的个人贡献是什么"] },
+  { stableAnswerId: "A41", aliases: ["你在比价Skill中具体负责什么", "机票比价Skill中你的个人贡献是什么"] },
   { stableAnswerId: "A01", aliases: ["请用60秒介绍张倬玮", "60秒了解张倬玮", "请介绍一下你自己", "做个自我介绍"] },
   { stableAnswerId: "A02", aliases: ["你为什么适合AI产品经理岗位", "为什么选择你来做这个岗位", "如果入职你能为团队做什么"] },
   { stableAnswerId: "A07", aliases: ["你如何使用AI编程工具", "AI编程占比多少", "AI写了代码你的价值在哪里"] },

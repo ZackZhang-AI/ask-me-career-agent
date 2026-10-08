@@ -1,10 +1,41 @@
 import { z } from "zod";
 import { candidateNarrative } from "../content/narrative";
+import { didiAnswerInputs } from "../content/didi-answers";
 import { answerStrategies, classifyInterviewQuestion, factRisks, interviewQuestionFamilies } from "./interview-question";
 import { normalizeInterviewQuestion } from "./question-normalization";
 import type { AnswerIntent, EvidencePolicy, QuestionContract, QuestionFacet, QuestionFrame, QuestionMode, QuestionTopic, ResponseShape } from "./types";
 
-const topics = ["profile", "role_fit", "baidu", "rag", "deepflow", "ask_me", "local_tools", "audit", "statistics", "skills", "enterprise_ai", "agent", "unknown"] as const;
+const topics = ["profile", "role_fit", "baidu", "didi", "diva", "flight_compare", "rag", "deepflow", "ask_me", "local_tools", "audit", "statistics", "skills", "enterprise_ai", "agent", "unknown"] as const;
+const projectByTopic: Partial<Record<QuestionTopic, string>> = {
+  baidu: "baidu-ai-coding-evaluation", didi: "didi-internship", diva: "didi-diva", flight_compare: "didi-flight-compare",
+  rag: "rag-knowledge-base", deepflow: "deepflow", agent: "deepflow", ask_me: "ask-me", local_tools: "local-first-tools", audit: "audit-tools",
+};
+const explicitProjectPatterns: Array<[QuestionTopic, RegExp]> = [
+  ["diva", /\bdiva\b|营销素材(?:生产)?(?:工作台|工具|项目)?|多广告位|机酒国庆/i],
+  ["flight_compare", /(?:机票|航班|竞品)?比价\s*(?:skill)?|航班匹配|航线分析|供给缺口|高价航班/i],
+  ["didi", /滴滴|\bdidi\b/i],
+  ["baidu", /百度|文心(?:一言)?|\bbaidu\b|webdev|evaluator\s*agent|ai\s*coding/i],
+  ["rag", /百川|医疗\s*rag|\brag\b|知识库/i],
+  ["deepflow", /deepflow/i], ["ask_me", /ask\s*me|数字分身/i],
+  ["local_tools", /resume\s*autofill|harnesslab|thirty[-\s]?minute|read[-\s]?later|downloads butler/i],
+  ["audit", /德勤|容诚|审计/i],
+];
+const recentInternshipPattern = /^(?:请问)?(?:你|您)?(?:目前|现在)(?:的)?(?:在|正在)?(?:哪(?:家|里)|做什么|做些什么|做的工作|工作(?:内容|是什么)|实习|负责什么)|(?:最近|最新|近期|当前|目前)(?:的)?(?:一段)?实习/i;
+const followupReferencePattern = /这个|该项目|这段|其中|它|上述|这套|这种|这些|那些|那次|当时|刚才|前面|^(?:然后呢|再具体|具体(?:怎么|如何|做了)|为什么这样|那(?:么)?(?:你|如何|怎么|效果|结果|指标|过程|方法|其中))/;
+
+function explicitProjectTopic(question: string) {
+  return explicitProjectPatterns.find(([, pattern]) => pattern.test(question))?.[0];
+}
+
+function historyProjectTopic(history: { role: "user" | "assistant"; content: string }[]) {
+  for (const message of [...history].reverse()) {
+    if (message.role !== "user") continue;
+    const topic = explicitProjectTopic(message.content);
+    if (topic) return topic;
+    if (recentInternshipPattern.test(message.content)) return "didi";
+  }
+  return undefined;
+}
 const facets = ["overview", "problem", "method", "contribution", "architecture", "collaboration", "evaluation", "transfer", "example", "result", "boundary", "fit"] as const;
 const answerIntents = ["agent_identity", "capability_scope", "introduction", "career_transition", "role_fit", "representative_project", "project_overview", "project_problem", "contribution", "ai_collaboration", "challenge", "diagnosis", "result", "limitation", "skills", "experience", "experience_value", "privacy", "education", "credentials", "hiring_recommendation", "behavioral_experience", "situational_judgment", "product_design", "business_analysis", "estimation", "work_style", "career_planning", "company_motivation", "career_logistics", "industry_view", "general"] as const;
 
@@ -39,7 +70,8 @@ export function inferAnswerIntent(question: string, topic: QuestionTopic = "unkn
   if (/^(?:(?:你|您)(?:能|可以)(?:做|回答|介绍|帮我)(?:些什么|什么|哪些(?:问题|内容|开放题)?)?|你有什么(?:作用|用处|功能)|你是做什么的|你能干什么|你可以干什么|你可以帮面试官了解什么|你能帮面试官了解什么|面试官可以通过你了解什么|能问你什么|可以问什么|功能范围|能力范围|你不能回答开放(?:问题|题目|题)?(?:吗)?|你能回答(?:开放|没有标准答案的)?(?:问题|题目|题)?(?:吗)?|.*(?:Agent|助手).{0,8}(?:能不能|可以不可以|能否)?回答.{0,12}(?:开放|标准答案|问题))[？?。.！!\s]*$/i.test(question)) return "capability_scope";
   if (hasCareerTransitionSignature(question)) return "career_transition";
   if (/为什么.{0,12}(?:让你|给你|邀请你|候选人).{0,12}(?:进入|参加).{0,8}(?:下一轮|复试)|为什么.{0,10}(?:录用|招聘)你|你为什么值得.{0,12}(?:下一轮|录用|选择)/i.test(question)) return "hiring_recommendation";
-  if (roleFitPattern.test(question)) return "role_fit";
+  const flightMatchingMethod = topic === "flight_compare" && !/岗位|产品经理|胜任|应聘|适合|契合/.test(question);
+  if (roleFitPattern.test(question) && !flightMatchingMethod) return "role_fit";
   if (/估算|估一估|市场规模|一天有多少|数量级|费米|Fermi/i.test(question)) return "estimation";
   if (/商业模式|漏斗|用户链路|获客|定价|收费方案|指标树|增长活动|续费|评估.{0,8}增长|如何.{0,12}(?:判断|选择).{0,12}(?:收入|留存)/i.test(question)) return "business_analysis";
   if (/设计一款|设计一个|设计.{0,12}(?:产品|功能)|产品设计|如何设计|如何改进|MVP|最小可行|功能优先级|需求优先级|如果让你(?:做|设计|负责|接手).{0,20}(?:产品|功能)/i.test(question)) return "product_design";
@@ -49,6 +81,7 @@ export function inferAnswerIntent(question: string, topic: QuestionTopic = "unkn
   if (/为什么.{0,12}(?:对|会对).{0,16}(?:感兴趣|有兴趣)/i.test(question)) return "career_planning";
   if (/为什么.{0,12}(?:选择|应聘|加入).{0,12}(?:我们|这家|贵公司|公司|创业公司|企业|岗位)|为什么是我们|选择这家公司/i.test(question)) return "company_motivation";
   if (/薪资|薪酬|到岗|入职|实习多久|实习时长|工作地点|意向城市|offer/i.test(question)) return "career_logistics";
+  if (recentInternshipPattern.test(question)) return "experience";
   if (/最新|最近|近期|当下|今年|当前.{0,16}(?:趋势|政策|监管|动态)|行业趋势|公司动态|新闻|热点|融资|财报|政策变化/i.test(question)) return "industry_view";
   if (/工作风格|跨团队|团队协作|如何协作|如何沟通|沟通冲突|面对压力|处理压力|应对压力|不确定性|说服(?:不了|不动)?|无法说服|意见不一致|对方不同意|被反对|推进不动|如何推动/i.test(question)) return "work_style";
   if (/(?:如何看待|怎么看|怎样看待).{0,20}(?:人工确认|人工复核|人审|Human.?in.?the.?loop)/i.test(question)) return "situational_judgment";
@@ -73,12 +106,16 @@ export function inferAnswerIntent(question: string, topic: QuestionTopic = "unkn
   if (facet === "contribution") return "contribution";
   if ((facet === "fit" && topic === "role_fit") || topic === "role_fit") return "role_fit";
   if (facet === "example" || (facet === "transfer" && ["audit", "statistics", "profile"].includes(topic))) return "experience_value";
-  if (["rag", "deepflow", "ask_me", "local_tools", "agent"].includes(topic)) return "project_overview";
+  if (["didi", "diva", "flight_compare"].includes(topic) && ["method", "evaluation"].includes(facet)) return "situational_judgment";
+  if (topic === "didi") return "experience";
+  if (["diva", "flight_compare", "rag", "deepflow", "ask_me", "local_tools", "agent"].includes(topic)) return "project_overview";
   return "general";
 }
 
-function questionModeFor(question: string, intent: AnswerIntent): QuestionMode {
+function questionModeFor(question: string, intent: AnswerIntent, topic?: QuestionTopic, facet?: QuestionFacet): QuestionMode {
   if (["agent_identity", "capability_scope", "privacy"].includes(intent)) return "agent_meta";
+  if (topic && ["didi", "diva", "flight_compare"].includes(topic) && facet && ["method", "evaluation"].includes(facet)
+    && ["diagnosis", "skills"].includes(intent) && !/当时|实际|用了|采用了|你做过|已经|曾经/.test(question)) return "candidate_reasoning";
   // These intents already have a grounded candidate-facing answer shape. They
   // may still use realtime delivery, but should remain an ordinary answer
   // rather than being labelled as a hypothetical/scoped response.
@@ -116,7 +153,7 @@ export const plannedQuestionFrameSchema = z.object({
   focusTerms: z.array(z.string().min(2).max(30)).min(1).max(4),
   targetRole: z.string().min(2).max(30).optional(),
   requestedDimensions: z.array(z.string().min(2).max(30)).min(1).max(4),
-  activeProject: z.enum(["baidu-ai-coding-evaluation", "rag-knowledge-base", "deepflow", "ask-me", "local-first-tools", "audit-tools"]).optional(),
+  activeProject: z.enum(["baidu-ai-coding-evaluation", "didi-internship", "didi-diva", "didi-flight-compare", "rag-knowledge-base", "deepflow", "ask-me", "local-first-tools", "audit-tools"]).optional(),
   useHistory: z.boolean(),
   confidence: z.number().min(0).max(1),
 });
@@ -145,7 +182,7 @@ type ContractInput = {
 function define(input: ContractInput): QuestionContract {
   const answerIntent = inferAnswerIntent(input.question, input.topic, input.facet);
   const targetRole = answerIntent === "role_fit" ? extractTargetRole(input.question) : undefined;
-  const questionMode = questionModeFor(input.question, answerIntent);
+  const questionMode = questionModeFor(input.question, answerIntent, input.topic, input.facet);
   const classification = classifyInterviewQuestion(input.question, answerIntent, questionMode);
   return {
     id: input.id,
@@ -163,7 +200,7 @@ function define(input: ContractInput): QuestionContract {
       focusTerms: input.dimensions.slice(0, 4),
       targetRole,
       requestedDimensions: input.dimensions,
-      activeProject: ({ baidu: "baidu-ai-coding-evaluation", rag: "rag-knowledge-base", deepflow: "deepflow", ask_me: "ask-me", local_tools: "local-first-tools", audit: "audit-tools" } as Partial<Record<QuestionTopic, string>>)[input.topic],
+      activeProject: projectByTopic[input.topic],
       useHistory: false,
       confidence: 1,
       requiredKnowledgeIds: input.knowledge,
@@ -187,21 +224,42 @@ function define(input: ContractInput): QuestionContract {
   };
 }
 
+const didiContractDefinitions = [
+  { answerId: "A37", id: "didi_internship", topic: "didi", facet: "overview", aliases: ["请介绍一下你的滴滴实习。", "你最近的一段实习是什么？", "你目前在哪实习？", "你现在在做什么？", "你目前在做什么？", "你在滴滴实习期间主要做了什么？"], knowledge: ["K54", "K55", "K58", "K61", "K56", "K59"], direct: ["滴滴"], next: ["diva_overview", "flight_compare_overview", "internship_transfer"] },
+  { answerId: "A38", id: "diva_overview", topic: "diva", facet: "overview", aliases: ["请介绍一下 DiVA。", "DiVA 是什么？", "你的营销素材工作台解决什么问题？", "请介绍滴滴的 DiVA 项目。"], knowledge: ["K55", "K56", "K57", "K61"], direct: ["DiVA", "营销素材"], next: ["diva_contribution", "flight_compare_overview", "role_fit"] },
+  { answerId: "A39", id: "flight_compare_overview", topic: "flight_compare", facet: "overview", aliases: ["请介绍一下比价 Skill。", "机票比价 Skill 是什么？", "请介绍滴滴的机票比价项目。"], knowledge: ["K58", "K59", "K60", "K61"], direct: ["比价", "Skill"], next: ["flight_compare_contribution", "diva_overview", "role_fit"] },
+  { answerId: "A40", id: "diva_contribution", topic: "diva", facet: "contribution", aliases: ["DiVA 里面你个人做了什么？", "你在营销素材工作台中的贡献是什么？"], knowledge: ["K55", "K56", "K57", "K61"], direct: ["DiVA", "营销素材"], next: ["diva_overview", "flight_compare_contribution", "internship_transfer"] },
+  { answerId: "A41", id: "flight_compare_contribution", topic: "flight_compare", facet: "contribution", aliases: ["你在机票比价项目中具体负责什么？", "比价 Skill 里面你个人做了什么？"], knowledge: ["K58", "K59", "K60", "K61"], direct: ["比价", "Skill"], next: ["flight_compare_overview", "diva_contribution", "internship_transfer"] },
+] satisfies Array<{ answerId: string; id: string; topic: QuestionTopic; facet: QuestionFacet; aliases: string[]; knowledge: string[]; direct: string[]; next: string[] }>;
+
+const didiContracts = didiContractDefinitions.map((input) => {
+  const answer = didiAnswerInputs.find((item) => item.id === input.answerId);
+  if (!answer) throw new Error(`Missing reviewed Didi answer: ${input.answerId}`);
+  return define({
+    ...input, question: answer.question, dimensions: answer.exclusivePoints,
+    goal: answer.evaluationGoal, thesis: answer.standardAnswer.split(/\n\s*\n/)[0].replace(/\*\*/g, ""),
+    required: answer.exclusivePoints, fallback: answer.standardAnswer,
+    shape: input.facet === "contribution" ? "contribution" : "project_arc",
+    forbidden: forbiddenFor(input.topic),
+  });
+});
+
 export const questionContracts: QuestionContract[] = [
+  ...didiContracts,
   define({
     id: "intro", question: "60 秒了解张倬玮。", aliases: ["请用 60 秒介绍张倬玮。", "请介绍一下你自己。"], topic: "profile", facet: "overview",
-    dimensions: ["候选人定位", "真实 AI 产品实习", "项目能力主线"], knowledge: ["K1", "K27", "K22", "K37", "K2"], stories: ["ST11"], shape: "narrative", length: { min: 430, max: 600 },
+    dimensions: ["候选人定位", "真实 AI 产品实习", "项目能力主线"], knowledge: ["K1", "K54", "K27", "K22", "K37", "K2"], stories: ["ST11"], shape: "narrative", length: { min: 430, max: 600 },
     goal: "让面试官快速形成是否值得继续沟通的候选人判断。", thesis: "我是张倬玮，一名把数据评测、企业业务理解和 AI 产品落地结合起来的应用统计学学生。",
-    required: ["应用统计学与审计基础", "百川医疗 RAG 与百度模型评测", "持续学习和产品落地能力"], direct: ["数据", "百川", "百度", "AI 产品"],
+    required: ["应用统计学与审计基础", "百川百度滴滴 AI 产品实践", "持续学习和产品落地能力"], direct: ["数据", "百川", "百度", "滴滴", "AI 产品"],
     fallback: candidateNarrative.introductions.seconds60,
-    next: ["baidu_internship", "representative_project", "role_fit"],
+    next: ["didi_internship", "representative_project", "role_fit"],
   }),
   define({
     id: "role_fit", question: "你为什么适合 AI 产品经理岗位？", aliases: ["他为什么适合 AI 产品经理岗位？", "你能为 AI 产品团队带来什么价值？", "他能为 AI 产品团队带来什么价值？"], topic: "role_fit", facet: "fit",
-    dimensions: ["岗位匹配", "真实 AI 产品实践", "自主产品验证", "入职价值"], knowledge: ["K27", "K19", "K22", "K12", "K5", "K2", "K37"], stories: ["ST11"], shape: "fit_mapping", length: { min: 360, max: 540 },
+    dimensions: ["岗位匹配", "真实 AI 产品实践", "自主产品验证", "入职价值"], knowledge: ["K54", "K27", "K19", "K22", "K12", "K5", "K2", "K37"], stories: ["ST11"], shape: "fit_mapping", length: { min: 360, max: 540 },
     goal: "说明候选人与初级 AI 产品岗位的具体匹配关系。", thesis: "我适合 AI 产品岗位，核心不是会使用模型，而是能把业务问题、质量验证和工程落地连起来。",
     required: ["模型评测与归因", "企业流程和风险理解", "Ask Me 与 DeepFlow 自主验证", "产品工程推进能力"], direct: ["适合", "评测", "业务", "落地"],
-    fallback: "我适合 AI 产品经理岗位，核心不是单纯会使用模型，而是已经形成了从业务理解、产品设计到质量验证和快速落地的完整能力链。\n\n**真实业务闭环**：百川医疗 RAG 中，我参与需求调研、知识库与检索问答设计和三轮 QA 评测；随后在百度参与六类 AI Coding 任务、七维 Gate、6 个模型 36 次 Pilot 与 Bad Case 归因。\n\n**数据与风险**：应用统计学让我重视样本、指标和结论边界；德勤 IT 审计让我理解企业流程中的证据、数据边界和人工复核。这些能力让我不会只看模型演示，而会追问结果能否复现、错误能否定位、风险是否可控。\n\n**自主产品验证**：Ask Me 验证可信回答、风险分级和招聘决策路径，DeepFlow 验证多 Agent、私域 RAG 和过程追踪。它们说明我能从问题洞察出发把方案推进到可运行、可测试的状态，并在业务、模型和工程之间建立共同语言。",
+    fallback: "我适合 AI 产品经理岗位，核心是已经形成了从业务理解、产品设计到质量验证和快速落地的完整能力链。\n\n**真实业务闭环**：百川医疗 RAG 中，我参与需求调研、知识库与检索问答设计和 QA 评测；百度实习中，我完成六个旗舰模型的正式评测与 Bad Case 归因；目前在滴滴，我把这些判断方法进一步用于营销素材工作台和机票比价 Skill，关注业务最终能否采用、交付是否更有效率。\n\n**数据与风险**：应用统计学让我重视样本、指标和结论边界；德勤 IT 审计让我理解企业流程中的证据、数据边界和人工复核。这些能力让我会追问结果能否复现、错误能否定位、风险是否可控。\n\n**自主产品验证**：Ask Me 验证可信回答、风险分级和招聘决策路径，DeepFlow 验证多 Agent、私域 RAG 和过程追踪。它们说明我能从问题洞察出发把方案推进到可运行、可测试的状态，并在业务、模型和工程之间建立共同语言。",
     next: ["baichuan_internship", "representative_project", "baidu_internship"],
   }),
   define({
@@ -215,9 +273,9 @@ export const questionContracts: QuestionContract[] = [
   define({
     id: "baidu_internship", question: "请介绍一下你的百度 AI 产品经理实习。", aliases: ["你在百度实习期间主要做了什么？", "请用 90 秒介绍这段百度实习。", "你的百度实习经历是什么？"], topic: "baidu", facet: "overview",
     dimensions: ["文心日常业务评测", "WebDev 专项", "版本与结果边界"], knowledge: ["K22", "K40", "K41", "K42", "K43"], stories: ["ST9"], shape: "narrative", length: { min: 400, max: 650 },
-    goal: "让面试官快速确认百度文心一言实习的双工作线、本人贡献与项目深度。", thesis: "2026 年 6 月至今，我在百度文心一言参与日常业务评测，并重点推进 WebDev E2E Bench。",
+    goal: "让面试官快速确认百度文心一言实习的双工作线、本人贡献与项目深度。", thesis: "2026 年 6 月至 9 月，我在百度文心一言参与日常业务评测，并重点推进 WebDev E2E Bench。",
     required: ["日常业务评测与 Bad Case 归因", "六类任务七维指标与 Gate", "V0.1 Pilot 与 V0.2 离线校准边界"], direct: ["百度", "文心一言", "评测", "WebDev"],
-    fallback: "2026 年 6 月至今，我在百度文心一言团队担任 AI 产品经理实习生。我的工作有**双工作线**：参与日常模型与策略版本评测，并重点推进 WebDev E2E Bench，把模型表现拆成任务、七维指标、Gate、失败证据和复测动作。\n\nV0.1 完成 6 模型、6 类任务、36 次正式 Pilot 和 18 份盲评；V0.2 将任务扩到 30 题，完成 30/30 Gold 连续三次通过和 60/60 受控错误检出。这种**分版本校准**避免把离线扩题误说成六模型全量新排名。\n\n我的贡献是问题定义、评测设计、Bad Case 归因和**产品验收**；主管负责方向与评审，算法研发承担相应实现。我不把项目包装成现网版本替换或行业权威排名。",
+    fallback: "2026 年 6 月至 9 月，我在百度文心一言团队担任 AI 产品经理实习生。我的工作有**双工作线**：参与日常模型与策略版本评测，并重点推进 WebDev E2E Bench，把模型表现拆成任务、七维指标、Gate、失败证据和复测动作。\n\nV0.1 完成 6 模型、6 类任务、36 次正式 Pilot 和 18 份盲评；V0.2 将任务扩到 30 题，完成 30/30 Gold 连续三次通过和 60/60 受控错误检出。这种**分版本校准**避免把离线扩题误说成六模型全量新排名。\n\n我的贡献是问题定义、评测设计、Bad Case 归因和**产品验收**；主管负责方向与评审，算法研发承担相应实现。我不把项目包装成现网版本替换或行业权威排名。",
     next: ["baidu_contribution", "baidu_project", "baidu_metrics"],
   }),
   define({
@@ -334,10 +392,10 @@ export const questionContracts: QuestionContract[] = [
   }),
   define({
     id: "internship_transfer", question: "你的实习和项目是如何串联起来的？", aliases: ["你的实习经历沉淀了哪些可迁移能力？", "他的实习经历沉淀了哪些可迁移能力？", "你的项目怎么串联起来？", "这些项目之间有什么关系？", "为什么做这些项目？"], topic: "profile", facet: "transfer",
-    dimensions: ["流程与证据", "真实 AI 产品闭环", "Agent 产品验证", "能力迁移"], knowledge: ["K1", "K8", "K27", "K19", "K22", "K12", "K5", "K37", "K39"], stories: ["ST11", "ST10", "ST9", "ST6"], length: { min: 400, max: 600 },
-    goal: "以最新简历为主线，说明德勤、百川、百度和独立项目如何形成连续的 AI 产品能力。", thesis: "我的实习和项目不是横向堆叠，而是在同一条能力主线上逐步深入。",
-    required: ["德勤流程证据意识", "百川与百度真实 AI 产品闭环", "Ask Me 与 DeepFlow 验证", "统一方法"], direct: ["串联", "百川", "百度", "Ask Me", "DeepFlow"],
-    fallback: "我的实习和项目可以这样**串联**：先理解真实流程，再把问题转成 AI 产品，最后用评测和 Bad Case 推动迭代。\n\n**真实 AI 闭环**：应用统计学和德勤 IT 审计让我建立样本、指标、流程、证据和风险意识，也启发了日志抽查与资料归档工具；百川医疗 RAG 把这种意识迁移到知识库、检索、来源和四维评测；百度又把质量判断推进到六类任务、七维 Gate、多模型 Pilot 和工具协议归因。\n\n**Agent 项目验证**：Ask Me 将可信回答和风险分级用于招聘决策，DeepFlow 将多 Agent、私域 RAG、引用与 Trace 用于复杂研究；Resume Autofill AI、个人知识库、HarnessLab、Read-Later Regret 和 Downloads Butler 则验证更具体的问题。项目名称不同，但底层方法一致：发现问题、定义方案、快速验证、评测归因和持续迭代。",
+    dimensions: ["流程与证据", "真实 AI 产品闭环", "Agent 产品验证", "能力迁移"], knowledge: ["K1", "K8", "K27", "K19", "K54", "K22", "K12", "K5", "K37", "K39"], stories: ["ST11", "ST10", "ST9", "ST6"], length: { min: 400, max: 600 },
+    goal: "以最新简历为主线，说明德勤、百川、百度、滴滴和独立项目如何形成连续的 AI 产品能力。", thesis: "我的实习和项目是在同一条能力主线上逐步深入。",
+    required: ["德勤流程证据意识", "百川与百度真实 AI 产品闭环", "Ask Me 与 DeepFlow 验证", "发现问题与持续迭代"], direct: ["串联", "百川", "百度", "Ask Me", "DeepFlow"],
+    fallback: "我的实习和项目可以这样**串联**：先理解真实流程，再把问题转成 AI 产品，用评测改进质量，最后推进到业务交付。\n\n**真实 AI 闭环**：应用统计学和德勤 IT 审计让我建立样本、指标、流程、证据和风险意识；百川医疗 RAG 把这种意识迁移到知识库、检索和问答评测；百度又把质量判断推进到任务设计、多模型正式评测和 Bad Case 归因。现在滴滴的 DiVA 和机票比价 Skill，让我进一步围绕素材交付和供给分析判断 AI、规则与人工怎样配合，最终看业务能否采用、效率是否改善。\n\n**自主项目验证**：Ask Me 将可信回答和风险分级用于招聘决策，DeepFlow 将多 Agent、私域 RAG、引用与 Trace 用于复杂研究；其他效率工具则验证更具体的问题。它们共同训练了我发现问题、定义方案、快速验证、评测归因和持续迭代的能力。",
     next: ["baichuan_internship", "baidu_internship", "role_fit"],
   }),
   define({
@@ -489,10 +547,15 @@ export function normalizeContractQuestion(value: string) {
   return normalizeInterviewQuestion(value);
 }
 
-export function findQuestionContract(question: string) {
+export function findQuestionContract(question: string, history: { role: "user" | "assistant"; content: string }[] = []) {
   const normalized = normalizeContractQuestion(question);
-  return questionContracts.find((contract) => [contract.question, ...contract.aliases]
+  const contract = questionContracts.find((contract) => [contract.question, ...contract.aliases]
     .some((candidate) => normalizeContractQuestion(candidate) === normalized));
+  const previousTopic = historyProjectTopic(history);
+  // A projectless alias must not turn a follow-up about a new project into a RAG answer.
+  if (contract && previousTopic && followupReferencePattern.test(question) && !explicitProjectTopic(question)
+    && contract.frame.activeProject && projectByTopic[previousTopic] !== contract.frame.activeProject) return undefined;
+  return contract;
 }
 
 export function frameFromContract(contract: QuestionContract): QuestionFrame {
@@ -500,14 +563,15 @@ export function frameFromContract(contract: QuestionContract): QuestionFrame {
 }
 
 const topicKnowledge: Record<QuestionTopic, string[]> = {
-  profile: ["K1", "K2", "K3", "K27", "K22", "K40", "K39", "K53"], role_fit: ["K2", "K3", "K27", "K22", "K40", "K12", "K5", "K49", "K53"], baidu: ["K22", "K40", "K41", "K42", "K43", "K23", "K24", "K25", "K26"], rag: ["K27", "K44", "K45", "K46", "K47", "K48", "K4", "K28", "K29", "K30", "K31", "K35", "K36"],
+  profile: ["K1", "K2", "K3", "K54", "K27", "K22", "K40", "K39", "K53"], role_fit: ["K2", "K54", "K3", "K27", "K22", "K40", "K12", "K5", "K49", "K53"], baidu: ["K22", "K40", "K41", "K42", "K43", "K23", "K24", "K25", "K26"], rag: ["K27", "K44", "K45", "K46", "K47", "K48", "K4", "K28", "K29", "K30", "K31", "K35", "K36"],
+  didi: ["K54", "K55", "K58", "K61", "K56", "K59"], diva: ["K55", "K56", "K57", "K61"], flight_compare: ["K58", "K59", "K60", "K61"],
   deepflow: ["K5", "K16", "K18", "K19", "K20", "K21"], ask_me: ["K12", "K38"], local_tools: ["K39", "K50", "K51", "K52", "K6"], audit: ["K8", "K9", "K10", "K49", "K7"],
   statistics: ["K3", "K17", "K42", "K48"], skills: ["K3", "K53", "K38", "K40", "K47", "K5", "K21"], enterprise_ai: ["K40", "K44", "K45", "K8", "K28", "K29"], agent: ["K18", "K19", "K21", "K51", "K52"], unknown: [],
 };
 
 function familyKnowledge(family: QuestionFrame["questionFamily"]) {
   if (family === "behavioral") return ["K42", "K47", "K22", "K27", "K49", "K53"];
-  if (family === "motivation" || family === "work_style") return ["K1", "K22", "K27", "K49", "K53"];
+  if (family === "motivation" || family === "work_style") return ["K1", "K54", "K22", "K27", "K49", "K53"];
   if (["situational", "product_case", "business_case", "estimation"].includes(family)) return ["K3", "K40", "K42", "K44", "K47"];
   return [];
 }
@@ -541,11 +605,12 @@ function responseShapeFor(facet: QuestionFacet): ResponseShape {
 
 function forbiddenFor(topic: QuestionTopic) {
   if (topic === "unknown" || topic === "profile" || topic === "role_fit" || topic === "skills" || topic === "enterprise_ai") return [];
-  return topics.filter((candidate) => ![topic, "unknown", ...(topic === "agent" ? ["deepflow"] : [])].includes(candidate)) as QuestionTopic[];
+  const relatedTopics = topic === "didi" ? ["diva", "flight_compare"] : ["diva", "flight_compare"].includes(topic) ? ["didi"] : topic === "agent" ? ["deepflow"] : [];
+  return topics.filter((candidate) => ![topic, "unknown", ...relatedTopics].includes(candidate)) as QuestionTopic[];
 }
 
 export function buildLocalQuestionFrame(question: string, history: { role: "user" | "assistant"; content: string }[] = []): QuestionFrame {
-  const contract = findQuestionContract(question);
+  const contract = findQuestionContract(question, history);
   if (contract) return frameFromContract(contract);
   if (/^(?:你是谁|你叫什么|你的身份是什么|你能做什么|你可以做什么|你有什么(?:作用|用处|功能)|你是做什么的|你能干什么|你可以干什么|你不能回答开放(?:问题|题目)?(?:吗)?|你能回答开放(?:问题|题目)?(?:吗)?)[？?。.！!\s]*$/i.test(question)) {
     const classification = classifyInterviewQuestion(question, inferAnswerIntent(question, "profile", "overview"), "agent_meta");
@@ -597,7 +662,12 @@ export function buildLocalQuestionFrame(question: string, history: { role: "user
       routeSource: "local",
     };
   }
-  const detectedTopic = topicPatterns.find(([, pattern]) => pattern.test(question))?.[0] ?? "unknown";
+  const namedProject = explicitProjectTopic(question);
+  const reference = followupReferencePattern.test(question);
+  const previousProject = reference ? historyProjectTopic(history) : undefined;
+  const scopedFollowup = previousProject && ["didi", "diva", "flight_compare"].includes(previousProject) ? previousProject : undefined;
+  const detectedTopic = namedProject ?? (recentInternshipPattern.test(question) ? "didi" : scopedFollowup)
+    ?? topicPatterns.find(([, pattern]) => pattern.test(question))?.[0] ?? "unknown";
   const detectedFacet = facetPatterns.find(([, pattern]) => pattern.test(question))?.[0] ?? "overview";
   const initialIntent = inferAnswerIntent(question, detectedTopic, detectedFacet);
   const topic = ["career_transition", "experience_value"].includes(initialIntent) ? "profile" : initialIntent === "role_fit" ? "role_fit" : detectedTopic;
@@ -609,13 +679,9 @@ export function buildLocalQuestionFrame(question: string, history: { role: "user
       .map((message) => extractTargetRole(message.content))
       .find(Boolean)
     : undefined;
-  const questionMode = questionModeFor(question, answerIntent);
+  const questionMode = questionModeFor(question, answerIntent, topic, facet);
   const classification = classifyInterviewQuestion(question, answerIntent, questionMode);
-  const reference = /这个|该项目|其中|它|上述|这套|这种|这些|那些|那次|当时|刚才|前面/.test(question);
-  const historyProject = [...history].reverse().find((message) => message.role === "user" && /百度|baidu|ai\s*coding|evaluator\s*agent|百川智能|百川|医疗\s*rag|rag|deepflow|ask\s*me/i.test(message.content))?.content.match(/百度|baidu|ai\s*coding|evaluator\s*agent|百川智能|百川|医疗\s*rag|rag|deepflow|ask\s*me/i)?.[0]?.toLowerCase();
-  const inferredTopic = topic === "unknown" && reference
-    ? (historyProject && /rag|百川/.test(historyProject) ? "rag" : historyProject === "deepflow" ? "deepflow" : historyProject?.includes("ask") ? "ask_me" : historyProject ? "baidu" : "unknown")
-    : topic;
+  const inferredTopic = topic === "unknown" && reference ? previousProject ?? topic : topic;
   const explicitTopic = inferredTopic !== "unknown";
   const hasMethodContext = /AI|产品|模型|RAG|DeepFlow|Agent|检索|评测|数据|用户|指标|需求|项目|功能|失败|复盘|取舍|协作|团队|岗位|工作|压力|冲突|学习|加班|职业|选择/i.test(question);
   const hasExplicitProjectOverviewAction = answerIntent === "project_overview"
@@ -636,11 +702,11 @@ export function buildLocalQuestionFrame(question: string, history: { role: "user
     focusTerms: focusTermsFor(answerIntent, targetRole),
     targetRole,
     requestedDimensions: [facet === "overview" ? "直接回答当前问题" : `${facet}相关判断`, "具体实践", "验证或落地方式"],
-    activeProject: inferredTopic === "baidu" ? "baidu-ai-coding-evaluation" : inferredTopic === "rag" ? "rag-knowledge-base" : inferredTopic === "deepflow" || inferredTopic === "agent" ? "deepflow" : inferredTopic === "ask_me" ? "ask-me" : undefined,
-    useHistory: reference,
+    activeProject: ["audit", "local_tools"].includes(inferredTopic) ? undefined : projectByTopic[inferredTopic],
+    useHistory: reference && !namedProject,
     confidence: ["career_transition", "role_fit"].includes(answerIntent) ? 0.92 : interviewReasoning ? 0.86 : hasStrongLocalIntent ? 0.88 : explicitTopic && facet !== "overview" ? 0.86 : explicitTopic ? 0.72 : facet !== "overview" ? 0.58 : 0.35,
-    requiredKnowledgeIds: ["career_transition", "experience_value"].includes(answerIntent) ? ["K1", "K3", "K8", "K27", "K22", "K40", "K53"] : [...new Set([...topicKnowledge[inferredTopic], ...familyKnowledge(classification.questionFamily)])],
-    allowedStoryIds: familyStories(classification.questionFamily).length ? familyStories(classification.questionFamily) : facet === "example" ? (inferredTopic === "baidu" ? ["ST9"] : inferredTopic === "audit" ? ["ST4", "ST6"] : inferredTopic === "rag" ? ["ST1"] : inferredTopic === "deepflow" || inferredTopic === "agent" ? ["ST2"] : []) : [],
+    requiredKnowledgeIds: ["career_transition", "experience_value"].includes(answerIntent) ? ["K1", "K3", "K8", "K54", "K27", "K22", "K40", "K53"] : [...new Set([...topicKnowledge[inferredTopic], ...(projectByTopic[inferredTopic] ? [] : familyKnowledge(classification.questionFamily))])],
+    allowedStoryIds: ["didi", "diva", "flight_compare"].includes(inferredTopic) ? [] : familyStories(classification.questionFamily).length ? familyStories(classification.questionFamily) : facet === "example" ? (inferredTopic === "baidu" ? ["ST9"] : inferredTopic === "audit" ? ["ST4", "ST6"] : inferredTopic === "rag" ? ["ST1"] : inferredTopic === "deepflow" || inferredTopic === "agent" ? ["ST2"] : []) : [],
     forbiddenTopics: forbiddenFor(inferredTopic),
     responseShape: answerIntent === "career_transition" ? "narrative" : responseShapeFor(facet),
     targetLength: { min: facet === "overview" ? 220 : 280, max: 480 },
@@ -658,11 +724,12 @@ export function mergePlannedFrame(local: QuestionFrame, planned: z.input<typeof 
     : blockCareerTransition
       ? inferredValueIntent
       : planned.answerIntent;
-  const plannedTopic = planned.topic === "unknown" ? local.topic : planned.topic;
+  const namedProject = explicitProjectTopic(question);
+  const plannedTopic = namedProject ?? (local.useHistory && local.activeProject ? local.topic : planned.topic === "unknown" ? local.topic : planned.topic);
   const topic = ["career_transition", "experience_value"].includes(answerIntent) ? "profile" : answerIntent === "role_fit" ? "role_fit" : plannedTopic;
   const facet = ["career_transition", "experience_value"].includes(answerIntent) ? "transfer" : answerIntent === "role_fit" ? "fit" : planned.facet;
   const targetRole = local.targetRole ?? planned.targetRole;
-  const questionMode = questionModeFor(question, answerIntent);
+  const questionMode = questionModeFor(question, answerIntent, topic, facet);
   const localClassification = classifyInterviewQuestion(question, answerIntent, questionMode);
   const preserveBoundary = local.factRisk === "unsupported_personal" || local.questionFamily === "agent_meta";
   const resolvedFamily = preserveBoundary || keepLocalIntent || blockCareerTransition
@@ -689,11 +756,11 @@ export function mergePlannedFrame(local: QuestionFrame, planned: z.input<typeof 
     focusTerms: keepLocalIntent || blockCareerTransition ? focusTermsFor(answerIntent, targetRole) : planned.focusTerms,
     targetRole,
     requestedDimensions: planned.requestedDimensions,
-    activeProject: planned.activeProject ?? (topic === "baidu" ? "baidu-ai-coding-evaluation" : topic === "rag" ? "rag-knowledge-base" : topic === "deepflow" || topic === "agent" ? "deepflow" : undefined),
-    useHistory: planned.useHistory,
+    activeProject: projectByTopic[topic] ?? planned.activeProject,
+    useHistory: namedProject ? false : local.useHistory || planned.useHistory,
     confidence: planned.confidence,
-    requiredKnowledgeIds: ["career_transition", "experience_value"].includes(answerIntent) ? ["K1", "K3", "K8", "K27", "K22", "K40", "K53"] : [...new Set([...topicKnowledge[topic], ...familyKnowledge(resolvedFamily)])],
-    allowedStoryIds: familyStories(resolvedFamily).length
+    requiredKnowledgeIds: ["career_transition", "experience_value"].includes(answerIntent) ? ["K1", "K3", "K8", "K54", "K27", "K22", "K40", "K53"] : [...new Set([...topicKnowledge[topic], ...(projectByTopic[topic] ? [] : familyKnowledge(resolvedFamily))])],
+    allowedStoryIds: ["didi", "diva", "flight_compare"].includes(topic) ? [] : familyStories(resolvedFamily).length
       ? familyStories(resolvedFamily)
       : facet === "example" || facet === "transfer"
       ? (topic === "baidu" ? ["ST9"] : topic === "audit" ? ["ST4", "ST6"] : topic === "rag" ? ["ST1"] : topic === "deepflow" || topic === "agent" ? ["ST2"] : [])

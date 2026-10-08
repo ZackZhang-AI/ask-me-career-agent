@@ -400,7 +400,8 @@ test("60 秒介绍返回足够完整的招聘视角回答", async () => {
   assert.equal(metaEvent(responseEvents).mode, "stable");
   assert.match(answer, /我叫张倬玮/);
   assert.match(answer, /百度/);
-  assert.match(answer, /七维指标|Evaluator Agent/);
+  assert.match(answer, /六个旗舰模型/);
+  assert.doesNotMatch(answer, /36 次|18 次|V0\.[12]/);
   assert.match(answer, /企业流程|证据链/);
   assert.doesNotMatch(answer, /证据边界|需要面试核实|\[S\d+\]/);
   assert.match(answer, /持之以恒/);

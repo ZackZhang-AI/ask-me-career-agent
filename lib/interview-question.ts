@@ -25,7 +25,7 @@ const behavioralPattern = /讲一个|举个例子|举例|哪一次|有没有一�
 const workStylePattern = /工作风格|如何协作|团队协作|跨团队|技术同学.{0,8}沟通|冲突|压力|优先级|不确定性|学习能力|抗压|加班|反馈|沟通方式|失败|复盘|重要决策|管理.{0,6}时间|重复性工作|保证.{0,6}(?:细节|质量)|独立工作|团队合作|缺点|短板|说服(?:不了|不动)?|无法说服|意见不一致|对方不同意|被反对|推进不动|如何推动/i;
 const logisticsPattern = /薪资|薪酬|到岗|入职|实习多久|实习时长|实习多长|工作地点|哪个城市工作|是否接受|意向城市|offer|求职流程|流程进度/i;
 const motivationPattern = /为什么.{0,12}(?:选择|应聘|加入|做|想做|转|不继续|感兴趣)|职业规划|职业方向|未来.{0,12}(?:规划|方向|发展|成长)|公司动机|为什么是我们|为什么来|选择这家公司|长期发展|选择.{0,10}(?:实习|工作|机会).{0,10}(?:看重|考虑|标准)|下一阶段.{0,12}(?:补齐|提升|成长)|判断.{0,12}工作.{0,12}值得加入|希望.{0,12}实习.{0,12}(?:获得|学到)/i;
-const interviewScopePattern = /候选人|面试|岗位|职位|工作|职业|公司|团队|同事|领导|产品|业务|用户|项目|实习|产出|经历|能力|AI|模型|数据|审计|统计|RAG|Agent|需求|方案|指标|评测|验证|可信|可靠|协作|沟通|说服|反对|不同意|冲突|压力|学习|规划|优势|不足|薪资|到岗/i;
+const interviewScopePattern = /候选人|面试|岗位|职位|工作|职业|公司|团队|同事|领导|产品|业务|用户|项目|实习|产出|经历|能力|AI|模型|数据|审计|统计|RAG|Agent|DiVA|比价|航班匹配|营销素材|需求|方案|指标|评测|验证|可信|可靠|协作|沟通|说服|反对|不同意|冲突|压力|学习|规划|优势|不足|薪资|到岗/i;
 
 const intentFamilies: Partial<Record<AnswerIntent, InterviewQuestionFamily>> = {
   agent_identity: "agent_meta",
@@ -93,7 +93,8 @@ export function classifyInterviewQuestion(question: string, intent: AnswerIntent
     return { questionFamily: "candidate_fact", factRisk: "unsupported_personal", answerStrategy: "boundary_bridge", protectedDecision: true };
   }
   const explicitlyFresh = /最新|最近|近期|今年|当下|当前.{0,16}(?:行业|公司|市场|动态|趋势|政策|监管)|新闻|热点|财报|股价|发布会|政策变化|行业事件/i.test(question);
-  if (currentTopicPattern.test(question) && (!isReasoningQuestion || explicitlyFresh)) {
+  const currentInternshipFact = intent === "experience" && /实习|目前|现在/.test(question);
+  if (!currentInternshipFact && currentTopicPattern.test(question) && (!isReasoningQuestion || explicitlyFresh)) {
     return { questionFamily: "current_topic", factRisk: "freshness_sensitive", answerStrategy: "reasoned_answer", protectedDecision: true };
   }
   const explicitFamily: InterviewQuestionFamily | undefined = behavioralPattern.test(question) ? "behavioral"

@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
 import { resolve } from "node:path";
 
 async function main() {
@@ -12,10 +13,12 @@ async function main() {
   const file = await readFile(resolve(source));
   if (file.subarray(0, 5).toString("ascii") !== "%PDF-") throw new Error("只允许上传有效的 PDF 简历。");
   const { put } = await import("@vercel/blob");
-  const blob = await put("resume/latest.pdf", file, {
+  // 内容寻址保留旧版本；预览更新不能覆盖生产环境仍引用的文件。
+  const version = createHash("sha256").update(file).digest("hex").slice(0, 16);
+  const blob = await put(`resume/${version}.pdf`, file, {
     access: "public",
     addRandomSuffix: false,
-    allowOverwrite: true,
+    allowOverwrite: false,
     contentType: "application/pdf",
     ...(token ? { token } : { oidcToken, storeId }),
   });
