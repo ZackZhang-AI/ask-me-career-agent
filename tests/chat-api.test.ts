@@ -133,6 +133,26 @@ test("安全拒答、证据不足与核心稳定回答返回标准 NDJSON 状态
   assert.ok(verified[0].latencyMs <= 100);
 });
 
+test("推荐题与同义追问返回正文和 completed，不产生撤回或调用模型", async () => {
+  process.env.DEEPSEEK_API_KEY = "test-only-placeholder";
+  let calls = 0;
+  globalThis.fetch = async () => { calls++; throw new Error("审核答案不应调用模型"); };
+  const messages: Array<{ role: "user" | "assistant"; content: string }> = [];
+  for (const question of ["你如何证明自动评测结果可信？", "你如何评估 RAG 回答质量？", "你如何评估并改进 AI 产品效果？"]) {
+    messages.push({ role: "user", content: question });
+    const responseEvents = await events(await POST(request({ sessionId: "recommendation-history", messages })));
+    assert.equal(responseEvents[0].type, "stage");
+    assert.equal(responseEvents.at(-1)?.type, "done");
+    assert.equal(responseEvents.at(-1)?.responseStatus, "completed");
+    assert.equal(responseEvents.some((event) => event.type === "error" || event.discardPartial), false);
+    const text = responseEvents.filter((event) => event.type === "delta").map((event) => event.content).join("");
+    assert.ok(text.length > 120);
+    assert.doesNotMatch(text, /没有成功生成/);
+    messages.push({ role: "assistant", content: text });
+  }
+  assert.equal(calls, 0);
+});
+
 test("Agent 基础问题使用独立快速回答且不消耗模型调用", async () => {
   process.env.DEEPSEEK_API_KEY = "test-only-placeholder";
   const history = [

@@ -333,7 +333,7 @@ export const questionContracts: QuestionContract[] = [
     id: "baidu_reliability", question: "你如何证明自动评测结果可信？", aliases: ["如何证明自动评测结果可信？", "Evaluator Agent 的评分可靠吗？", "LLM Judge 如何校准？", "人机一致率是多少？"], topic: "baidu", facet: "evaluation",
     dimensions: ["V0.1 证据", "V0.2 校准", "失败转人工"], knowledge: ["K24", "K25", "K42"], length: { min: 340, max: 540 },
     goal: "用当前校准证据说明可靠性，同时准确解释样本边界。", thesis: "评测器已具备受控 Pilot 所需的基础可靠性，但主观判断仍需要人工校准。",
-    required: ["6/6 Gold 与 10/10 确定性缺陷", "30/30 Gold 与 60/60 受控错误", "人工样本边界"], direct: ["Gold", "一致性", "人工"],
+    required: ["6/6 Gold 与 10/10 确定性缺陷", "30/30 Gold 与 60/60 受控错误", "人工样本边界"], direct: ["Gold", "一致性", "人工", "可信", "校准"],
     fallback: "我会把可信度拆成**分版本校准**。V0.1 中，6/6 个 Gold 样例通过、10/10 个确定性缺陷被检出，重复自动检查一致性为 100%；主观缺陷方向敏感度是 5/6。V0.2 扩到 30 题后，首轮只有 16/30 Gold 通过，我先处理测试状态、断言和兼容性问题，再做到 30/30 Gold 连续三次通过和 60/60 受控错误检出。\n\n**人工样本边界**也必须说明：Auto-Judge Spearman 为 0.6191，Judge-Human 为 0.4599，只能作为 V0.1 小样本诊断；现有人工评分 18 份、由一人完成且抽样不均。\n\n因此，硬事实优先用确定性工具，开放体验保留证据，冲突和低置信度结果转人工。V0.2 可以证明离线规则经过校准，但不能说明 Judge 已经替代人或形成通用准确率。",
     next: ["baidu_metrics", "baidu_badcase", "baidu_project"],
   }),

@@ -1,5 +1,5 @@
 import { buildAnswerPlan, buildContext, systemPrompt } from "./answer";
-import { hasBlockingQualityTriggers, validateAnswer } from "./answer-quality";
+import { hasBlockingLocalQualityTriggers, hasBlockingQualityTriggers, validateAnswer } from "./answer-quality";
 import { decideAnswerability, serviceUnavailableMessage, unresolvedReferenceReason } from "./answerability";
 import {
   DeepSeekPlannerError,
@@ -288,7 +288,7 @@ export async function buildChatDelivery(input: PipelineInput): Promise<ChatDeliv
   }): ChatDelivery | undefined => {
     if (!stableAnswer && !contract) return undefined;
     const gate = validateAnswer(plan.fallbackAnswer, plan);
-    if (hasBlockingQualityTriggers(gate.triggers)) return undefined;
+    if (hasBlockingLocalQualityTriggers(gate.triggers)) return undefined;
     console.warn("ask-me-approved-fallback", JSON.stringify({
       contentVersion: reviewedInterviewAnswerVersion,
       contractId: contract?.id,
@@ -343,7 +343,15 @@ export async function buildChatDelivery(input: PipelineInput): Promise<ChatDeliv
 
   if (!decision.shouldGenerate) {
     const localGate = validateAnswer(plan.fallbackAnswer, plan);
-    if (!localGate.passed) {
+    if (localGate.triggers.length) {
+      console.warn("ask-me-local-quality", JSON.stringify({
+        contractId: contract?.id,
+        reviewedAnswerId: stableAnswer?.id,
+        triggers: localGate.triggers,
+        blocked: hasBlockingLocalQualityTriggers(localGate.triggers),
+      }));
+    }
+    if (hasBlockingLocalQualityTriggers(localGate.triggers)) {
       return emptyDelivery({
         message: serviceUnavailableMessage(),
         disposition: "service_unavailable",
@@ -382,6 +390,8 @@ export async function buildChatDelivery(input: PipelineInput): Promise<ChatDeliv
         ...diagnosticBase,
         answerPath: stableAnswer || contract ? "stable" : "demo",
         boundaryReason: "none",
+        qualityTriggerCount: localGate.triggers.length,
+        semanticWarningCount: localGate.triggers.length,
       },
     };
   }

@@ -200,6 +200,14 @@ export function hasBlockingQualityTriggers(triggers: readonly string[]) {
   return triggers.some((trigger) => !ADVISORY_TRIGGERS.has(trigger));
 }
 
+// Reviewed local answers may legitimately repeat when a user asks again.
+// Keep relevance and factual checks; presentation/history hints are not outages.
+export function hasBlockingLocalQualityTriggers(triggers: readonly string[]) {
+  return hasBlockingQualityTriggers(triggers.filter((trigger) => ![
+    "repetitive_answer", "repeated_closing", "repeated_label_sequence",
+  ].includes(trigger)));
+}
+
 export function validateAnswer(candidate: string, plan: AnswerPlan): QualityGateResult {
   const triggers: string[] = [];
   const clean = candidate.trim();

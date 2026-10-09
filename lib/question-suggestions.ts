@@ -186,6 +186,7 @@ export function getFollowUpQuestions(
   preferredQuestions: readonly string[] = [],
 ) {
   const seen = new Set(askedQuestions.map(normalizeQuestion));
+  const seenContracts = new Set(askedQuestions.map((item) => findQuestionContract(item)?.id).filter(Boolean));
   const category = inferQuestionCategory(question);
   const selected: string[] = [];
 
@@ -194,8 +195,10 @@ export function getFollowUpQuestions(
     for (const candidate of candidates) {
       const item = toCandidatePerspective(candidate);
       const normalized = normalizeQuestion(item);
-      if (!normalized || seen.has(normalized)) continue;
+      const contract = findQuestionContract(item);
+      if (!normalized || seen.has(normalized) || !contract || seenContracts.has(contract.id)) continue;
       seen.add(normalized);
+      seenContracts.add(contract.id);
       selected.push(item);
       if (selected.length >= target) break;
     }
@@ -262,6 +265,7 @@ export function getHrFollowUpQuestions(
   preferredQuestions: readonly string[] = [],
 ): HrFollowUpSuggestion[] {
   const seen = new Set(askedQuestions.map(normalizeQuestion));
+  const seenContracts = new Set(askedQuestions.map((item) => findQuestionContract(item)?.id).filter(Boolean));
   const used = new Set<string>();
   const candidates = getFollowUpQuestions(question, askedQuestions, 9, preferredQuestions);
 
@@ -273,10 +277,12 @@ export function getHrFollowUpQuestions(
     ];
     const selected = pool.find((candidate) => {
       const normalized = normalizeQuestion(candidate);
-      return normalized && !seen.has(normalized) && !used.has(normalized) && Boolean(findQuestionContract(candidate));
+      const contract = findQuestionContract(candidate);
+      return normalized && !seen.has(normalized) && !used.has(normalized) && contract && !seenContracts.has(contract.id);
     });
     if (!selected) return [];
     used.add(normalizeQuestion(selected));
+    seenContracts.add(findQuestionContract(selected)!.id);
     return [{ kind: intent.kind, label: intent.label, question: selected }];
   });
 }
