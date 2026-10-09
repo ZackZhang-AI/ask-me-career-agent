@@ -161,3 +161,36 @@ test("专业价值、职业转型与商业化匹配继续各用正确意图", ()
   ];
   for (const [question, intent] of cases) assert.equal(buildLocalQuestionFrame(question).answerIntent, intent, question);
 });
+
+for (const question of [
+  "如果 DiVA 素材投放后转化不佳，你会怎么分析？",
+  "如果机票比价 Skill 的结果不可靠，你会怎么排查？",
+  "DiVA 的交付效果没有改善，你会先排查什么？",
+  "如何验证 DiVA 的素材交付质量？",
+]) {
+  test(`滴滴业务排查不带入 RAG 模板：${question}`, () => {
+    const local = buildLocalQuestionFrame(question);
+    assert.equal(local.answerIntent, "situational_judgment");
+    const planned = { ...local, answerIntent: "diagnosis" as const, topic: "rag" as const, confidence: 0.99 };
+    const frame = mergePlannedFrame(local, planned, question);
+    assert.equal(frame.answerIntent, "situational_judgment");
+    assert.equal(frame.topic, local.topic);
+    const plan = buildAnswerPlan(question, retrieveKnowledge(question, { frame }), undefined, [], frame);
+    assert.doesNotMatch([...plan.allowedFacts, ...plan.exclusivePoints, plan.thesis, plan.fallbackAnswer].join("\n"), /知识摄入|召回证据|引用链路|检索策略|同一组 Bad Case/);
+  });
+}
+
+test("同一项目的假设追问保持业务方法而不是 RAG 排查", () => {
+  const question = "如果这个项目投放后转化不佳，你会怎么分析？";
+  const frame = buildLocalQuestionFrame(question, divaHistory);
+  assert.equal(frame.topic, "diva");
+  assert.equal(frame.answerIntent, "situational_judgment");
+});
+
+test("实际 RAG 故障排查继续保留检索诊断能力", () => {
+  const question = "如果 RAG 召回结果不相关，你会怎么排查？";
+  const frame = buildLocalQuestionFrame(question);
+  assert.equal(frame.answerIntent, "diagnosis");
+  const plan = buildAnswerPlan(question, retrieveKnowledge(question, { frame }), undefined, [], frame);
+  assert.match(plan.allowedFacts.join("\n"), /召回证据|检索/);
+});

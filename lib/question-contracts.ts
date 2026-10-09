@@ -66,6 +66,8 @@ export function extractTargetRole(question: string) {
 }
 
 export function inferAnswerIntent(question: string, topic: QuestionTopic = "unknown", facet: QuestionFacet = "overview"): AnswerIntent {
+  // Business workflow troubleshooting must not inherit the RAG diagnostic template.
+  const diagnosticIntent = ["didi", "diva", "flight_compare"].includes(topic) ? "situational_judgment" : "diagnosis";
   if (/^(?:(?:你|您)?(?:是谁|叫什么(?:名字)?|是什么(?:身份|助手|Agent|角色)?|的身份是什么)|(?:请)?(?:介绍|说明)(?:一下)?你的身份)[？?。.！!\s]*$/i.test(question)) return "agent_identity";
   if (/^(?:(?:你|您)(?:能|可以)(?:做|回答|介绍|帮我)(?:些什么|什么|哪些(?:问题|内容|开放题)?)?|你有什么(?:作用|用处|功能)|你是做什么的|你能干什么|你可以干什么|你可以帮面试官了解什么|你能帮面试官了解什么|面试官可以通过你了解什么|能问你什么|可以问什么|功能范围|能力范围|你不能回答开放(?:问题|题目|题)?(?:吗)?|你能回答(?:开放|没有标准答案的)?(?:问题|题目|题)?(?:吗)?|.*(?:Agent|助手).{0,8}(?:能不能|可以不可以|能否)?回答.{0,12}(?:开放|标准答案|问题))[？?。.！!\s]*$/i.test(question)) return "capability_scope";
   if (hasCareerTransitionSignature(question)) return "career_transition";
@@ -88,11 +90,11 @@ export function inferAnswerIntent(question: string, topic: QuestionTopic = "unkn
   if (/AI\s*(?:编程|写|生成)|代码.*AI|AI.*占比|用了多少\s*AI/i.test(question)) return "ai_collaboration";
   if (/挑战|困难|失败|取舍|踩坑|复盘|怎么推进|如何推进/i.test(question)) return "challenge";
   if (/讲一个|讲一次|举个例子|举例|哪一次|有没有一次|有没有.{0,12}(?:经历|情况|冲突|失败|压力|困难)|曾经|最失败|最困难|最有压力/i.test(question)) return "behavioral_experience";
-  if (/^(?:如果|假设|当)/.test(question) && /(?:怎么办|怎么|如何|怎样)/.test(question)) return "diagnosis";
-  if (/(?:如何|怎么|怎样).{0,12}(?:证明|验证).{0,12}(?:可信|可靠|质量)/i.test(question)) return "diagnosis";
+  if (/^(?:如果|假设|当)/.test(question) && /(?:怎么办|怎么|如何|怎样)/.test(question)) return diagnosticIntent;
+  if (/(?:如何|怎么|怎样).{0,12}(?:证明|验证).{0,12}(?:可信|可靠|质量)/i.test(question)) return diagnosticIntent;
   if (resultEvidencePattern.test(question)) return "result";
   if (/个人贡献|你做了什么|你负责|具体做了|你的工作|主导/i.test(question)) return "contribution";
-  if (/没有改善|没改善|没有效果|没效果|优先排查|先排查|先.{0,3}看什么|定位问题|(?:如何|怎么).{0,4}定位|为什么没有/i.test(question)) return "diagnosis";
+  if (/没有改善|没改善|没有效果|没效果|优先排查|先排查|先.{0,3}看什么|定位问题|(?:如何|怎么).{0,4}定位|为什么没有/i.test(question)) return diagnosticIntent;
   if (/隐私|机密|企业数据|数据边界/i.test(question)) return "privacy";
   if (/学历|就读|学校|院校|教育背景|什么专业|所学专业/i.test(question)) return "education";
   if (/短板|不足|弱点|限制|能力缺口/i.test(question) || facet === "boundary") return "limitation";
