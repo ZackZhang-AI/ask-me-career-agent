@@ -20,4 +20,13 @@
 - 新增截图原题、标点与同义变体、重复追问、推荐契约去重、事实安全反例、全部本地契约实际匹配链路检查。
 - 八轮对话携带真实历史，每轮三类推荐分别执行回答链路。
 - API 回归验证 stage、非空 delta、done/completed，无 error/discardPartial；三次请求均未调用模型。
-- 未修改前端布局、流式队列、模型、限流、预算和公开协议。本次未发布生产；线上版本仍需发布后验证。
+- 未修改前端布局、流式队列、模型、限流、预算和公开协议。
+
+## 发布结果
+
+- 应用提交：`b373c9c`，已推送当前分支。
+- 生产部署：`dpl_4xLsmyyfzPhgSE2jSknUiK6xPJHM`，构建完成约 37 秒，状态 Ready。
+- 先使用生产环境构建但不切换域名，经认证完成三轮真实 API 连续问答，再 promote 同一构建。
+- 正式域名 `https://ask-me-career-agent.vercel.app` 再次完成相同三轮问答：可信度、RAG 评估、AI 产品效果。全部 completed，非空正文，无 error/discardPartial。
+- 首页返回 200 HTML；简历入口返回 200 PDF。
+- 上一生产部署 `dpl_4DbTuJQtBt3x7DvKggqKNgXExgwt` 保留作为回退版本。
