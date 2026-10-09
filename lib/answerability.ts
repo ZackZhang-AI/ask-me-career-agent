@@ -33,10 +33,10 @@ interface AnswerabilityInput {
 }
 
 const ambiguousRolePattern = /(?:这个|该|上述|刚才的|前面提到的)(?:岗位|职位|岗)|这个岗/;
-const ambiguousProjectPattern = /(?:这个|该|上述|刚才的|前面提到的)(?:项目|系统)|这个项目|该项目/;
+const ambiguousProjectPattern = /(?:这个|该|上述|刚才的|前面提到的)(?:项目|系统)|这个项目|该项目|(?:你们|这些|那些|这批).{0,8}素材/;
 const ambiguousCompanyPattern = /(?:为什么|为何).{0,8}(?:选择|加入|应聘)(?:我们|你们|贵公司|这家公司)|为什么是我们/i;
 const roleNamePattern = /[A-Za-z0-9\u4e00-\u9fa5]{2,24}(?:产品经理|岗位|职位|PM)/i;
-const projectNamePattern = /百度|AI\s*Coding|Evaluator\s*Agent|RAG|DeepFlow|Ask\s*Me|Thirty-Minute Brain|审计/i;
+const projectNamePattern = /滴滴|DiVA|营销素材工作台|机票|比价\s*Skill|百度|AI\s*Coding|Evaluator\s*Agent|RAG|DeepFlow|Ask\s*Me|Thirty-Minute Brain|审计/i;
 
 function historyContains(history: ChatMessage[], pattern: RegExp) {
   return history.slice(-8).some((message) => message.role === "user" && pattern.test(message.content));
@@ -77,7 +77,7 @@ function clarify(reason: "ambiguous_role" | "ambiguous_project", capabilityIds: 
     capabilityIds,
     message: reason === "ambiguous_role"
       ? "为了避免泛泛而谈，您能补充一下具体公司、岗位名称，或者 JD 中最关注的职责吗？"
-      : "为了准确回答，您指的是 AI Coding Evaluator、RAG Knowledge Base、DeepFlow，还是 Ask Me 项目？",
+      : "为了准确回答，您指的是哪个项目？补充一下项目名称即可，我会结合对应经历继续说明。",
   };
 }
 

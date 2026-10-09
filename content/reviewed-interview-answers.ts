@@ -1,6 +1,6 @@
 import { normalizeInterviewQuestion } from "../lib/question-normalization";
 
-export const reviewedInterviewAnswerVersion = "2026-10-07.1";
+export const reviewedInterviewAnswerVersion = "2026-10-09.1";
 
 /**
  * Reviewed interview-script bindings. Full answer copy remains in qa.ts so the

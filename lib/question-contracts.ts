@@ -21,7 +21,7 @@ const explicitProjectPatterns: Array<[QuestionTopic, RegExp]> = [
   ["audit", /德勤|容诚|审计/i],
 ];
 const recentInternshipPattern = /^(?:请问)?(?:你|您)?(?:目前|现在)(?:的)?(?:在|正在)?(?:哪(?:家|里)|做什么|做些什么|做的工作|工作(?:内容|是什么)|实习|负责什么)|(?:最近|最新|近期|当前|目前)(?:的)?(?:一段)?实习/i;
-const followupReferencePattern = /这个|该项目|这段|其中|它|上述|这套|这种|这些|那些|那次|当时|刚才|前面|^(?:然后呢|再具体|具体(?:怎么|如何|做了)|为什么这样|那(?:么)?(?:你|如何|怎么|效果|结果|指标|过程|方法|其中))/;
+const followupReferencePattern = /这个|该项目|这段|其中|它|上述|这套|这种|这些|那些|那次|当时|刚才|前面|(?:你们|这批).{0,8}素材|^(?:然后呢|再具体|具体(?:怎么|如何|做了)|为什么这样|那(?:么)?(?:你|如何|怎么|效果|结果|指标|过程|方法|其中))/;
 
 function explicitProjectTopic(question: string) {
   return explicitProjectPatterns.find(([, pattern]) => pattern.test(question))?.[0];
@@ -225,6 +225,7 @@ function define(input: ContractInput): QuestionContract {
 }
 
 const didiContractDefinitions = [
+  { answerId: "A42", id: "diva_outcome_boundary", topic: "diva", facet: "result", aliases: ["DiVA 的素材都投放了吗，转化提升了吗？", "DiVA 已经带来转化提升了吗？", "你们已经把素材全部投放并提升转化了吗？", "这些素材都投放了吗，转化提升了吗？"], knowledge: ["K56", "K55", "K61"], direct: ["业务采用", "投放", "转化"], next: ["diva_contribution", "diva_overview", "flight_compare_overview"] },
   { answerId: "A37", id: "didi_internship", topic: "didi", facet: "overview", aliases: ["请介绍一下你的滴滴实习。", "你最近的一段实习是什么？", "你目前在哪实习？", "你现在在做什么？", "你目前在做什么？", "你在滴滴实习期间主要做了什么？"], knowledge: ["K54", "K55", "K58", "K61", "K56", "K59"], direct: ["滴滴"], next: ["diva_overview", "flight_compare_overview", "internship_transfer"] },
   { answerId: "A38", id: "diva_overview", topic: "diva", facet: "overview", aliases: ["请介绍一下 DiVA。", "DiVA 是什么？", "你的营销素材工作台解决什么问题？", "请介绍滴滴的 DiVA 项目。"], knowledge: ["K55", "K56", "K57", "K61"], direct: ["DiVA", "营销素材"], next: ["diva_contribution", "flight_compare_overview", "role_fit"] },
   { answerId: "A39", id: "flight_compare_overview", topic: "flight_compare", facet: "overview", aliases: ["请介绍一下比价 Skill。", "机票比价 Skill 是什么？", "请介绍滴滴的机票比价项目。"], knowledge: ["K58", "K59", "K60", "K61"], direct: ["比价", "Skill"], next: ["flight_compare_contribution", "diva_overview", "role_fit"] },
@@ -239,7 +240,7 @@ const didiContracts = didiContractDefinitions.map((input) => {
     ...input, question: answer.question, dimensions: answer.exclusivePoints,
     goal: answer.evaluationGoal, thesis: answer.standardAnswer.split(/\n\s*\n/)[0].replace(/\*\*/g, ""),
     required: answer.exclusivePoints, fallback: answer.standardAnswer,
-    shape: input.facet === "contribution" ? "contribution" : "project_arc",
+    shape: input.facet === "contribution" ? "contribution" : input.facet === "result" ? "shortcoming" : "project_arc",
     forbidden: forbiddenFor(input.topic),
   });
 });
@@ -549,9 +550,17 @@ export function normalizeContractQuestion(value: string) {
 
 export function findQuestionContract(question: string, history: { role: "user" | "assistant"; content: string }[] = []) {
   const normalized = normalizeContractQuestion(question);
-  const contract = questionContracts.find((contract) => [contract.question, ...contract.aliases]
+  let contract = questionContracts.find((contract) => [contract.question, ...contract.aliases]
     .some((candidate) => normalizeContractQuestion(candidate) === normalized));
   const previousTopic = historyProjectTopic(history);
+  const outcomeBoundary = contractById.get("diva_outcome_boundary");
+  // After one clarification, a project-name-only reply resumes the pending outcome question.
+  if (normalized === "diva" && outcomeBoundary) {
+    const previousQuestion = [...history].reverse().find((message) => message.role === "user")?.content;
+    if (previousQuestion && outcomeBoundary.aliases.some((alias) => normalizeContractQuestion(alias) === normalizeContractQuestion(previousQuestion))) contract = outcomeBoundary;
+  }
+  // A projectless outcome question must not silently assume the DiVA project.
+  if (contract?.id === "diva_outcome_boundary" && !explicitProjectTopic(question) && previousTopic !== "diva") return undefined;
   // A projectless alias must not turn a follow-up about a new project into a RAG answer.
   if (contract && previousTopic && followupReferencePattern.test(question) && !explicitProjectTopic(question)
     && contract.frame.activeProject && projectByTopic[previousTopic] !== contract.frame.activeProject) return undefined;

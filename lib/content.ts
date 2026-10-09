@@ -115,7 +115,8 @@ export const stableAnswerSchema = z.object({
   sourceIds: z.array(z.string().regex(/^S\d+$/)).min(1),
   requiredClaimIds: z.array(z.string().regex(/^C\d+$/)).min(1),
   requiredSourceIds: z.array(z.string().regex(/^S\d+$/)).min(1),
-  matchKeywords: z.array(z.string().min(1)).min(1),
+  // An empty list restricts sensitive answers to exact questions or reviewed contracts.
+  matchKeywords: z.array(z.string().min(1)),
   matchRequiresProjectContext: z.boolean().optional(),
   evaluationGoal: z.string().min(1),
   exclusivePoints: z.array(z.string().min(1)).min(1),
