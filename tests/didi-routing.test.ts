@@ -171,7 +171,7 @@ for (const question of [
   test(`滴滴业务排查不带入 RAG 模板：${question}`, () => {
     const local = buildLocalQuestionFrame(question);
     assert.equal(local.answerIntent, "situational_judgment");
-    const planned = { ...local, answerIntent: "diagnosis" as const, topic: "rag" as const, confidence: 0.99 };
+    const planned = { ...local, answerIntent: "diagnosis" as const, topic: "rag" as const, activeProject: "rag-knowledge-base" as const, confidence: 0.99 };
     const frame = mergePlannedFrame(local, planned, question);
     assert.equal(frame.answerIntent, "situational_judgment");
     assert.equal(frame.topic, local.topic);
