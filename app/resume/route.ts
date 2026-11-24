@@ -26,8 +26,12 @@ h1{font-size:28px;margin:0 0 12px}p{line-height:1.7;color:#666}a{display:inline-
 </html>`;
 }
 
+const DEFAULT_RESUME_URL =
+  "https://zackzhang.vercel.app/assets/docs/zack-zhang-resume-aipm.pdf?v=20261124";
+
 export async function GET(request: NextRequest) {
-  const resumeUrl = process.env.RESUME_BLOB_URL;
+  const configuredUrl = process.env.RESUME_URL?.trim();
+  const resumeUrl = configuredUrl === "disabled" ? "" : configuredUrl || DEFAULT_RESUME_URL;
   if (!resumeUrl) return new Response(resumeUnavailableHtml(), { status: 404, headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
 
   let destination: URL;
