@@ -162,19 +162,27 @@ test("客户端 IP 只从代理头提取首个值", () => {
   assert.equal(extractClientIp(request), "203.0.113.8");
 });
 
-test("简历入口在未配置、非法和有效地址下返回可理解状态", async () => {
-  delete process.env.RESUME_BLOB_URL;
-  const missing = await getResume(new NextRequest("http://localhost/resume"));
-  assert.equal(missing.status, 404);
-  assert.match(await missing.text(), /最新版简历正在更新/);
+test("简历入口在默认、关闭、非法和自定义地址下返回可理解状态", async () => {
+  delete process.env.RESUME_URL;
+  const fallback = await getResume(new NextRequest("http://localhost/resume"));
+  assert.equal(fallback.status, 307);
+  assert.equal(
+    fallback.headers.get("location"),
+    "https://zackzhang.vercel.app/assets/docs/zack-zhang-resume-aipm.pdf?v=20261124",
+  );
 
-  process.env.RESUME_BLOB_URL = "javascript:alert(1)";
+  process.env.RESUME_URL = "disabled";
+  const disabled = await getResume(new NextRequest("http://localhost/resume"));
+  assert.equal(disabled.status, 404);
+  assert.match(await disabled.text(), /最新版简历正在更新/);
+
+  process.env.RESUME_URL = "javascript:alert(1)";
   const invalid = await getResume(new NextRequest("http://localhost/resume"));
   assert.equal(invalid.status, 500);
 
-  process.env.RESUME_BLOB_URL = "https://example.com/resume.pdf";
+  process.env.RESUME_URL = "https://example.com/resume.pdf";
   const valid = await getResume(new NextRequest("http://localhost/resume"));
   assert.equal(valid.status, 307);
   assert.equal(valid.headers.get("location"), "https://example.com/resume.pdf");
-  delete process.env.RESUME_BLOB_URL;
+  delete process.env.RESUME_URL;
 });
