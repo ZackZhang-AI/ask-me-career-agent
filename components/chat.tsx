@@ -6,10 +6,10 @@ import {
   ArrowUpIcon,
   ArrowUpRightIcon,
   CheckCircleIcon,
+  CheckIcon,
+  CompassIcon,
   EnvelopeSimpleIcon,
-  FileTextIcon,
   GithubLogoIcon,
-  HouseIcon,
   PhoneIcon,
   SparkleIcon,
   StopIcon,
@@ -95,7 +95,9 @@ export function Chat({ presetAnswers }: ChatProps) {
   const [answerFeedback, setAnswerFeedback] = useState<Record<number, "helpful" | "not_helpful">>({});
   const [answerFeedbackReason, setAnswerFeedbackReason] = useState<Record<number, string>>({});
   const [copiedAnswer, setCopiedAnswer] = useState<number | null>(null);
+  const [copiedMobileEmail, setCopiedMobileEmail] = useState(false);
   const [expandedEvidence, setExpandedEvidence] = useState<Record<number, boolean>>({});
+  const [highlightedSource, setHighlightedSource] = useState<{ answerIndex: number; sourceId: string } | null>(null);
   const [showScrollToLatest, setShowScrollToLatest] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   const conversationEpochRef = useRef(0);
@@ -104,9 +106,14 @@ export function Chat({ presetAnswers }: ChatProps) {
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const shouldFollowRef = useRef(true);
   const handledCommandRef = useRef(0);
-  const { command, persistConversation } = useConversationControl();
+  const highlightTimerRef = useRef<number | null>(null);
+  const { command, persistConversation, setHasActiveMessages } = useConversationControl();
   const { thinkingLabel, startThinking, updateThinkingStage, clearThinkingTimers } = useThinkingStatus();
   const { startReveal, enqueueReveal, finishReveal, cancelReveal } = useStreamReveal();
+
+  useEffect(() => {
+    setHasActiveMessages(messages.length > 0);
+  }, [messages.length, setHasActiveMessages]);
 
   useEffect(() => {
     if (!shouldFollowRef.current) return;
@@ -116,6 +123,7 @@ export function Chat({ presetAnswers }: ChatProps) {
 
   useEffect(() => () => {
     clearThinkingTimers();
+    if (highlightTimerRef.current !== null) window.clearTimeout(highlightTimerRef.current);
     abortRef.current?.abort();
     cancelReveal();
   }, [cancelReveal, clearThinkingTimers]);
@@ -361,6 +369,7 @@ export function Chat({ presetAnswers }: ChatProps) {
     setAnswerFeedbackReason({});
     setCopiedAnswer(null);
     setExpandedEvidence({});
+    setHighlightedSource(null);
     setShowScrollToLatest(false);
     shouldFollowRef.current = true;
     window.history.replaceState(null, "", `${window.location.pathname}#top`);
@@ -385,6 +394,7 @@ export function Chat({ presetAnswers }: ChatProps) {
     setAnswerFeedbackReason({});
     setCopiedAnswer(null);
     setExpandedEvidence({});
+    setHighlightedSource(null);
     setShowScrollToLatest(false);
     shouldFollowRef.current = true;
     requestAnimationFrame(() => messageEndRef.current?.scrollIntoView({ block: "end" }));
@@ -426,6 +436,34 @@ export function Chat({ presetAnswers }: ChatProps) {
     }
   }
 
+  async function copyMobileEmailAddress() {
+    try {
+      await navigator.clipboard.writeText(profile.email);
+      setCopiedMobileEmail(true);
+      window.setTimeout(() => setCopiedMobileEmail(false), 1_800);
+    } catch {
+      window.location.href = `mailto:${profile.email}`;
+    }
+  }
+
+  function jumpToCitation(answerIndex: number, sourceId: string) {
+    setExpandedEvidence((current) => ({ ...current, [answerIndex]: true }));
+    setHighlightedSource({ answerIndex, sourceId });
+    if (highlightTimerRef.current !== null) window.clearTimeout(highlightTimerRef.current);
+    highlightTimerRef.current = window.setTimeout(() => {
+      setHighlightedSource((current) => (
+        current?.answerIndex === answerIndex && current.sourceId === sourceId ? null : current
+      ));
+    }, 1_800);
+
+    requestAnimationFrame(() => {
+      const sourceElement = document.getElementById(`source-${answerIndex}-${sourceId}`) as HTMLDetailsElement | null;
+      if (!sourceElement) return;
+      sourceElement.open = true;
+      sourceElement.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+  }
+
   function answerQuestionContext(answerIndex: number) {
     for (let index = answerIndex - 1; index >= 0; index -= 1) {
       if (messages[index]?.role === "user") {
@@ -451,13 +489,14 @@ export function Chat({ presetAnswers }: ChatProps) {
 
   function submit(event: FormEvent) {
     event.preventDefault();
-    void send(input);
+    if (!loading) void send(input);
   }
 
   function onKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+    if (event.nativeEvent.isComposing || event.keyCode === 229) return;
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
-      void send(input);
+      if (!loading) void send(input);
     }
   }
 
@@ -473,19 +512,31 @@ export function Chat({ presetAnswers }: ChatProps) {
 
   return (
     <div className={`chat-shell ${isEmpty ? "is-empty" : "has-messages"}`}>
-      {!isEmpty && (
-        <button className="return-home" type="button" onClick={resetConversation}>
-          <HouseIcon size={15} weight="bold" aria-hidden="true" />
-          回到主页
-        </button>
-      )}
       <div className="chat-scroll" ref={chatScrollRef} onScroll={handleScroll}>
         {isEmpty ? (
           <div className="empty-state">
             <section className="welcome" aria-labelledby="chat-title">
-              <div className="evidence-label"><CheckCircleIcon size={16} weight="fill" aria-hidden="true" /> 公开资料已更新</div>
-              <h1 id="chat-title">我是{profile.name}的 AI Career Agent</h1>
-              <p className="welcome-description">你可以向我了解他的教育经历、AI 项目、实习经验、能力优势等。</p>
+              <div className="welcome-eyebrow-row">
+                <span className="editorial-eyebrow">CAREER AGENT · PUBLIC EVIDENCE</span>
+                <span className="evidence-label">
+                  <CheckCircleIcon size={14} weight="fill" aria-hidden="true" />
+                  公开资料已核验
+                </span>
+              </div>
+
+              <h1 id="chat-title">
+                你好，我是{profile.name}的{" "}
+                <span className="title-accent">
+                  AI 分身
+                  <span className="title-accent-rule" aria-hidden="true" />
+                </span>
+                。
+              </h1>
+
+              <p className="welcome-description">
+                围绕应用统计、IT 审计，以及滴滴业务工作流、百度多模型评测与百川医疗 RAG 主线，你可以直接问我项目取舍、踩坑复盘或岗位匹配；重要事实均附带公开来源与口径说明。
+              </p>
+
               <div className="education-line" aria-label={`${profile.school}，985、211、双一流，${profile.major}，${profile.graduation}`}>
                 <strong>{profile.school}</strong>
                 <span className="school-tags" aria-label="学校标签">
@@ -493,17 +544,39 @@ export function Chat({ presetAnswers }: ChatProps) {
                 </span>
                 <span className="education-detail">{profile.major}</span>
                 <span className="education-detail">{profile.graduation}</span>
+                <span className="education-detail">AI 产品经理方向</span>
               </div>
-              <nav className="mobile-contact" aria-label="联系方式">
-                <a href={`mailto:${profile.email}`} data-track-event="contact_opened" data-track-detail="email"><EnvelopeSimpleIcon size={15} aria-hidden="true" />邮件</a>
-                <a href={`tel:${profile.phone}`} data-track-event="contact_opened" data-track-detail="phone"><PhoneIcon size={15} aria-hidden="true" />电话</a>
-                <a href={profile.github} target="_blank" rel="noreferrer" data-track-event="project_opened" data-track-detail="github"><GithubLogoIcon size={15} aria-hidden="true" />GitHub</a>
-                <a href="/resume"><FileTextIcon size={15} aria-hidden="true" />简历</a>
+
+              <nav className="mobile-contact" aria-label="快捷入口与联系方式">
+                <a href={profile.portfolio} target="_blank" rel="noreferrer" data-track-event="project_opened" data-track-detail="portfolio">
+                  <CompassIcon size={14} aria-hidden="true" />
+                  作品集
+                </a>
+                <a href={profile.github} target="_blank" rel="noreferrer" data-track-event="project_opened" data-track-detail="github">
+                  <GithubLogoIcon size={14} aria-hidden="true" />
+                  GitHub
+                </a>
+                <button
+                  type="button"
+                  data-track-event="contact_opened"
+                  data-track-detail="email"
+                  onClick={() => void copyMobileEmailAddress()}
+                >
+                  {copiedMobileEmail ? <CheckIcon size={14} weight="bold" aria-hidden="true" /> : <EnvelopeSimpleIcon size={14} aria-hidden="true" />}
+                  {copiedMobileEmail ? "已复制邮箱" : "复制邮箱"}
+                </button>
+                <a href={`tel:${profile.phone}`} data-track-event="contact_opened" data-track-detail="phone">
+                  <PhoneIcon size={14} aria-hidden="true" />
+                  电话
+                </a>
               </nav>
             </section>
 
             <section className="question-start" aria-labelledby="question-title">
-              <h2 id="question-title">从您可能最关心的问题开始吧。</h2>
+              <div className="section-kicker">
+                <span className="section-num" aria-hidden="true">01</span>
+                <h2 id="question-title">从你可能最关心的问题开始</h2>
+              </div>
               <div className="question-groups" role="tablist" aria-label="问题分类">
                 {questionGroups.map((group) => (
                   <button
@@ -528,7 +601,7 @@ export function Chat({ presetAnswers }: ChatProps) {
                 {activeQuestions.map((question) => (
                   <button key={question} type="button" onClick={() => void send(question, true)}>
                     <span>{question}</span>
-                    <ArrowUpRightIcon size={17} aria-hidden="true" />
+                    <ArrowUpRightIcon size={16} aria-hidden="true" />
                   </button>
                 ))}
               </div>
@@ -536,17 +609,32 @@ export function Chat({ presetAnswers }: ChatProps) {
 
             <section className="project-proof" aria-labelledby="project-title">
               <div className="proof-heading">
-                <h2 id="project-title">可直接核验的项目</h2>
-                <a href={profile.github} target="_blank" rel="noreferrer" data-track-event="project_opened" data-track-detail="all-repositories"><GithubLogoIcon size={16} aria-hidden="true" />全部仓库</a>
+                <div className="section-kicker">
+                  <span className="section-num" aria-hidden="true">02</span>
+                  <h2 id="project-title">可直接核验的项目</h2>
+                </div>
+                <a href={profile.github} target="_blank" rel="noreferrer" data-track-event="project_opened" data-track-detail="all-repositories">
+                  <GithubLogoIcon size={15} aria-hidden="true" />
+                  <span>全部仓库</span>
+                  <ArrowUpRightIcon size={13} aria-hidden="true" />
+                </a>
               </div>
               <div className="project-grid">
                 {featuredProjects.map((project) => (
-                  <a className="project-link" href={project.url} target="_blank" rel="noreferrer" key={project.name} data-track-event="project_opened" data-track-detail={project.name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}>
+                  <a
+                    className="project-link"
+                    href={project.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    key={project.name}
+                    data-track-event="project_opened"
+                    data-track-detail={project.name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}
+                  >
                     <span className="project-status">{project.status}</span>
                     <strong>{project.name}</strong>
                     <p>{project.summary}</p>
                     <small>{project.stack}</small>
-                    <ArrowUpRightIcon className="project-arrow" size={18} aria-hidden="true" />
+                    <ArrowUpRightIcon className="project-arrow" size={16} aria-hidden="true" />
                   </a>
                 ))}
               </div>
@@ -559,10 +647,10 @@ export function Chat({ presetAnswers }: ChatProps) {
                 className={`message ${message.role}${message.role === "assistant" && message.content && !message.responseStatus ? " streaming" : ""}`}
                 key={`${message.role}-${index}`}
               >
-                {message.role === "assistant" && <span className="assistant-mark" aria-hidden="true">A</span>}
+                {message.role === "assistant" && <span className="assistant-mark" aria-hidden="true">Z</span>}
                 <div className="message-body">
                   <p className={message.role === "user" ? "sr-only" : "message-role"}>
-                    {message.role === "user" ? "你的问题" : "Ask Me"}
+                    {message.role === "user" ? "你的问题" : `${profile.name} · AI 分身`}
                   </p>
                   {message.role === "assistant" && !message.content ? (
                     <div className="thinking-state" role="status" aria-live="polite">
@@ -581,15 +669,7 @@ export function Chat({ presetAnswers }: ChatProps) {
                             streaming={!message.responseStatus}
                             citations={message.citations}
                             sources={message.sources}
-                            onCitationClick={(sourceId) => {
-                              setExpandedEvidence((current) => ({ ...current, [index]: true }));
-                              requestAnimationFrame(() => {
-                                const sourceElement = document.getElementById(`source-${index}-${sourceId}`) as HTMLDetailsElement | null;
-                                if (!sourceElement) return;
-                                sourceElement.open = true;
-                                sourceElement.scrollIntoView({ behavior: "smooth", block: "center" });
-                              });
-                            }}
+                            onCitationClick={(sourceId) => jumpToCitation(index, sourceId)}
                           />
                         )
                       : <div className="message-content">{message.content}</div>
@@ -600,50 +680,42 @@ export function Chat({ presetAnswers }: ChatProps) {
                     </div>
                   )}
                   {message.role === "assistant" && message.content && message.responseStatus && (
-                    <AnswerActions
-                      copied={copiedAnswer === index}
-                      evidenceExpanded={Boolean(expandedEvidence[index])}
-                      hasEvidence={Boolean(message.sources?.length)}
-                      onCopy={() => void copyAnswer(index, message.content)}
-                      onRegenerate={() => regenerateAnswer(index)}
-                      onCondense={() => condenseAnswer(index)}
-                      onToggleEvidence={() => setExpandedEvidence((current) => ({
-                        ...current,
-                        [index]: !current[index],
-                      }))}
-                    />
-                  )}
-                  {message.sources && message.sources.length > 0 && (
-                    <EvidencePanel
-                      answerIndex={index}
-                      sources={message.sources}
-                      expanded={Boolean(expandedEvidence[index])}
-                      onExpandedChange={(expanded) => setExpandedEvidence((current) => ({
-                        ...current,
-                        [index]: expanded,
-                      }))}
-                      onSourceOpen={(sourceId) => track("source_opened", getBrowserSessionId(), sourceId)}
-                    />
-                  )}
-                  {message.role === "assistant" && message.content && message.responseStatus === "completed" && (
-                    <div className="answer-feedback" aria-label="回答反馈">
-                      <span>这个回答有帮助吗？</span>
-                      <button
-                        type="button"
-                        aria-pressed={answerFeedback[index] === "helpful"}
-                        onClick={() => {
-                          setAnswerFeedback((current) => ({ ...current, [index]: "helpful" }));
-                          track("answer_feedback", getBrowserSessionId(), "helpful");
-                        }}
-                      >有帮助</button>
-                      <button
-                        type="button"
-                        aria-pressed={answerFeedback[index] === "not_helpful"}
-                        onClick={() => {
-                          setAnswerFeedback((current) => ({ ...current, [index]: "not_helpful" }));
-                        }}
-                      >需改进</button>
-                      {answerFeedback[index] === "not_helpful" && (
+                    <div className="answer-toolbar">
+                      <AnswerActions
+                        copied={copiedAnswer === index}
+                        evidenceExpanded={Boolean(expandedEvidence[index])}
+                        hasEvidence={Boolean(message.sources?.length)}
+                        onCopy={() => void copyAnswer(index, message.content)}
+                        onRegenerate={() => regenerateAnswer(index)}
+                        onCondense={() => condenseAnswer(index)}
+                        onToggleEvidence={() => setExpandedEvidence((current) => ({
+                          ...current,
+                          [index]: !current[index],
+                        }))}
+                      />
+
+                      {message.responseStatus === "completed" && (
+                        <div className="answer-feedback" aria-label="回答反馈">
+                          <span className="feedback-prompt">有帮助吗？</span>
+                          <button
+                            type="button"
+                            aria-pressed={answerFeedback[index] === "helpful"}
+                            onClick={() => {
+                              setAnswerFeedback((current) => ({ ...current, [index]: "helpful" }));
+                              track("answer_feedback", getBrowserSessionId(), "helpful");
+                            }}
+                          >有帮助</button>
+                          <button
+                            type="button"
+                            aria-pressed={answerFeedback[index] === "not_helpful"}
+                            onClick={() => {
+                              setAnswerFeedback((current) => ({ ...current, [index]: "not_helpful" }));
+                            }}
+                          >需改进</button>
+                        </div>
+                      )}
+
+                      {message.responseStatus === "completed" && answerFeedback[index] === "not_helpful" && (
                         <div className="feedback-reasons" aria-label="选择需要改进的原因">
                           {feedbackReasons.map((reason) => (
                             <button
@@ -661,9 +733,46 @@ export function Chat({ presetAnswers }: ChatProps) {
                       )}
                     </div>
                   )}
+                  {message.sources && message.sources.length > 0 && (
+                    <EvidencePanel
+                      answerIndex={index}
+                      sources={message.sources}
+                      expanded={Boolean(expandedEvidence[index])}
+                      highlightedSourceId={highlightedSource?.answerIndex === index ? highlightedSource.sourceId : null}
+                      onExpandedChange={(expanded) => setExpandedEvidence((current) => ({
+                        ...current,
+                        [index]: expanded,
+                      }))}
+                      onSourceOpen={(sourceId) => track("source_opened", getBrowserSessionId(), sourceId)}
+                    />
+                  )}
                 </div>
               </article>
             ))}
+
+            {hasCompletedAnswer && !loading && followUpQuestions.length > 0 && (
+              <section className="contextual-suggestions" aria-labelledby="follow-up-title">
+                <div className="contextual-suggestions-heading">
+                  <span className="contextual-suggestions-icon" aria-hidden="true">
+                    <SparkleIcon size={14} weight="fill" />
+                  </span>
+                  <span>
+                    <strong id="follow-up-title">继续了解张倬玮</strong>
+                    <small>从证据、复盘和岗位匹配继续追问</small>
+                  </span>
+                </div>
+                <div className="contextual-suggestions-list">
+                  {followUpQuestions.map((suggestion) => (
+                    <button key={suggestion.kind} type="button" onClick={() => void send(suggestion.question, true)}>
+                      <small>{suggestion.label}</small>
+                      <span>{suggestion.question}</span>
+                      <ArrowUpRightIcon size={14} aria-hidden="true" />
+                    </button>
+                  ))}
+                </div>
+              </section>
+            )}
+
             <div ref={messageEndRef} />
             <div className="sr-only" role="status" aria-live="polite">
               {!loading && hasCompletedAnswer ? "回答已生成" : ""}
@@ -673,28 +782,18 @@ export function Chat({ presetAnswers }: ChatProps) {
       </div>
 
       <div className="composer-dock">
-        {hasCompletedAnswer && !loading && followUpQuestions.length > 0 && (
-          <section className="contextual-suggestions" aria-labelledby="follow-up-title">
-            <div className="contextual-suggestions-heading">
-              <span className="contextual-suggestions-icon" aria-hidden="true">
-                <SparkleIcon size={15} weight="fill" />
-              </span>
-              <span>
-                <strong id="follow-up-title">继续了解张倬玮</strong>
-                <small>从证据、复盘和岗位匹配继续追问</small>
-              </span>
-            </div>
-            <div className="contextual-suggestions-list">
-              {followUpQuestions.map((suggestion) => (
-                <button key={suggestion.kind} type="button" onClick={() => void send(suggestion.question, true)}>
-                  <small>{suggestion.label}</small>
-                  <span>{suggestion.question}</span>
-                  <ArrowUpRightIcon size={14} aria-hidden="true" />
-                </button>
-              ))}
-            </div>
-          </section>
+        {showScrollToLatest && !isEmpty && (
+          <button
+            className="scroll-to-latest"
+            type="button"
+            aria-label="回到最新回答"
+            title="回到最新回答"
+            onClick={scrollToLatest}
+          >
+            <ArrowDownIcon size={16} weight="bold" aria-hidden="true" />
+          </button>
         )}
+
         {error && (
           <div className="chat-error" role="alert">
             <span>{error}</span>
@@ -713,8 +812,7 @@ export function Chat({ presetAnswers }: ChatProps) {
             onKeyDown={onKeyDown}
             maxLength={500}
             rows={1}
-            placeholder="询问经历、项目、能力或岗位匹配"
-            disabled={loading}
+            placeholder={loading ? "回答生成中，可提前输入下一道追问…" : "询问经历、项目、能力边界或岗位匹配"}
           />
           {loading ? (
             <button
@@ -727,7 +825,7 @@ export function Chat({ presetAnswers }: ChatProps) {
               aria-label="停止生成"
               title="停止生成"
             >
-              <StopIcon size={16} weight="fill" aria-hidden="true" />
+              <StopIcon size={15} weight="fill" aria-hidden="true" />
             </button>
           ) : (
             <button
@@ -737,23 +835,12 @@ export function Chat({ presetAnswers }: ChatProps) {
               aria-label="发送问题"
               title="发送问题"
             >
-              <ArrowUpIcon size={18} weight="bold" aria-hidden="true" />
+              <ArrowUpIcon size={17} weight="bold" aria-hidden="true" />
             </button>
           )}
         </form>
         <p className="composer-note">AI 可能会出错。重要经历与数据请在面试中进一步核实。</p>
       </div>
-      {showScrollToLatest && !isEmpty && (
-        <button
-          className="scroll-to-latest"
-          type="button"
-          aria-label="回到最新回答"
-          title="回到最新回答"
-          onClick={scrollToLatest}
-        >
-          <ArrowDownIcon size={17} weight="bold" aria-hidden="true" />
-        </button>
-      )}
     </div>
   );
 }

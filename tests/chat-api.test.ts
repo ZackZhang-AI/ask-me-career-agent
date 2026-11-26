@@ -504,3 +504,43 @@ test("Pro 审校预算不足时不生成未经审校的开放题答案", async (
   assert.match(answer, /抱歉，这次回答没有成功生成/);
   assert.doesNotMatch(answer, /工程团队|客户交付|积极反馈/);
 });
+
+test("滴滴实习与风控挑战问题通过 /api/chat 返回完整第一人称流式回答与 S14 来源", async () => {
+  const internshipEvents = await events(await POST(request({
+    sessionId: "api-didi-internship",
+    messages: [{ role: "user", content: "请介绍一下你在滴滴的 AI 产品经理实习。" }],
+  })));
+  const internshipAnswer = internshipEvents
+    .filter((event) => event.type === "delta")
+    .map((event) => event.content)
+    .join("");
+  const internshipMeta = metaEvent(internshipEvents);
+
+  assert.equal(internshipMeta.mode, "stable");
+  assert.equal((internshipMeta.sourceIds as string[] | undefined)?.includes("S14"), true);
+  assert.match(internshipAnswer, /ABC 智能一组/);
+  assert.match(internshipAnswer, /120 分钟/);
+  assert.match(internshipAnswer, /DiVA/);
+  assert.match(internshipAnswer, /2,500 条/);
+
+  const challengeEvents = await events(await POST(request({
+    sessionId: "api-didi-challenge",
+    messages: [
+      { role: "user", content: "租车商家准入 AI 预审工作台具体做了什么？" },
+      { role: "assistant", content: "租车商家准入 AI 预审工作台完成了 100 多笔试点预审。" },
+      { role: "user", content: "租车准入预审工作台遇到的最大挑战是什么？" },
+    ],
+  })));
+  const challengeAnswer = challengeEvents
+    .filter((event) => event.type === "delta")
+    .map((event) => event.content)
+    .join("");
+  const challengeMeta = metaEvent(challengeEvents);
+
+  assert.equal(challengeMeta.mode, "stable");
+  assert.equal((challengeMeta.sourceIds as string[] | undefined)?.includes("S14"), true);
+  assert.match(challengeAnswer, /15\s*处假冲突/);
+  assert.match(challengeAnswer, /40 份/);
+  assert.match(challengeAnswer, /45\s*秒/);
+  assert.equal((challengeMeta.followUpQuestions as string[] | undefined)?.length, 3);
+});

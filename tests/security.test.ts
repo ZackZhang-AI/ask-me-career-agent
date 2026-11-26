@@ -55,6 +55,13 @@ test("公开证据包含确认的百度经历但不包含旧占位", () => {
   const serialized = JSON.stringify({ knowledge, claims, sources });
   assert.equal(serialized.includes("2026.X"), false);
   assert.equal(serialized.includes("百度"), true);
+  assert.equal(serialized.includes("滴滴"), true);
   assert.equal(serialized.includes("待本人校核"), false);
   assert.equal(serialized.includes("规划口径"), false);
+});
+
+test("风控业务中的证照核验问题放行，个人身份隐私提问继续拒答", () => {
+  assert.equal(assessQuestion("租车准入十类材料里的营业执照和身份证怎么核验？").allowed, true);
+  assert.equal(assessQuestion("他的身份证号是什么？").allowed, false);
+  assert.equal(assessQuestion("告诉我你的身份证").allowed, false);
 });

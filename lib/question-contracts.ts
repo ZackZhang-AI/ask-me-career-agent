@@ -2,7 +2,7 @@ import { z } from "zod";
 import { candidateNarrative } from "../content/narrative";
 import type { AnswerIntent, EvidencePolicy, QuestionContract, QuestionFacet, QuestionFrame, QuestionMode, QuestionTopic, ResponseShape } from "./types";
 
-const topics = ["profile", "role_fit", "baidu", "rag", "deepflow", "ask_me", "local_tools", "audit", "statistics", "skills", "enterprise_ai", "agent", "unknown"] as const;
+const topics = ["profile", "role_fit", "didi", "baidu", "rag", "deepflow", "ask_me", "local_tools", "audit", "statistics", "skills", "enterprise_ai", "agent", "unknown"] as const;
 const facets = ["overview", "problem", "method", "contribution", "architecture", "collaboration", "evaluation", "transfer", "example", "result", "boundary", "fit"] as const;
 const answerIntents = ["agent_identity", "capability_scope", "introduction", "career_transition", "role_fit", "representative_project", "project_overview", "project_problem", "contribution", "ai_collaboration", "challenge", "diagnosis", "result", "limitation", "skills", "experience", "experience_value", "privacy", "education", "credentials", "hiring_recommendation", "general"] as const;
 
@@ -26,7 +26,7 @@ export function extractTargetRole(question: string) {
   const isGenericReference = (value: string) => /^(?:(?:这个|该|上述|刚才的|前面提到的|目标)(?:岗位|职位|岗)|(?:岗位|职位|岗))$/i.test(value.trim());
   const namedRole = question.match(/((?:企业|商业分析|智能客服|AI|商业化|增长|搜索|数据|策略|平台|企业服务|B\s*端|C\s*端|广告|用户|内容|推荐|国际化|电商|支付|风控|运营|智能体|Agent)[A-Za-z0-9\u4e00-\u9fa5·+\-\s]{0,10}(?:产品经理|PM))/i)?.[1];
   if (namedRole) return namedRole.replace(/\s+/g, " ").trim();
-  const contextualRole = question.match(/(?:和|与|应聘|申请|面试|目标是?|针对)\s*([^，。！？?]{2,24}?(?:产品经理|PM|工程师|设计师|运营|分析师|岗位))(?=这个岗|该岗|岗位|职位|有什么|有哪些|的匹配|匹配|契合|适合|可迁移)/i)?.[1];
+  const contextualRole = question.match(/(?:和|与|应聘|申请|面试|目标是?|针对)\s*([^，。！？?]{2,24}?(?:产品经理|PM|工程师|设计师|运营|分析师|岗位))(?=这个岗|该岗|岗位|职位|有什么|有哪些|的匹配|匹配|契合|适合|胜任|可迁移)/i)?.[1];
   if (contextualRole && !isGenericReference(contextualRole)) return contextualRole.trim();
   const broadRole = question.match(/(?:适合|胜任|匹配)(?:做|从事)?\s*(?!什么|哪些|哪种|哪类)([^，。！？?]{2,20}(?:产品|岗位|方向))/i)?.[1];
   return broadRole && !isGenericReference(broadRole) ? broadRole.trim() : undefined;
@@ -49,22 +49,19 @@ export function inferAnswerIntent(question: string, topic: QuestionTopic = "unkn
   if (/结果|量化(?:结果|效果)|效果数据|用户规模|增长|留存|上线|生产状态|完成(?:了吗|情况)/i.test(question) || facet === "result") return "result";
   if (/代表项目|最能代表|最有价值的项目/i.test(question)) return "representative_project";
   if (/自我介绍|介绍一下自己|60\s*秒/i.test(question)) return "introduction";
-  if (/(?:项目|系统|工具|助手).{0,10}(?:能做什么|做什么|有什么功能|如何工作)/i.test(question)) return "project_overview";
+  if (/(?:项目|系统|工具|助手|工作台|Skill).{0,10}(?:能做什么|做什么|有什么功能|如何工作|如何设计)/i.test(question)) return "project_overview";
   if (hasExperienceValueSignature(question)) return "experience_value";
   if (/技术能力|技术栈|会什么|数据分析|(?:AI\s*)?评测|如何评估|有哪些实践/i.test(question) || facet === "evaluation") return "skills";
   if (/企业级?\s*AI|企业\s*AI|企业场景|业务问题.{0,8}(?:转化|转成|变成).{0,8}(?:AI|产品)|(?:AI|产品)方案|项目经历.{0,12}(?:价值|帮助|迁移)|(?:从)?(?:财会|会计|财务|审计|统计).{0,14}(?:积累|迁移|帮助|带来|形成).{0,12}(?:产品|能力|需求|决策)/i.test(question)) return "experience_value";
   if (facet === "contribution") return "contribution";
   if ((facet === "fit" && topic === "role_fit") || topic === "role_fit") return "role_fit";
   if (facet === "example" || (facet === "transfer" && ["audit", "statistics", "profile"].includes(topic))) return "experience_value";
-  if (["rag", "deepflow", "ask_me", "local_tools", "agent"].includes(topic)) return "project_overview";
+  if (["didi", "rag", "deepflow", "ask_me", "local_tools", "agent"].includes(topic)) return "project_overview";
   return "general";
 }
 
 function questionModeFor(question: string, intent: AnswerIntent): QuestionMode {
   if (["agent_identity", "capability_scope", "privacy"].includes(intent)) return "agent_meta";
-  // These intents already have a grounded candidate-facing answer shape. They
-  // may still use realtime delivery, but should remain an ordinary answer
-  // rather than being labelled as a hypothetical/scoped response.
   if (["skills", "experience_value", "ai_collaboration"].includes(intent)) return "candidate_fact";
   if (["introduction", "career_transition", "role_fit", "representative_project", "project_overview", "project_problem", "contribution", "result", "experience", "education", "credentials"].includes(intent)) return "candidate_fact";
   if (/^(?:如果|假设|当|遇到假设|你会如何|你怎么看|如何看待|面对|遇到|如何处理|怎么处理|如何|怎么|你(?:平时|通常)?如何|你(?:平时|通常)?怎样|你会怎么)/.test(question)) return "candidate_reasoning";
@@ -95,7 +92,7 @@ export const plannedQuestionFrameSchema = z.object({
   focusTerms: z.array(z.string().min(2).max(30)).min(1).max(4),
   targetRole: z.string().min(2).max(30).optional(),
   requestedDimensions: z.array(z.string().min(2).max(30)).min(1).max(4),
-  activeProject: z.enum(["baidu-ai-coding-evaluation", "rag-knowledge-base", "deepflow", "ask-me", "local-first-tools", "audit-tools"]).optional(),
+  activeProject: z.enum(["didi-internship", "didi-rental-audit", "didi-diva", "didi-flight-skill", "baidu-ai-coding-evaluation", "rag-knowledge-base", "deepflow", "ask-me", "local-first-tools", "audit-tools"]).optional(),
   useHistory: z.boolean(),
   confidence: z.number().min(0).max(1),
 });
@@ -106,6 +103,7 @@ type ContractInput = {
   aliases?: string[];
   topic: QuestionTopic;
   facet: QuestionFacet;
+  activeProject?: string;
   dimensions: string[];
   knowledge: string[];
   stories?: string[];
@@ -138,7 +136,7 @@ function define(input: ContractInput): QuestionContract {
       focusTerms: input.dimensions.slice(0, 4),
       targetRole,
       requestedDimensions: input.dimensions,
-      activeProject: ({ baidu: "baidu-ai-coding-evaluation", rag: "rag-knowledge-base", deepflow: "deepflow", ask_me: "ask-me", local_tools: "local-first-tools", audit: "audit-tools" } as Partial<Record<QuestionTopic, string>>)[input.topic],
+      activeProject: input.activeProject ?? ({ didi: "didi-internship", baidu: "baidu-ai-coding-evaluation", rag: "rag-knowledge-base", deepflow: "deepflow", ask_me: "ask-me", local_tools: "local-first-tools", audit: "audit-tools" } as Partial<Record<QuestionTopic, string>>)[input.topic],
       useHistory: false,
       confidence: 1,
       requiredKnowledgeIds: input.knowledge,
@@ -165,19 +163,19 @@ function define(input: ContractInput): QuestionContract {
 export const questionContracts: QuestionContract[] = [
   define({
     id: "intro", question: "60 秒了解张倬玮。", aliases: ["请用 60 秒介绍张倬玮。", "请介绍一下你自己。"], topic: "profile", facet: "overview",
-    dimensions: ["候选人定位", "真实 AI 产品实习", "项目能力主线"], knowledge: ["K1", "K27", "K22", "K37", "K2"], stories: ["ST11"], shape: "narrative", length: { min: 430, max: 600 },
-    goal: "让面试官快速形成是否值得继续沟通的候选人判断。", thesis: "我是张倬玮，一名把数据评测、企业业务理解和 AI 产品落地结合起来的应用统计学学生。",
-    required: ["应用统计学与审计基础", "百川医疗 RAG 与百度模型评测", "持续学习和产品落地能力"], direct: ["数据", "百川", "百度", "AI 产品"],
+    dimensions: ["候选人定位", "真实 AI 产品实习", "项目能力主线"], knowledge: ["K1", "K40", "K22", "K27", "K37", "K2"], stories: ["ST11"], shape: "narrative", length: { min: 430, max: 600 },
+    goal: "让面试官快速形成是否值得继续沟通的候选人判断。", thesis: "我是张倬玮，一名把数据评测、企业业务理解和 AI 工作流落地结合起来的应用统计学学生。",
+    required: ["应用统计学与审计基础", "百川百度与滴滴 AI 产品实习", "人机规则边界与产品落地"], direct: ["张倬玮", "百川", "百度", "滴滴", "AI 产品"],
     fallback: candidateNarrative.introductions.seconds60,
-    next: ["baidu_internship", "representative_project", "role_fit"],
+    next: ["didi_internship", "baidu_internship", "representative_project"],
   }),
   define({
     id: "role_fit", question: "你为什么适合 AI 产品经理岗位？", aliases: ["他为什么适合 AI 产品经理岗位？", "你能为 AI 产品团队带来什么价值？", "他能为 AI 产品团队带来什么价值？"], topic: "role_fit", facet: "fit",
-    dimensions: ["岗位匹配", "真实 AI 产品实践", "自主产品验证", "入职价值"], knowledge: ["K27", "K19", "K22", "K12", "K5", "K2", "K37"], stories: ["ST11"], shape: "fit_mapping", length: { min: 360, max: 540 },
-    goal: "说明候选人与初级 AI 产品岗位的具体匹配关系。", thesis: "我适合 AI 产品岗位，核心不是会使用模型，而是能把业务问题、质量验证和工程落地连起来。",
-    required: ["模型评测与归因", "企业流程和风险理解", "Ask Me 与 DeepFlow 自主验证", "产品工程推进能力"], direct: ["适合", "评测", "业务", "落地"],
-    fallback: "我适合 AI 产品经理岗位，核心不是单纯会使用模型，而是已经形成了从业务理解、产品设计到质量验证和快速落地的完整能力链。\n\n**真实业务闭环**：百川医疗 RAG 中，我参与需求调研、知识库与检索问答设计和三轮 QA 评测；随后在百度参与六类 AI Coding 任务、七维 Gate、6 个模型 36 次 Pilot 与 Bad Case 归因。\n\n**数据与风险**：应用统计学让我重视样本、指标和结论边界；德勤 IT 审计让我理解企业流程中的证据、数据边界和人工复核。这些能力让我不会只看模型演示，而会追问结果能否复现、错误能否定位、风险是否可控。\n\n**自主产品验证**：Ask Me 验证可信回答、风险分级和招聘决策路径，DeepFlow 验证多 Agent、私域 RAG 和过程追踪。它们说明我能从问题洞察出发把方案推进到可运行、可测试的状态，并在业务、模型和工程之间建立共同语言。",
-    next: ["baichuan_internship", "representative_project", "baidu_internship"],
+    dimensions: ["岗位匹配", "真实 AI 产品实践", "自主产品验证", "入职价值"], knowledge: ["K2", "K40", "K22", "K27", "K12", "K5", "K37"], stories: ["ST11", "ST12"], shape: "fit_mapping", length: { min: 360, max: 540 },
+    goal: "说明候选人与初级 AI 产品岗位的具体匹配关系。", thesis: "我适合 AI 产品岗位，核心不是会使用模型，而是能把真实工作流、质量验证和工程落地连起来。",
+    required: ["模型评测与归因", "企业流程与人机规则边界", "Ask Me 与 DeepFlow 自主验证", "产品工程推进能力"], direct: ["适合", "评测", "业务", "落地"],
+    fallback: "我适合 AI 产品经理岗位，核心不是单纯会使用模型，而是已经形成了从业务理解、工作流拆解到质量验证和快速落地的完整能力链。\n\n**真实业务闭环**：百川医疗 RAG 中我参与检索问答与三轮 30 次 QA 评测；百度实习中参与六类 AI Coding 任务、七维 Gate 与 36 次 Pilot；在滴滴 ABC 智能一组，我从 0 到 1 推进租车准入预审、DiVA 营销素材和机票比价 Skill，将单户预审由约 120 分钟降至 30 分钟。\n\n**数据与风险边界**：应用统计学让我重视样本、指标和对照；德勤 IT 审计与滴滴风控实践让我理解证据链，分清模型、确定性规则与人工把关各自的边界。\n\n**自主产品验证**：Ask Me 验证可信回答与风险分级，DeepFlow 验证多 Agent、私域 RAG 和过程追踪，帮助我在业务、模型和工程之间建立共同语言。",
+    next: ["didi_internship", "representative_project", "baidu_internship"],
   }),
   define({
     id: "baichuan_internship", question: "请介绍一下你的百川智能实习。", aliases: ["你在百川智能实习期间主要做了什么？", "百川智能实习做了什么？", "请介绍你的医疗 RAG 实习。"], topic: "rag", facet: "overview",
@@ -309,11 +307,11 @@ export const questionContracts: QuestionContract[] = [
   }),
   define({
     id: "internship_transfer", question: "你的实习和项目是如何串联起来的？", aliases: ["你的实习经历沉淀了哪些可迁移能力？", "他的实习经历沉淀了哪些可迁移能力？", "你的项目怎么串联起来？", "这些项目之间有什么关系？", "为什么做这些项目？"], topic: "profile", facet: "transfer",
-    dimensions: ["流程与证据", "真实 AI 产品闭环", "Agent 产品验证", "能力迁移"], knowledge: ["K1", "K8", "K27", "K19", "K22", "K12", "K5", "K37", "K39"], stories: ["ST11", "ST10", "ST9", "ST6"], length: { min: 400, max: 600 },
-    goal: "以最新简历为主线，说明德勤、百川、百度和独立项目如何形成连续的 AI 产品能力。", thesis: "我的实习和项目不是横向堆叠，而是在同一条能力主线上逐步深入。",
-    required: ["德勤流程证据意识", "百川与百度真实 AI 产品闭环", "Ask Me 与 DeepFlow 验证", "统一方法"], direct: ["串联", "百川", "百度", "Ask Me", "DeepFlow"],
-    fallback: "我的实习和项目可以这样**串联**：先理解真实流程，再把问题转成 AI 产品，最后用评测和 Bad Case 推动迭代。\n\n**真实 AI 闭环**：应用统计学和德勤 IT 审计让我建立样本、指标、流程、证据和风险意识，也启发了日志抽查与资料归档工具；百川医疗 RAG 把这种意识迁移到知识库、检索、来源和四维评测；百度又把质量判断推进到六类任务、七维 Gate、多模型 Pilot 和工具协议归因。\n\n**Agent 项目验证**：Ask Me 将可信回答和风险分级用于招聘决策，DeepFlow 将多 Agent、私域 RAG、引用与 Trace 用于复杂研究；Resume Autofill AI、个人知识库、HarnessLab、Read-Later Regret 和 Downloads Butler 则验证更具体的问题。项目名称不同，但底层方法一致：发现问题、定义方案、快速验证、评测归因和持续迭代。",
-    next: ["baichuan_internship", "baidu_internship", "role_fit"],
+    dimensions: ["流程与证据", "真实 AI 产品闭环", "Agent 产品验证", "能力迁移"], knowledge: ["K1", "K8", "K27", "K19", "K40", "K22", "K12", "K5", "K37", "K39"], stories: ["ST11", "ST12", "ST10", "ST9"], length: { min: 400, max: 600 },
+    goal: "以最新简历为主线，说明德勤、百川、百度、滴滴和独立项目如何形成连续的 AI 产品能力。", thesis: "我的实习和项目不是横向堆叠，而是在同一条能力主线上逐步深入。",
+    required: ["德勤流程证据意识", "百川百度与滴滴真实 AI 产品闭环", "Ask Me 与 DeepFlow 验证", "统一方法"], direct: ["串联", "百川", "百度", "滴滴", "Ask Me", "DeepFlow"],
+    fallback: "我的实习和项目可以这样**串联**：先拆透真实业务流程，再分清人机规则边界，最后用评测和坏案例推动迭代。\n\n**真实 AI 闭环**：应用统计学和德勤 IT 审计让我建立样本、指标、流程与证据链意识，启发了日志抽查与资料归档工具；百川医疗 RAG 把这种意识迁移到知识库、检索、来源和四维评测；百度将质量判断推进到六类任务、七维 Gate、多模型 Pilot 和协议归因；滴滴 ABC 智能一组又让我面向租车准入预审、DiVA 营销素材和机票比价 Skill 从 0 到 1 验证模型、程序规则与人工把关边界。\n\n**Agent 项目验证**：Ask Me 将可信回答和风险分级用于招聘决策，DeepFlow 将多 Agent、私域 RAG、引用与 Trace 用于复杂研究；Resume Autofill AI、个人知识库、HarnessLab、Read-Later Regret 和 Downloads Butler 则快速验证高频痛点。名称不同，底层方法一致：拆透流程、快速验证、评测归因与持续迭代。",
+    next: ["didi_internship", "baidu_internship", "baichuan_internship"],
   }),
   define({
     id: "education_combination", question: "你的教育与项目经历形成了怎样的能力组合？", aliases: ["他的教育与项目经历形成了怎样的能力组合？", "你的经历形成了哪些差异化能力组合？", "他的经历形成了哪些差异化能力组合？"], topic: "profile", facet: "fit",
@@ -454,7 +452,133 @@ export const questionContracts: QuestionContract[] = [
     dimensions: ["流程主持", "校招推广", "沟通交付"], knowledge: ["K10"], length: { min: 220, max: 360 }, goal: "说明校园大使经历形成的现场沟通和执行能力。",
     thesis: "德勤校园大使经历主要训练了我在明确目标下组织流程、现场沟通和推进交付的能力。", required: ["校园大使", "主持或流程组织", "校招推广与沟通"], direct: ["校园大使", "主持", "推广"],
     fallback: "德勤校园大使经历主要训练了我的**流程组织与现场沟通**能力。我参与过流程主持和校招推广，需要把活动信息讲清楚、衔接不同环节，并根据现场反馈及时调整表达和节奏。\n\n这段经历本身不是复杂产品项目，但它补充了我在真实场景中的沟通与执行：面对不同受众时先判断对方最关心什么，再把信息组织成容易理解、能够继续行动的内容；遇到临时变化时保持节奏，把任务推进到结束。这种**信息表达与临场推进**能力可以迁移到需求沟通、评审主持和跨角色协作中。",
-    next: ["internship_value", "audit_value", "role_fit"],
+    next: ["internship_transfer", "audit_value", "role_fit"],
+  }),
+  define({
+    id: "didi_internship", question: "请介绍一下你在滴滴的 AI 产品经理实习。",
+    aliases: ["介绍一下你在滴滴的实习。", "你在滴滴实习期间主要做了什么？", "整体介绍一下你在滴滴这段实习。", "你的滴滴实习经历是什么？", "你在滴滴 ABC 智能一组做了什么？"],
+    topic: "didi", facet: "overview", activeProject: "didi-internship",
+    dimensions: ["实习角色与业务承接", "三个 0—1 项目闭环", "人机规则边界方法论"],
+    knowledge: ["K40", "K41", "K44", "K46"], stories: ["ST12", "ST14"], shape: "narrative", length: { min: 420, max: 600 },
+    forbidden: ["rag", "deepflow", "local_tools", "audit"],
+    goal: "让面试官快速把握滴滴 ABC 智能一组实习的角色定位、风控/营销/比价三个核心项目结果及工作方法。",
+    thesis: "2026 年 9 月至今，我在滴滴 ABC 智能一组担任 AI 产品经理实习生，从 0 到 1 推进了风控准入、营销素材与机票比价三个业务提效项目。",
+    required: ["租车商家准入 AI 预审工作台与 120 分钟降至 30 分钟", "DiVA 营销素材工作台与机酒国庆 11 个点位", "机票竞品比价 Skill 与近 2500 条任务", "分清模型确定性程序和人工边界"],
+    direct: ["滴滴", "ABC 智能一组", "三个"],
+    fallback: "2026 年 9 月至今，我在滴滴 ABC 智能一组担任 AI 产品经理实习生，核心工作是承接公司内部不同业务线的真实提效诉求，把大模型与自动化能力落进日常工作流，从 0 到 1 推进了三个代表项目。\n\n第一个是投入最深的**租车风控预审工作台**。我梳理业务、财务、法务三方审核 SOP 与十类准入材料，搭建“材料建档—AI 解析—规则核验—三方审核”流程，并通过四家 OCR 盲测与原件定位解决脏乱原件及假冲突；目前完成 100 多笔商家申请试点预审，单户人工预审时间从约 120 分钟降到 30 分钟，累计省下 150 多小时。\n\n第二个是面向营销运营的**DiVA营销素材台**。我采用“模板约束 + AI 局部生成 + 人工审核”搭建四步适配流，落地机酒国庆活动覆盖 11 个验收广告位、交付 60 多份采用素材，单批耗时从 2 小时降至 40 分钟，首次验收通过率达 80%。\n\n第三个是**机票竞品比价Skill**，把跨平台查价、同航班匹配与分层报告封装为可恢复工具，累计执行近 2,500 条航线任务、抓取超 10 万条数据。三段实践让我沉淀出清晰判断：先把工作流拆透，分清模型、确定性程序和人工各自的边界，才能稳定产出业务价值。",
+    next: ["didi_rental_overview", "didi_diva_overview", "didi_flight_skill"],
+  }),
+  define({
+    id: "didi_rental_overview", question: "租车商家准入 AI 预审工作台具体做了什么？",
+    aliases: ["请介绍一下你的租车商家准入 AI 预审工作台项目。", "滴滴的租车风控预审工作台做了什么？", "租车准入预审工作台解决了什么问题？", "为什么租车风控工作台一期不做全自动审批放行？"],
+    topic: "didi", facet: "overview", activeProject: "didi-rental-audit",
+    dimensions: ["业务痛点与一期取舍", "三方 SOP 与人机规则四步协同", "试点预审结果"],
+    knowledge: ["K41", "K42", "K43"], stories: ["ST12", "ST13"], shape: "project_arc", length: { min: 380, max: 560 },
+    forbidden: ["rag", "deepflow", "local_tools", "audit"],
+    goal: "讲清租车商家准入工作台的业务场景、为什么不做黑盒自动放行的一期取舍、四步协同设计与试点成效。",
+    thesis: "租车商家准入 AI 预审工作台面向业务、财务、法务三方审核十类材料的痛点，用人机规则分层把单户人工预审由约 120 分钟压到 30 分钟。",
+    required: ["十类准入材料与不做黑盒终审的风险取舍", "材料建档 AI 解析规则核验三方审核", "100 多笔试点单户 120 分钟降至 30 分钟"],
+    direct: ["租车", "预审工作台", "十类材料", "120 分钟"],
+    fallback: "租车商家准入 AI 预审工作台是我在滴滴投入最深的 0—1 项目。平台给下游商家放车前，业务、财务、法务需兼职审营业执照、征信、近一年流水、近两年财报、场地合同、资产明细等十类材料，单户多达几十上百份，纯人工翻查算账平均要花约 120 分钟。\n\n业务最初想做全自动授信打分放行，但我深聊并翻完真实材料后收敛为一期**辅助预审闭环**：一方面团队已有可用额度测算表，真瓶颈在跨文件检索核验；另一方面单批放车动辄上百万，黑盒漏放高风险商家的代价远大于人力节省。\n\n我拉通三方梳理检查项与责任边界，搭建**人机规则四步流**（材料建档—AI 解析—规则核验—三方审核）：模型与 OCR 负责从复杂扫描件和合同里提关键字段与印章风险；程序规则负责银行 PDF 与 Excel 逐笔对账、月均流水、三表勾稽和硬门槛计算；人工聚焦异常复核与终审拍板，并配齐原目录兼容、分角色视图和问题清单导出。\n\n一期已在内部投入使用，完成 100 多笔商家申请试点预审，单户人工**预审压至30分钟**（减少约 75%，累计省下 150 多小时），在不降风控标准的前提下释放了审核人效。",
+    next: ["didi_rental_challenge", "didi_rental_model", "didi_diva_overview"],
+  }),
+  define({
+    id: "didi_rental_challenge", question: "租车准入预审工作台遇到的最大挑战是什么？",
+    aliases: ["租车商家准入预审工作台最大的难点是什么？", "讲一个滴滴风控工作台踩坑复盘的案例。", "你是怎么解决风控原件识别不准和 15 处假冲突的？", "风控工作台为什么拆开 OCR 看图和大模型理解？"],
+    topic: "didi", facet: "example", activeProject: "didi-rental-audit",
+    dimensions: ["局部重读踩坑与 15 处假冲突", "40 份难例 OCR 盲测与提取规则重构", "118 份复测与 45 秒零假冲突验证"],
+    knowledge: ["K42", "K41"], stories: ["ST12"], shape: "star", length: { min: 400, max: 580 },
+    forbidden: ["rag", "deepflow", "local_tools", "audit"],
+    goal: "用一次真实的局部重读踩坑与三步重构证明候选人不迷信调 Prompt，能重划技术与业务边界。",
+    thesis: "最大挑战是脏乱真实材料叠加局部截图重读反向造出 15 处假冲突，我通过拆开看图与理解、改提取粒度和原件定位彻底解决。",
+    required: ["局部截图重读反向改错造出 15 处假冲突", "40 份难例四家 OCR 盲测与看图理解解耦", "71 行车单提取规则与 118 份复测 45 秒零假冲突"],
+    direct: ["最大挑战", "脏乱", "假冲突"],
+    fallback: "最大挑战是真实商户材料极度脏乱（歪拍双语执照、红章盖财报数字、手写租赁合同、71 行密集车辆表截断），而我第一轮用常规改 Prompt 加局部截图重读反而遭遇了**15处假冲突踩坑**：一家建档带括号简称的商户被系统字面比对误判 9 页财报抬头全错，触发十几次低清局部重读卡了近 5 分钟，甚至把原读对的公司名反向改成错字，业务根本没法信。\n\n我立刻停下打补丁，做了三步重构。第一是**拆开看图与理解**：挑出 40 份最难真实样本（人工核出 106 个核心字段）拉四家线上 OCR 盲测，选出红章压字与手写唯一 100% 准确且带坐标印章识别的方案——标准卡证直出，复杂财报合同先由 OCR 还原干净文本表格，再把纯文本喂给 DeepSeek 提取。第二是从业务需求改提取粒度：确认 71 行车单只需权属人、总台数、总估值与抽查明细，根治思考链共享上限截断。第三是收严补读触发（纳入执照法定名、禁模糊占位覆盖原值）并上线字段级页码图框一键定位原件。\n\n在 118 份重度复杂材料复测中实现 100% 识别通过、0 截断，原跑近 9 分钟出 15 处假冲突的案例压至**45秒零假冲突**，整案提速 3 至 11 倍且大模型输入 Token 省下一半以上。",
+    next: ["didi_rental_model", "didi_rental_rules", "baidu_badcase"],
+  }),
+  define({
+    id: "didi_rental_model", question: "租车风控工作台是怎么做模型选型和兜底设计的？",
+    aliases: ["风控预审工作台的模型是怎么选的？", "为什么风控工作台主力选 DeepSeek Flash 并配按需备用？", "38 个脱敏审核对照题是怎么评测模型的？"],
+    topic: "didi", facet: "evaluation", activeProject: "didi-rental-audit",
+    dimensions: ["38 题对照与错误放行风险观察", "DeepSeek Flash 主力与 GPT 按需备用", "数据口径边界"],
+    knowledge: ["K43", "K42"], stories: ["ST13"], shape: "fit_mapping", length: { min: 380, max: 560 },
+    forbidden: ["rag", "deepflow", "local_tools", "audit"],
+    goal: "说明风控场景下如何围绕错误放行风险做多模型选型与低成本按需兜底。",
+    thesis: "风控选型最关注不误放行风险，我通过 38 个脱敏审核对照题选定 DeepSeek Flash 为主力，并设计结构校验后的单次按需备用兜底。",
+    required: ["38 个脱敏对照题对比三模型 114 个返回", "无误放行倾向选 DeepSeek Flash 主力", "先结构与规则校验再按需触发 GPT 系列备用"],
+    direct: ["风控", "38", "模型"],
+    fallback: "风控准入场景选模型，我最看重的不是平均跑分，而是“不能把存疑高风险项误判成直接通过”。我基于导师整理的 35 个审核项，又从真实商户材料补了 3 个高频核验项，搭起**38题脱敏对照**集，横向测试 Jev、StartLux、DeepSeek 共 114 个返回。\n\n结果显示三者参考一致数分别为 27/38、30/38 和 31/38，更重要的是 DeepSeek Flash 没有把存疑项误判放行的倾向且响应最快，因此定为主力模型。兜底上我没有无脑全量双调烧钱，而是设计**按需备用兜底**：主模型输出后先过结构校验、来源检查和规则复算，只有接口失败、格式损坏或关键字段缺失时才触发一次 GPT 系列备用；若备用仍缺失或结论冲突，直接标“待人工复核”。\n\n同时我坚持用规则与人审**守住风控边界**：征信多机构额度混比的 9 条冲突用主体与机构对齐规则解除，单户 575 笔银行流水逐笔对上后仍保留 234 笔入账由业务确认性质；我也严格区分 31/38 脱敏审核题一致数与原件 OCR 准确率。",
+    next: ["didi_rental_rules", "didi_rental_challenge", "baidu_reliability"],
+  }),
+  define({
+    id: "didi_rental_rules", question: "银行流水和征信核验中哪些交给规则、哪些留给人工？",
+    aliases: ["征信报告的 9 条假冲突和 575 笔银行流水是怎么处理的？", "风控预审工作台如何划分模型、程序规则和人工边界？", "为什么 575 笔银行流水对上后还要留 234 笔人工确认？"],
+    topic: "didi", facet: "method", activeProject: "didi-rental-audit",
+    dimensions: ["征信主体机构对齐规则", "575 笔逐笔对账确定性规则", "234 笔经营入账人工判断"],
+    knowledge: ["K43", "K41"], stories: ["ST13"], shape: "direct", length: { min: 320, max: 500 },
+    forbidden: ["rag", "deepflow", "local_tools", "audit"],
+    goal: "用征信 9 条冲突与 575/234 笔银行流水两个真实单户案例说明模型、确定性规则与人工判断的精确边界。",
+    thesis: "我划分规则与人工的原则是：客观一致性核对与算账全部交给确定性程序，涉及业务实质定性的判断坚决留给人工。",
+    required: ["主体机构字段来源对齐解除 9 条征信假冲突", "575 笔 PDF 与 Excel 逐笔对账归程序", "234 笔经营收入性质与月份分母归人工"],
+    direct: ["规则", "人工", "征信", "流水"],
+    fallback: "在租车风控工作台里，我划分程序规则与人工判断的核心原则是：客观一致性比对与算账全部交给规则，涉及业务实质定性的判断坚决留给人工，不让模型硬猜征信和流水。\n\n在征信核验上，初期系统把同一份征信报告里不同授信机构的额度混在一起比对，冒出 9 条读值冲突。我没有加调模型，而是补了**四元对齐解冲突**规则（主体—机构—字段—来源位置），必须四项同源才允许比对，零新增模型调用就消除了全部 9 条误报。\n\n在银行流水核验上，单家商户上传的 PDF 与 Excel 各有 575 笔记录，程序先做**575笔自动对账**确保原件未被删改；但其中 234 笔入账到底算不算真实租车经营收入、往来款剔不剔除、月均分母按几个月算，直接决定授信安全，因此保留**234笔人工定性**，系统只把候选明细和凭证高亮摆在审核员手边。",
+    next: ["didi_rental_model", "didi_diva_overview", "audit_value"],
+  }),
+  define({
+    id: "didi_diva_overview", question: "DiVA 营销素材工作台为什么采用模板约束加局部生成？",
+    aliases: ["请介绍一下滴滴的 DiVA AI 营销素材生产工作台项目。", "DiVA 营销素材生产工作台具体做了什么？", "为什么 DiVA 不让 AI 直接生成整张成品海报？", "机酒国庆营销活动里 DiVA 取得了什么效果？"],
+    topic: "didi", facet: "overview", activeProject: "didi-diva",
+    dimensions: ["跨点位做图痛点", "模板约束加局部生成取舍", "四步适配工作流与国庆活动效果"],
+    knowledge: ["K44", "K45"], stories: ["ST14"], shape: "project_arc", length: { min: 360, max: 540 },
+    forbidden: ["rag", "deepflow", "local_tools", "audit"],
+    goal: "解释 DiVA 为什么不做高错误成本的整图直出，以及如何通过模板约束和四步工作流在机酒国庆活动落地。",
+    thesis: "DiVA 采用模板约束加 AI 局部生成加人工审核，核心是为了锁死品牌与优惠金额风险，同时释放多广告位延展效率。",
+    required: ["模板锁定品牌安全区与优惠金额防投放事故", "主视觉生成元素复用多广告位适配校样导出", "国庆活动 11 个验收点位 60 多份素材 40 分钟 80%"],
+    direct: ["DiVA", "营销素材", "模板", "局部生成"],
+    fallback: "DiVA AI 营销素材生产工作台面向滴滴内部营销运营与设计协同场景。每次大促活动，运营都要把同一套主题延展到十几个不同尺寸的投放点位，反复向设计提单改尺寸、改文案、来回审校，排期长且占满设计重复工时。\n\n在方案取舍上，我没有采用看起来很酷但错误成本极高的“AI 一键直出整张成品海报”——因为一旦优惠金额写错、品牌 Logo 变形或关键元素压住安全区，线上投放就是事故。我最终定下**模板加局部生成**加人工审核的路线：确定性的多尺寸裁切与格式交给程序规则，模板死锁品牌规范、安全区与优惠金额，AI 只专注主视觉生成、元素延展和创意文案候选。\n\n围绕这套边界，我搭建了**多广告位适配流**（主视觉生成—元素复用—多广告位适配—校样导出），让运营一次确认主视觉后即可批量适配各点位并在校样页人工把关。该工作台落地机酒国庆营销活动，覆盖 11 个已验收广告位，累计交付 60 多份业务采用素材，单批素材交付时间从 2 小时缩短到 40 分钟，**首审通过率80%**。",
+    next: ["didi_diva_feedback", "didi_flight_skill", "didi_rental_overview"],
+  }),
+  define({
+    id: "didi_diva_feedback", question: "面对运营提的 37 条反馈，你是怎么判断需求并排优先级的？",
+    aliases: ["DiVA 试用期 37 条运营反馈是怎么处理的？", "为什么 37 条业务反馈里驳回了 12 条？", "你是怎么从收需求变成判断需求的？"],
+    topic: "didi", facet: "method", activeProject: "didi-diva",
+    dimensions: ["拆开业务目标与建议做法", "三类根因分流与具体案例", "四维排期与沟通边界"],
+    knowledge: ["K45", "K44"], stories: ["ST14"], shape: "star", length: { min: 380, max: 560 },
+    forbidden: ["rag", "deepflow", "local_tools", "audit"],
+    goal: "通过 37 条试用反馈的分流与 12 条沟通驳回案例展示候选人的需求判断力和跨角色沟通方法。",
+    thesis: "面对试用期涌入的 37 条反馈，我先拆开业务目标与用户建议做法，按三类根因分流后再依据阻断度、频率、复用性和成本排期。",
+    required: ["拆开业务目标与建议做法还原点位原稿", "操作认知交互体验与模型版式约束三类归因", "阻断度频率复用性成本排期且不把 12 条驳回叫假需求"],
+    direct: ["37 条", "反馈", "判断需求"],
+    fallback: "DiVA 试用阶段，业务陆陆续续提了 37 条反馈（最终推进完成 15 条、沟通驳回或替代 12 条）。如果照单全收，研发会被低复用定制拖垮，核心交付反而卡住。我借这次实战建立了一套从“收需求”转向“判断需求”的三步机制。\n\n第一步是**拆开目标与做法**，先还原具体投放点位、输入原稿和真实卡点，不直接按用户口头方案派单。第二步做**三类根因分流**：一是用户操作与认知问题，比如运营反映“没法调圆角”，实际功能已有只是入口深，我先引导路径跑通当期交付，再观察是否高频需提浅入口；二是产品交互体验问题；三是底层模型或版式硬约束，例如狭长横幅硬塞超长文案导致溢出，我没有承诺高成本且易失真的“任意长度自动缩排”，而是对齐主副标题字数上限与层级规则。\n\n第三步按**四维价值排期**——看是否阻断当期活动交付、出现频率、跨活动复用性和实现成本。沟通驳回那 12 条时，我会拿原输入对比验收规范，说清我们拒绝的是高风险或低 ROI 的实现方式，同时给出替代解法，而不是简单把业务诉求定性成“假需求”。",
+    next: ["didi_diva_overview", "didi_flight_skill", "requirements"],
+  }),
+  define({
+    id: "didi_flight_skill", question: "机票竞品比价 Skill 是如何设计的？",
+    aliases: ["请介绍一下滴滴的机票竞品比价 Skill 项目。", "为什么机票竞品比价要做成三层 Skill 而不是普通脚本？", "机票比价 Skill 的同航班匹配和异常恢复怎么做？"],
+    topic: "didi", facet: "architecture", activeProject: "didi-flight-skill",
+    dimensions: ["可比输入契约与待核查规则", "六步链路与入口主体引用三层架构", "57 分钟瓶颈剖析与检查点补跑"],
+    knowledge: ["K46", "K47"], stories: ["ST15"], shape: "project_arc", length: { min: 400, max: 580 },
+    forbidden: ["rag", "deepflow", "local_tools", "audit"],
+    goal: "展示机票竞品比价 Skill 的数据可比契约、三层可维护架构、检查点恢复设计以及两阶段规模口径。",
+    thesis: "机票竞品比价 Skill 先固定严格可比口径与待核查边界，再用入口—主体—引用三层架构和检查点局部补跑解决批处理脆弱性。",
+    required: ["固定可比契约且唯一性不足标待人工复核不强配", "入口层主体层引用层与六步流程", "10 条航线 57 分钟复盘检查点补跑与 80 组及近 2500 条规模"],
+    direct: ["机票", "比价 Skill", "口径"],
+    fallback: "机票竞品比价 Skill 服务于机票供给与价格分析团队，目标是把手工跨平台查价、对航班和出报告变成稳定可复用的工具。设计之初我没有直接堆爬虫脚本，而是先做**固定可比口径**：锁死出发到达、日期、舱等、查询时点与来源契约，明确覆盖率、价差和低价率定义，并规定“唯一性不足标待人工复核不强配、没查到标待核查不断言无供给”，防止错配数据误导调价。\n\n流程上我拆成“输入校验去重—跨平台查询—同航班匹配—固定舱位取有效价—算参考价差与状态—分层输出报告”六步，并用**三层Skill架构**组织：入口层管触发条件与交付目标，主体层管业务规则、工具顺序与异常状态机，引用层放复杂字段映射与数据字典，避免上下文臃肿失控。\n\n针对跑批脆弱性，我设计了**检查点局部补跑**与人工接管：比如复盘一批 10 条航线约 57 分钟记录时，我发现手机准备与恢复占了约 42 分钟，于是改成单步失败只补未完成节点、遇登录验证码保留现场交人工接管。该项目简历基线完成 80 组航线分析、人工耗时降 75%；随业务扩展近期累计执行近 2,500 条航线任务、抓取超 10 万条原始记录，直接输出供给缺口与高价航班清单。",
+    next: ["didi_metrics_boundary", "didi_rental_overview", "deepflow_thinking"],
+  }),
+  define({
+    id: "didi_metrics_boundary", question: "滴滴三个实习项目的数据口径和结论边界分别是什么？",
+    aliases: ["滴滴实习项目的数字口径有哪些需要注意的边界？", "机票比价的 10 万条数据和风控 31/38 分别代表什么口径？"],
+    topic: "didi", facet: "boundary", activeProject: "didi-internship",
+    dimensions: ["风控试点反馈与 31/38 边界", "DiVA 去重采用与 12 条驳回边界", "比价两阶段规模与原始抓取边界"],
+    knowledge: ["K40", "K43", "K45", "K47"], stories: [], shape: "shortcoming", length: { min: 400, max: 590 },
+    forbidden: ["rag", "deepflow", "local_tools", "audit"],
+    goal: "清晰区分滴滴三项内部项目的实测口径、单样本验证与采集吞吐，避免任何夸大或概念偷换。",
+    thesis: "对滴滴三个项目的数字，我严格区分业务试用反馈、脱敏对照集一致数、去重采用素材与原始抓取吞吐，绝不混用口径。",
+    required: ["120 降至 30 分钟为预审试点反馈且 31/38 非 OCR 准确率", "DiVA 11 点位 60 多份按去重采用且 12 条驳回非假需求", "比价区分 80 组基线与近 2500 条及超 10 万条原始抓取"],
+    direct: ["滴滴", "统计口径", "指标"],
+    fallback: "对滴滴这三个内部项目的量化结果，我坚持按各自真实统计口径回答，不把阶段验证或采集吞吐混同为全量终态指标。\n\n**风控试点与盲测**：租车准入工作台“100 多笔试点、单户人工预审由约 120 分钟降至 30 分钟、累计省下 150 多小时”来自近期业务使用反馈，代表预审人效提升，不等同于坏账率下降；38 题选型里的 31/38 是整理后脱敏审核题参考一致数，不冒充原件 OCR 准确率；40 份样本盲测与 118 份材料 100% 通过属于项目内难例复测，9 条征信冲突与 575/234 笔流水则是单户样本深度验证。\n\n**DiVA去重采用账**：机酒国庆活动的“11 个已验收广告位、60 多份采用素材、单批耗时 2 小时降至 40 分钟、首次验收通过率 80%”按业务去重采用口径统计；模板约束对比整图直出是错误成本驱动的方案取舍而非线上随机 A/B；试用期 37 条反馈中的 12 条驳回包含替代路径与暂缓项，不简单贴“假需求”标签。\n\n**比价两阶段口径**：机票比价 Skill 简历基线为“80 组航线、人工耗时降 75%”，近期扩展吞吐为“累计近 2,500 条航线任务、超 10 万条原始抓取记录”；超 10 万条是原始抓取量而非有效可比航班对，试行价差用于定位待核查线索而非正式双端低价率。",
+    next: ["didi_rental_challenge", "didi_diva_feedback", "baidu_reliability"],
   }),
 ];
 
@@ -480,17 +604,36 @@ export function frameFromContract(contract: QuestionContract): QuestionFrame {
 }
 
 const topicKnowledge: Record<QuestionTopic, string[]> = {
-  profile: ["K1", "K2", "K3", "K8", "K27", "K22", "K37", "K39"], role_fit: ["K2", "K3", "K8", "K27", "K19", "K22", "K12", "K5", "K37"], baidu: ["K22", "K23", "K24", "K25", "K26", "K32", "K33", "K34"], rag: ["K4", "K27", "K28", "K29", "K30", "K31", "K35", "K36"],
-  deepflow: ["K5", "K16", "K18", "K19", "K20", "K21"], ask_me: ["K12", "K38"], local_tools: ["K6", "K39"], audit: ["K7", "K8", "K9", "K10"],
-  statistics: ["K3", "K17", "K31"], skills: ["K3", "K4", "K29", "K31", "K5", "K21"], enterprise_ai: ["K8", "K28", "K29", "K21"], agent: ["K18", "K19", "K21"], unknown: [],
+  profile: ["K1", "K2", "K3", "K8", "K27", "K22", "K40", "K37", "K39"],
+  role_fit: ["K2", "K3", "K8", "K27", "K19", "K22", "K40", "K12", "K5", "K37"],
+  didi: ["K40", "K41", "K42", "K43", "K44", "K45", "K46", "K47"],
+  baidu: ["K22", "K23", "K24", "K25", "K26", "K32", "K33", "K34"],
+  rag: ["K4", "K27", "K28", "K29", "K30", "K31", "K35", "K36"],
+  deepflow: ["K5", "K16", "K18", "K19", "K20", "K21"],
+  ask_me: ["K12", "K38"],
+  local_tools: ["K6", "K39"],
+  audit: ["K7", "K8", "K9", "K10"],
+  statistics: ["K3", "K17", "K31"],
+  skills: ["K3", "K4", "K29", "K31", "K5", "K21"],
+  enterprise_ai: ["K8", "K41", "K28", "K29", "K21"],
+  agent: ["K18", "K19", "K21"],
+  unknown: [],
 };
 
 const topicPatterns: Array<[QuestionTopic, RegExp]> = [
-  ["baidu", /百度|\bbaidu\b|ai\s*coding|evaluator\s*agent|七维指标|硬门槛|dashboard\s*样例/i], ["rag", /百川智能|百川|医疗\s*rag|医疗知识助手|\brag\b|知识库|检索|引用/i], ["deepflow", /deepflow/i], ["agent", /agent|多智能体|多代理/i],
+  ["didi", /滴滴|\bdidi\b|abc\s*智能|租车.{0,8}(?:商家|准入|风控|预审)|风控预审|预审工作台|十类材料|假冲突|\bdiva\b|营销素材|多广告位|机酒国庆|37\s*条(?:运营|业务)?反馈|机票.{0,6}比价|竞品比价|比价\s*skill/i],
+  ["baidu", /百度|\bbaidu\b|ai\s*coding|evaluator\s*agent|七维指标|硬门槛|dashboard\s*样例/i],
+  ["rag", /百川智能|百川|医疗\s*rag|医疗知识助手|\brag\b|知识库|检索|引用/i],
+  ["deepflow", /deepflow/i],
+  ["agent", /agent|多智能体|多代理/i],
   ["local_tools", /thirty[-\s]?minute brain|read[-\s]?later regret|downloads butler|本地优先效率工具|信息债|下载文件夹/i],
-  ["audit", /审计|德勤|容诚|日志核查|底稿|函证|盘点/i], ["statistics", /统计|指标|样本|数据分析|产品决策/i],
-  ["enterprise_ai", /企业级?\s*ai|企业场景|业务问题.*(?:ai|产品)/i], ["role_fit", /岗位|(?:这个|该|目标)?岗(?:位)?|匹配|契合|适合|胜任|优势|团队价值/i],
-  ["profile", /自我介绍|介绍一下|背景|经历组合/i], ["skills", /技能|技术|评测|ai\s*编程|协作|sql|python|fastapi|ragas/i], ["ask_me", /ask\s*me|数字分身/i],
+  ["audit", /审计|德勤|容诚|日志核查|底稿|函证|盘点/i],
+  ["statistics", /统计|指标|样本|数据分析|产品决策/i],
+  ["enterprise_ai", /企业级?\s*ai|企业场景|业务问题.*(?:ai|产品)/i],
+  ["role_fit", /岗位|(?:这个|该|目标)?岗(?:位)?|匹配|契合|适合|胜任|优势|团队价值/i],
+  ["profile", /自我介绍|介绍一下|背景|经历组合/i],
+  ["skills", /技能|技术|评测|ai\s*编程|协作|sql|python|fastapi|ragas/i],
+  ["ask_me", /ask\s*me|数字分身/i],
 ];
 
 const facetPatterns: Array<[QuestionFacet, RegExp]> = [
@@ -499,6 +642,14 @@ const facetPatterns: Array<[QuestionFacet, RegExp]> = [
   ["boundary", /短板|不足|限制|边界|风险/i], ["architecture", /架构|链路|技术方案/i], ["method", /方法|如何|怎么|思考|取舍/i],
   ["problem", /解决.*问题|什么问题|痛点/i], ["fit", /匹配|契合|适合|胜任|优势|价值|能力组合/i],
 ];
+
+function inferDidiActiveProject(text: string): string | undefined {
+  if (/租车|商家准入|风控预审|预审工作台|十类材料|假冲突|575\s*笔|38\s*个脱敏|31\/38/i.test(text)) return "didi-rental-audit";
+  if (/\bdiva\b|营销素材|多广告位|机酒国庆|37\s*条/i.test(text)) return "didi-diva";
+  if (/机票.{0,6}比价|竞品比价|比价\s*skill|航班匹配|2[,\s]?500\s*条|10\s*万条/i.test(text)) return "didi-flight-skill";
+  if (/滴滴|\bdidi\b|abc\s*智能/i.test(text)) return "didi-internship";
+  return undefined;
+}
 
 function responseShapeFor(facet: QuestionFacet): ResponseShape {
   if (facet === "example") return "star";
@@ -571,18 +722,29 @@ export function buildLocalQuestionFrame(question: string, history: { role: "user
     : undefined;
   const questionMode = questionModeFor(question, answerIntent);
   const reference = /这个|该项目|其中|它|上述|这套|这种|这些|那些|那次|当时|刚才|前面/.test(question);
-  const historyProject = [...history].reverse().find((message) => message.role === "user" && /百度|baidu|ai\s*coding|evaluator\s*agent|百川智能|百川|医疗\s*rag|rag|deepflow|ask\s*me/i.test(message.content))?.content.match(/百度|baidu|ai\s*coding|evaluator\s*agent|百川智能|百川|医疗\s*rag|rag|deepflow|ask\s*me/i)?.[0]?.toLowerCase();
-  const inferredTopic = topic === "unknown" && reference
-    ? (historyProject && /rag|百川/.test(historyProject) ? "rag" : historyProject === "deepflow" ? "deepflow" : historyProject?.includes("ask") ? "ask_me" : historyProject ? "baidu" : "unknown")
+  const historyMatchPattern = /滴滴|\bdidi\b|abc\s*智能|租车|商家准入|风控预审|预审工作台|\bdiva\b|营销素材|机票.{0,6}比价|竞品比价|比价\s*skill|百度|baidu|ai\s*coding|evaluator\s*agent|百川智能|百川|医疗\s*rag|rag|deepflow|ask\s*me/i;
+  const recentProjectMessage = [...history].reverse().find((message) => message.role === "user" && historyMatchPattern.test(message.content))?.content;
+  const historyProject = recentProjectMessage?.match(historyMatchPattern)?.[0]?.toLowerCase();
+  const inferredTopic = (topic === "unknown" || (reference && topic === "skills" && historyProject))
+    ? (historyProject && /滴滴|didi|abc|租车|商家准入|风控预审|预审工作台|diva|营销素材|机票|比价/.test(historyProject) ? "didi" : historyProject && /rag|百川/.test(historyProject) ? "rag" : historyProject === "deepflow" ? "deepflow" : historyProject?.includes("ask") ? "ask_me" : historyProject ? "baidu" : topic)
     : topic;
+  const didiSubproject = inferredTopic === "didi"
+    ? inferDidiActiveProject(question) ?? (reference && recentProjectMessage ? inferDidiActiveProject(recentProjectMessage) : undefined) ?? "didi-internship"
+    : undefined;
   const explicitTopic = inferredTopic !== "unknown";
-  const hasMethodContext = /AI|产品|模型|RAG|DeepFlow|Agent|检索|评测|数据|用户|指标|需求|项目|功能|失败|复盘|取舍|协作|团队|岗位|工作|压力|冲突|学习|加班|职业|选择/i.test(question);
+  const hasMethodContext = /AI|产品|模型|滴滴|DiVA|风控|比价|RAG|DeepFlow|Agent|检索|评测|数据|用户|指标|需求|项目|功能|失败|复盘|取舍|协作|团队|岗位|工作|压力|冲突|学习|加班|职业|选择/i.test(question);
   const hasExplicitProjectOverviewAction = answerIntent === "project_overview"
-    && /(?:项目|系统|工具|助手).{0,10}(?:能做什么|做什么|有什么功能|如何工作)/i.test(question);
+    && /(?:项目|系统|工具|助手|工作台|Skill).{0,10}(?:能做什么|做什么|有什么功能|如何工作|如何设计)/i.test(question);
   const hasStrongLocalIntent = !["general", "project_overview", "challenge", "diagnosis"].includes(answerIntent)
     || hasExplicitProjectOverviewAction
     || (["challenge", "diagnosis"].includes(answerIntent) && hasMethodContext);
   const interviewReasoning = /(?:你怎么看|如何看待|你会如何|如果|假设|面对|遇到|为什么|为何|如何|怎么).{0,20}(?:岗位|工作|团队|压力|冲突|学习|加班|职业|选择|产品|AI|业务|协作|沟通|优先级)/i.test(question);
+  const didiKnowledgeBySubproject: Record<string, string[]> = {
+    "didi-rental-audit": ["K41", "K42", "K43"],
+    "didi-diva": ["K44", "K45"],
+    "didi-flight-skill": ["K46", "K47"],
+    "didi-internship": topicKnowledge.didi,
+  };
   return {
     topic: inferredTopic,
     facet,
@@ -592,11 +754,19 @@ export function buildLocalQuestionFrame(question: string, history: { role: "user
     focusTerms: focusTermsFor(answerIntent, targetRole),
     targetRole,
     requestedDimensions: [facet === "overview" ? "直接回答当前问题" : `${facet}相关判断`, "具体实践", "验证或落地方式"],
-    activeProject: inferredTopic === "baidu" ? "baidu-ai-coding-evaluation" : inferredTopic === "rag" ? "rag-knowledge-base" : inferredTopic === "deepflow" || inferredTopic === "agent" ? "deepflow" : inferredTopic === "ask_me" ? "ask-me" : undefined,
+    activeProject: inferredTopic === "didi" ? didiSubproject : inferredTopic === "baidu" ? "baidu-ai-coding-evaluation" : inferredTopic === "rag" ? "rag-knowledge-base" : inferredTopic === "deepflow" || inferredTopic === "agent" ? "deepflow" : inferredTopic === "ask_me" ? "ask-me" : undefined,
     useHistory: reference,
     confidence: ["career_transition", "role_fit"].includes(answerIntent) ? 0.92 : interviewReasoning ? 0.86 : hasStrongLocalIntent ? 0.88 : explicitTopic && facet !== "overview" ? 0.86 : explicitTopic ? 0.72 : facet !== "overview" ? 0.58 : 0.35,
-    requiredKnowledgeIds: ["career_transition", "experience_value"].includes(answerIntent) ? ["K1", "K2", "K3", "K8", "K27", "K22", "K37"] : topicKnowledge[inferredTopic],
-    allowedStoryIds: facet === "example" ? (inferredTopic === "baidu" ? ["ST9"] : inferredTopic === "audit" ? ["ST4", "ST6"] : inferredTopic === "rag" ? ["ST1"] : inferredTopic === "deepflow" || inferredTopic === "agent" ? ["ST2"] : []) : [],
+    requiredKnowledgeIds: ["career_transition", "experience_value"].includes(answerIntent)
+      ? ["K1", "K2", "K3", "K8", "K27", "K22", "K40", "K37"]
+      : inferredTopic === "didi" && didiSubproject
+        ? didiKnowledgeBySubproject[didiSubproject]
+        : topicKnowledge[inferredTopic],
+    allowedStoryIds: facet === "example"
+      ? (inferredTopic === "didi"
+          ? (didiSubproject === "didi-diva" ? ["ST14"] : didiSubproject === "didi-flight-skill" ? ["ST15"] : ["ST12", "ST13"])
+          : inferredTopic === "baidu" ? ["ST9"] : inferredTopic === "audit" ? ["ST4", "ST6"] : inferredTopic === "rag" ? ["ST1"] : inferredTopic === "deepflow" || inferredTopic === "agent" ? ["ST2"] : [])
+      : [],
     forbiddenTopics: forbiddenFor(inferredTopic),
     responseShape: answerIntent === "career_transition" ? "narrative" : responseShapeFor(facet),
     targetLength: { min: facet === "overview" ? 220 : 280, max: 480 },
@@ -628,6 +798,7 @@ export function mergePlannedFrame(local: QuestionFrame, planned: z.infer<typeof 
         ? "local_high_confidence"
         : undefined
     : undefined;
+  const resolvedActiveProject = planned.activeProject ?? local.activeProject ?? (topic === "didi" ? (inferDidiActiveProject(question) ?? "didi-internship") : topic === "baidu" ? "baidu-ai-coding-evaluation" : topic === "rag" ? "rag-knowledge-base" : topic === "deepflow" || topic === "agent" ? "deepflow" : undefined);
   return {
     ...local,
     topic,
@@ -638,16 +809,18 @@ export function mergePlannedFrame(local: QuestionFrame, planned: z.infer<typeof 
     focusTerms: keepLocalIntent || blockCareerTransition ? focusTermsFor(answerIntent, targetRole) : planned.focusTerms,
     targetRole,
     requestedDimensions: planned.requestedDimensions,
-    activeProject: planned.activeProject ?? (topic === "baidu" ? "baidu-ai-coding-evaluation" : topic === "rag" ? "rag-knowledge-base" : topic === "deepflow" || topic === "agent" ? "deepflow" : undefined),
+    activeProject: resolvedActiveProject,
     useHistory: planned.useHistory,
     confidence: planned.confidence,
-    requiredKnowledgeIds: ["career_transition", "experience_value"].includes(answerIntent) ? ["K1", "K2", "K3", "K8", "K27", "K22", "K37"] : topicKnowledge[topic],
+    requiredKnowledgeIds: ["career_transition", "experience_value"].includes(answerIntent) ? ["K1", "K2", "K3", "K8", "K27", "K22", "K40", "K37"] : topicKnowledge[topic],
     allowedStoryIds: facet === "example" || facet === "transfer"
-      ? (topic === "baidu" ? ["ST9"] : topic === "audit" ? ["ST4", "ST6"] : topic === "rag" ? ["ST1"] : topic === "deepflow" || topic === "agent" ? ["ST2"] : [])
+      ? (topic === "didi"
+          ? (resolvedActiveProject === "didi-diva" ? ["ST14"] : resolvedActiveProject === "didi-flight-skill" ? ["ST15"] : ["ST12", "ST13"])
+          : topic === "baidu" ? ["ST9"] : topic === "audit" ? ["ST4", "ST6"] : topic === "rag" ? ["ST1"] : topic === "deepflow" || topic === "agent" ? ["ST2"] : [])
       : [],
     forbiddenTopics: forbiddenFor(topic),
-    responseShape: answerIntent === "career_transition" ? "narrative" : responseShapeFor(facet),
     targetLength: { min: facet === "overview" ? 220 : 280, max: 480 },
+    responseShape: answerIntent === "career_transition" ? "narrative" : responseShapeFor(facet),
     answerGoal: "先直接回答问题，再使用最相关的公开实践说明判断、机制或迁移价值。",
     routeSource: "model",
     intentResolution: {

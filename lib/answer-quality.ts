@@ -25,6 +25,7 @@ const RAW_FIELD_PHRASES = [
 ];
 
 const TOPIC_TERMS: Partial<Record<AnswerPlan["topic"], string[]>> = {
+  didi: ["滴滴", "DiVA", "租车商家准入", "机票竞品比价", "比价 Skill", "ABC 智能一组"],
   rag: ["RAG", "Dense Retrieval", "Rerank", "Milvus", "向量检索"],
   deepflow: ["DeepFlow", "Coordinator", "Planner", "Researcher", "Reporter"],
   audit: ["审计", "德勤", "容诚", "底稿", "函证", "盘点"],
@@ -58,9 +59,10 @@ const RISKY_CLAIMS = [
   "大规模上线",
   "商业化",
   "百度",
+  "滴滴",
 ];
 
-const KNOWN_ORGANIZATIONS = ["东北大学", "百川智能", "德勤", "容诚", "ACCA", "百度"];
+const KNOWN_ORGANIZATIONS = ["东北大学", "百川智能", "德勤", "容诚", "ACCA", "百度", "滴滴"];
 
 const NUMBER_PATTERN = /\d+(?:\.\d+)?(?:%|％|万|亿|倍|个|人|次|天|小时|分钟|条|项|分)?/g;
 const EVENT_SIGNAL = /(?:我|本人).{0,12}(?:负责|主导|参与|完成|推动|组织|协调|交付|上线|服务|访谈|调研|获得|实现|搭建|开发|经历|遇到|发现|验证过|尝试过)|(?:已|已经).{0,12}(?:上线|交付|落地|服务|完成)|(?:用户|客户).{0,12}(?:反馈|认可|满意|使用)|(?:提升|降低|增长|节省|改善)/;
@@ -69,6 +71,7 @@ const DOMAIN_TERMS = [
   "AI 产品", "数据", "评测", "统计", "业务", "审计", "风险", "产品", "工程", "原型", "RAG", "DeepFlow",
   "Dense Retrieval", "Rerank", "RAGAS", "Bad Case", "检索", "引用", "工作流", "Agent", "MVP", "人工确认",
   "SQL", "Python", "FastAPI", "Milvus", "需求", "取舍", "验收", "贡献", "用户", "结果", "岗位价值",
+  "滴滴", "DiVA", "风控", "预审", "OCR", "Skill", "比价", "素材", "广告位", "盲测",
 ];
 
 function normalizedNumbers(value: string) {

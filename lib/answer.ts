@@ -8,7 +8,7 @@ import { buildLocalQuestionFrame, findQuestionContract, frameFromContract } from
 import { buildAnswerBrief, buildInterviewConversationContext } from "./interview-context";
 
 const boundaryPattern = /短板|不足|限制|边界|风险|真实性|真实数据|用户(?:数|规模|反馈|测试)|增长|留存|生产(?:状态|规模|环境)|完成(?:了吗|情况)|未完成|个人贡献(?:比例|边界)/;
-const knownOrganizations = ["东北大学", "百川智能", "百度", "德勤", "容诚", "ACCA"];
+const knownOrganizations = ["东北大学", "百川智能", "百度", "滴滴", "德勤", "容诚", "ACCA"];
 const diagnosticMethodFacts = [
   "如果同一组 Bad Case 没有改善，优先确认评测口径与失败分类是否稳定，避免把指标波动误判为方案变化。",
   "随后沿知识摄入、检索、回答、引用链路逐段定位：先看召回证据是否相关且完整，再看回答是否忠实使用证据，最后检查引用与评测是否正确归因。",
@@ -153,7 +153,7 @@ function careerTransitionAnswer() {
   return [
     `我从财会和审计走向 AI 产品，并不是一次突然的换赛道，而是在连续实践中逐步确认：我更擅长也更愿意做连接**业务问题、数据判断和技术落地**的工作。`,
     `财务审计和 IT 审计让我真正接触企业流程，也养成了对证据、口径、权限和风险的敏感度；应用统计学训练则让我习惯先定义样本和指标，再判断结论边界。这些经历没有被丢掉，而是构成了我做产品时理解业务和验证效果的基础。`,
-    `之后通过 RAG、Agent 等项目，以及百度实习中的模型评测和 Bad Case 归因，我开始把原来偏分析和检查的能力，用在**定义问题、设计方案并推动验证**上。这个过程让我确认，AI 产品同时需要用户理解、数据实验和技术边界判断，与我的能力积累是连续的。`,
+    `之后通过百川医疗 RAG、百度多模型评测，以及滴滴实习中的风控预审、DiVA 营销素材和机票比价 Skill，再加上 Ask Me 与 DeepFlow 等独立项目，我持续把偏分析和检查的能力，用在**定义问题、设计方案并推动验证**上，逐步确认 AI 产品与我的能力积累高度一致。`,
     `所以与其说我是“从财会转产品”，不如说我是在持续学习和实践中，把统计与审计形成的能力迁移到了更适合自己的方向。这也体现了我面对陌生领域时的**学习能力和持续推进能力**。`,
   ].join("\n\n");
 }
@@ -163,7 +163,7 @@ function roleFitAnswer(targetRole?: string) {
   return [
     `我和${role}的匹配，主要体现在**业务理解、数据判断和产品落地**这三项能够形成闭环，而不是只掌握某一个工具。`,
     `应用统计学让我习惯用样本、指标和对照判断问题；财务审计与 IT 审计经历让我理解企业流程中的证据、权限、口径和风险。这让我面对一个岗位场景时，能够先理解业务目标和约束，再决定产品应该解决什么。`,
-    `百度实习中的模型评测、Bad Case 归因，以及 AI Coding 七维指标和 Gate 实践，训练了我把“效果不好”拆成**任务、指标、证据和下一轮动作**。RAG、DeepFlow 与 Ask Me 等项目，则让我持续练习需求拆解、方案取舍、原型推进和工程验收。`,
+    `百度实习中的模型评测与 Bad Case 归因、百川医疗 RAG 实践，以及滴滴实习从 0 到 1 推进风控预审、营销素材与比价 Skill 的工作流落地，训练了我把模糊诉求拆成**人机规则边界、指标证据和下一轮动作**；Ask Me 与 DeepFlow 也持续验证了我的独立推进能力。`,
     `因此，即使具体业务需要继续学习，我也已经具备从业务问题出发、用数据验证判断并把方案推进到可运行状态的能力。对${role}而言，我能较快承担需求分析、问题归因、方案验证和跨角色协作，并在实践中持续补齐行业知识。`,
   ].join("\n\n");
 }
@@ -254,6 +254,7 @@ function intentFromFrame(frame: QuestionFrame, detected: AnswerIntent): AnswerIn
   if (frame.facet === "fit") return "role_fit";
   if (frame.facet === "evaluation") return "skills";
   if (frame.facet === "example" || (frame.facet === "transfer" && ["audit", "statistics", "profile"].includes(frame.topic))) return "experience_value";
+  if (frame.facet !== "transfer" && frame.topic === "didi") return "project_overview";
   if (frame.facet !== "transfer" && (frame.topic === "rag" || frame.topic === "deepflow" || frame.topic === "ask_me")) return "representative_project";
   return detected;
 }

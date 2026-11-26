@@ -9,6 +9,11 @@ const actionsSource = readFileSync(new URL("../components/answer-actions.tsx", i
 const globalStyles = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8");
 const revealSource = readFileSync(new URL("../components/use-stream-reveal.ts", import.meta.url), "utf8");
 const revealCoreSource = readFileSync(new URL("../lib/stream-reveal.ts", import.meta.url), "utf8");
+const layoutSource = readFileSync(new URL("../app/layout.tsx", import.meta.url), "utf8");
+const topbarSource = readFileSync(new URL("../components/chat-topbar.tsx", import.meta.url), "utf8");
+const themeToggleSource = readFileSync(new URL("../components/theme-toggle.tsx", import.meta.url), "utf8");
+const formattedAnswerSource = readFileSync(new URL("../components/formatted-answer.tsx", import.meta.url), "utf8");
+const evidencePanelSource = readFileSync(new URL("../components/evidence-panel.tsx", import.meta.url), "utf8");
 
 test("回答首字出现前保留可感知的加载状态", () => {
   const loadingSources = `${chatSource}\n${thinkingSource}`;
@@ -61,4 +66,24 @@ test("安全语义片段通过独立队列转为自适应逐字展示", () => {
   assert.match(revealCoreSource, /Intl\.Segmenter\("zh", \{ granularity: "grapheme" \}\)/);
   assert.match(revealCoreSource, /MAX_FINISHING_TAIL_MS = 1_500/);
   assert.doesNotMatch(chatSource, /PRESET_REVEAL_INTERVAL_MS/);
+});
+
+test("对齐作品集温润编辑风、双主题切换、移动端抽屉与溯源微交互", () => {
+  assert.match(globalStyles, /--page:\s*#eae5e0/i);
+  assert.match(globalStyles, /--accent:\s*#c74d0c/i);
+  assert.match(globalStyles, /:root\[data-theme="dark"\]/);
+  assert.match(layoutSource, /ask-me-theme/);
+  assert.match(topbarSource, /<ThemeToggle/);
+  assert.match(topbarSource, /profile\.portfolio/);
+  assert.match(topbarSource, /href="\/resume"/);
+  assert.match(topbarSource, /className="return-home"/);
+  assert.match(themeToggleSource, /useSyncExternalStore/);
+  assert.match(appFrameSource, /is-mobile-open/);
+  assert.match(appFrameSource, /strength-panel/);
+  assert.doesNotMatch(appFrameSource, /strength-flyout/);
+  assert.match(chatSource, /event\.nativeEvent\.isComposing/);
+  assert.doesNotMatch(chatSource, /disabled=\{loading\}\s*\/>/);
+  assert.match(formattedAnswerSource, /\.sort\(\(left, right\) =>/);
+  assert.match(evidencePanelSource, /className="source-index"/);
+  assert.match(evidencePanelSource, /is-highlighted/);
 });

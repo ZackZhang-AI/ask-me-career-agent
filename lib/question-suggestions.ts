@@ -13,39 +13,39 @@ export const questionGroups = [
     label: "快速判断",
     questions: [
       "请介绍一下你自己。",
+      "请介绍一下你在滴滴的 AI 产品经理实习。",
       "你为什么适合 AI 产品经理岗位？",
       "哪个项目最能代表你的 AI 产品能力？",
-      "你在百度实习中具体负责什么？",
     ],
   },
   {
     id: "projects",
     label: "项目与贡献",
     questions: [
-      "哪个项目最能代表你的 AI 产品能力？",
-      "Evaluator Agent 项目具体做了什么？",
-      "AI Coding 评测的七维指标和硬门槛如何设计？",
-      "你如何分析和归因 AI Coding 的 Bad Case？",
+      "租车商家准入 AI 预审工作台具体做了什么？",
+      "租车准入预审工作台遇到的最大挑战是什么？",
+      "DiVA 营销素材工作台为什么采用模板约束加局部生成？",
+      "机票竞品比价 Skill 是如何设计的？",
     ],
   },
   {
     id: "experience",
     label: "经历与业务",
     questions: [
+      "面对运营提的 37 条反馈，你是怎么判断需求并排优先级的？",
       "请介绍一下你的百度 AI 产品经理实习。",
+      "请介绍一下你的百川智能实习。",
       "审计经历如何帮助你做 AI 产品？",
-      "你的实习经历沉淀了哪些可迁移能力？",
-      "应用统计学背景如何帮助你做 AI 产品？",
     ],
   },
   {
     id: "capabilities",
     label: "能力亮点",
     questions: [
-      "你的核心技术能力有哪些？",
-      "你在数据分析与 AI 评测方面有哪些实践？",
+      "租车风控工作台是怎么做模型选型和兜底设计的？",
+      "银行流水和征信核验中哪些交给规则、哪些留给人工？",
+      "AI Coding 评测的七维指标和硬门槛如何设计？",
       "你如何证明自动评测结果可信？",
-      "你对企业级 AI 场景有哪些理解？",
     ],
   },
 ] as const;
@@ -54,28 +54,28 @@ export type QuestionGroupId = (typeof questionGroups)[number]["id"];
 
 const followUpsByCategory: Record<QuestionCategory, readonly string[]> = {
   profile: [
+    "请介绍一下你在滴滴的 AI 产品经理实习。",
     "他为什么适合 AI 产品经理岗位？",
     "哪个项目最能代表他的 AI 产品能力？",
-    "他最值得面试官关注的三项优势是什么？",
   ],
   fit: [
+    "租车商家准入 AI 预审工作台具体做了什么？",
     "哪个项目最能代表他的 AI 产品能力？",
-    "他能为 AI 产品团队带来什么价值？",
     "他如何把业务问题转化为 AI 产品方案？",
   ],
   project: [
     "他在代表项目中负责哪些核心工作？",
+    "租车准入预审工作台遇到的最大挑战是什么？",
     "他如何评估并改进 AI 产品效果？",
-    "他如何把业务问题转化为 AI 产品方案？",
   ],
   experience: [
+    "请介绍一下你在滴滴的 AI 产品经理实习。",
     "他的实习经历沉淀了哪些可迁移能力？",
-    "审计经历如何帮助他做 AI 产品？",
     "应用统计学背景如何帮助他做 AI 产品？",
   ],
   skills: [
+    "租车风控工作台是怎么做模型选型和兜底设计的？",
     "他在数据分析与 AI 评测方面有哪些实践？",
-    "他对企业级 AI 场景有哪些理解？",
     "他如何使用 AI 编程工具提升交付效率？",
   ],
   gaps: [
@@ -90,8 +90,8 @@ const followUpsByCategory: Record<QuestionCategory, readonly string[]> = {
   ],
   other: [
     "60 秒了解张倬玮。",
+    "请介绍一下你在滴滴的 AI 产品经理实习。",
     "他为什么适合 AI 产品经理岗位？",
-    "哪个项目最能代表他的 AI 产品能力？",
   ],
 };
 
@@ -108,11 +108,19 @@ const evergreenRecruiterQuestions = [
   "他适合从哪些业务场景开始创造价值？",
   "他与技术团队协作时可以承担哪些职责？",
   "他的经历形成了哪些差异化能力组合？",
+  "滴滴三个实习项目的数据口径和结论边界分别是什么？",
+  "你在百度实习中具体负责什么？",
+  "Evaluator Agent 项目具体做了什么？",
+  "你如何分析和归因 AI Coding 的 Bad Case？",
+  "你在 RAG 项目中负责哪些核心工作？",
+  "你的核心技术能力有哪些？",
+  "你在数据分析与 AI 评测方面有哪些实践？",
+  "你对企业级 AI 场景有哪些理解？",
 ] as const;
 
 const explorationQuestionsByCategory: Record<QuestionCategory, readonly string[]> = {
   profile: [
-    "RAG 项目体现了他哪些产品方法？",
+    "租车商家准入 AI 预审工作台具体做了什么？",
     "他在数据分析与 AI 评测方面有哪些实践？",
   ],
   fit: [
@@ -126,7 +134,7 @@ const explorationQuestionsByCategory: Record<QuestionCategory, readonly string[]
   ],
   experience: [
     "RAG 项目体现了他哪些产品方法？",
-    "DeepFlow 体现了他哪些多 Agent 产品思考？",
+    "机票竞品比价 Skill 是如何设计的？",
   ],
   skills: [
     "他有哪些可以直接演示的项目成果？",
@@ -169,11 +177,11 @@ function normalizeQuestion(question: string) {
 }
 
 export function inferQuestionCategory(question: string): QuestionCategory {
-  if (/项目|rag|agent|deepflow|百度|ai\s*coding|贡献|核心工作|产品方案|ai\s*编程|用户增长|生产/.test(question.toLowerCase())) return "project";
+  if (/项目|工作台|diva|机票比价|比价\s*skill|rag|agent|deepflow|百度|ai\s*coding|贡献|核心工作|产品方案|ai\s*编程|用户增长|生产/.test(question.toLowerCase())) return "project";
   if (/匹配|岗位|适合|录用|优势|团队价值|带来什么价值/.test(question)) return "fit";
-  if (/实习|经历|审计|德勤|容诚|业务/.test(question)) return "experience";
+  if (/实习|经历|滴滴|百川|审计|德勤|容诚|37\s*条|反馈|业务/.test(question)) return "experience";
   if (/技能|技术|模型|英语|证书|评测|评估|效果|隐私|企业数据|企业级/.test(question)) return "skills";
-  if (/短板|不足|缺口|核实|风险|边界/.test(question)) return "gaps";
+  if (/短板|不足|缺口|核实|风险|边界|口径/.test(question)) return "gaps";
   if (/机密|提示词|忽略|编造|私人/.test(question)) return "security";
   if (/介绍|背景|教育|学校|张倬玮/.test(question)) return "profile";
   return "other";
@@ -227,21 +235,21 @@ const hrFollowUpIntents: Array<{
   {
     kind: "evidence",
     label: "证据追问",
-    matcher: /评估|评测|可信|一致性|效果|负责|贡献|证据|核验|演示|数据|指标|gate/i,
+    matcher: /评估|评测|可信|一致性|效果|负责|贡献|证据|核验|演示|数据|指标|口径|选型|gate/i,
     fallbacks: [
+      "租车风控工作台是怎么做模型选型和兜底设计的？",
       "你如何证明自动评测结果可信？",
-      "AI Coding 评测的七维指标和硬门槛如何设计？",
-      "你在百度实习中具体负责什么？",
+      "滴滴三个实习项目的数据口径和结论边界分别是什么？",
     ],
   },
   {
     kind: "retrospective",
     label: "项目复盘",
-    matcher: /转化|改进|取舍|复盘|核心工作|项目|归因|bad case/i,
+    matcher: /挑战|转化|改进|取舍|复盘|核心工作|项目|工作台|反馈|归因|bad case/i,
     fallbacks: [
+      "租车准入预审工作台遇到的最大挑战是什么？",
+      "面对运营提的 37 条反馈，你是怎么判断需求并排优先级的？",
       "你如何分析和归因 AI Coding 的 Bad Case？",
-      "Evaluator Agent 项目具体做了什么？",
-      "你如何把业务问题转化为 AI 产品方案？",
     ],
   },
   {
@@ -250,7 +258,7 @@ const hrFollowUpIntents: Array<{
     matcher: /适合|岗位|价值|胜任|优势|团队/,
     fallbacks: [
       "你为什么适合 AI 产品经理岗位？",
-      "请介绍一下你自己。",
+      "请介绍一下你在滴滴的 AI 产品经理实习。",
       "哪个项目最能代表你的 AI 产品能力？",
     ],
   },

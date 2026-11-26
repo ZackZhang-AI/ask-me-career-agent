@@ -12,6 +12,10 @@ export type ConversationControl = {
   command: ConversationCommand | null;
   history: LocalConversation[];
   activeConversationId: string | null;
+  hasActiveMessages: boolean;
+  setHasActiveMessages: (active: boolean) => void;
+  mobileDrawerOpen: boolean;
+  setMobileDrawerOpen: (open: boolean) => void;
   startNewConversation: () => void;
   enqueueQuestion: (question: string) => void;
   openConversation: (id: string) => void;

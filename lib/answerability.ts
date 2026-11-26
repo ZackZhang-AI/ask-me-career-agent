@@ -35,7 +35,7 @@ interface AnswerabilityInput {
 const ambiguousRolePattern = /(?:这个|该|上述|刚才的|前面提到的)(?:岗位|职位|岗)|这个岗/;
 const ambiguousProjectPattern = /(?:这个|该|上述|刚才的|前面提到的)(?:项目|系统)|这个项目|该项目/;
 const roleNamePattern = /[A-Za-z0-9\u4e00-\u9fa5]{2,24}(?:产品经理|岗位|职位|PM)/i;
-const projectNamePattern = /百度|AI\s*Coding|Evaluator\s*Agent|RAG|DeepFlow|Ask\s*Me|Thirty-Minute Brain|审计/i;
+const projectNamePattern = /滴滴|DiVA|租车|风控预审|预审工作台|营销素材|机票比价|比价\s*Skill|百度|AI\s*Coding|Evaluator\s*Agent|RAG|DeepFlow|Ask\s*Me|Thirty-Minute Brain|审计/i;
 const unsupportedPersonalFactPattern = /千万|百万(?:营收|收入|(?:付费)?用户)|亿元?|营收|正式(?:研发)?团队|带领.{0,8}团队|带过.{0,8}人|独立训练|千亿参数|自动驾驶|支付牌照|政治人物/;
 const scopedInterviewReasoningPattern = /(?:你怎么看|如何看待|你会如何|如果|假设|面对|遇到|为什么|为何|如何|怎么).{0,24}(?:岗位|工作|团队|压力|冲突|学习|加班|职业|选择|产品|AI|业务|协作|沟通|优先级|功能|取舍|方案|需求|资源|保留|面试)/i;
 const interviewScopePattern = /面试|岗位|工作|团队|压力|冲突|学习|加班|职业|选择|产品|AI|业务|协作|沟通|项目|经历|能力|求职|功能|取舍|方案|需求|资源|保留/i;
@@ -78,7 +78,7 @@ function clarify(reason: "ambiguous_role" | "ambiguous_project", capabilityIds: 
     capabilityIds,
     message: reason === "ambiguous_role"
       ? "为了避免泛泛而谈，您能补充一下具体岗位名称，或者 JD 中最关注的职责吗？"
-      : "为了准确回答，您指的是 AI Coding Evaluator、RAG Knowledge Base、DeepFlow，还是 Ask Me 项目？",
+      : "为了准确回答，您指的是滴滴的租车准入预审工作台 / DiVA / 机票比价 Skill，还是 RAG Knowledge Base、AI Coding Evaluator、DeepFlow 或 Ask Me 项目？",
   };
 }
 
