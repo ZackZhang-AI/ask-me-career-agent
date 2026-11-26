@@ -68,9 +68,9 @@ test("安全语义片段通过独立队列转为自适应逐字展示", () => {
   assert.doesNotMatch(chatSource, /PRESET_REVEAL_INTERVAL_MS/);
 });
 
-test("对齐作品集温润编辑风、双主题切换、移动端抽屉与溯源微交互", () => {
-  assert.match(globalStyles, /--page:\s*#eae5e0/i);
-  assert.match(globalStyles, /--accent:\s*#c74d0c/i);
+test("保持清爽现代白底绿accent风格、双主题切换、移动端抽屉与溯源微交互", () => {
+  assert.match(globalStyles, /--page:\s*#ffffff/i);
+  assert.match(globalStyles, /--accent:\s*#176b54/i);
   assert.match(globalStyles, /:root\[data-theme="dark"\]/);
   assert.match(layoutSource, /ask-me-theme/);
   assert.match(topbarSource, /<ThemeToggle/);

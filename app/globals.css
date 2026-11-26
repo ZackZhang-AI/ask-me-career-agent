@@ -1,88 +1,88 @@
 :root {
   color-scheme: light;
-  --font-serif: var(--font-bodoni), var(--font-noto-serif), "Noto Serif CJK SC", "Source Han Serif SC", "Songti SC", "STSong", Georgia, serif;
-  --font-sans: var(--font-manrope), var(--font-noto-sans), "Noto Sans CJK SC", "Source Han Sans SC", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  --font-serif: var(--font-geist), "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  --font-sans: var(--font-geist), "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
 
-  --page: #eae5e0;
-  --page-glow: #f4f0eb;
-  --sidebar: #e2dcd4;
-  --surface: #f4f0ea;
-  --surface-elevated: #faf7f2;
-  --surface-hover: #dad3c9;
-  --surface-soft: #efeae2;
-  --ink: #17140f;
-  --muted: #686057;
-  --faint: #8a8075;
-  --line: #c9c2b9;
-  --line-soft: #d7d0c7;
-  --accent: #c74d0c;
-  --accent-bright: #e05a14;
-  --accent-soft: rgba(199, 77, 12, 0.1);
-  --verified: #2b614b;
-  --verified-soft: rgba(43, 97, 75, 0.11);
-  --danger: #a63a2b;
-  --shadow-warm: rgba(54, 43, 31, 0.08);
-  --shadow-warm-strong: rgba(54, 43, 31, 0.14);
-  --selection-bg: #ffc28d;
-  --selection-ink: #17140f;
+  --page: #ffffff;
+  --page-glow: #fafbfa;
+  --sidebar: #f8f8f7;
+  --surface: #ffffff;
+  --surface-elevated: #ffffff;
+  --surface-hover: #ececea;
+  --surface-soft: #f4f4f2;
+  --ink: #202123;
+  --muted: #6b6c70;
+  --faint: #929398;
+  --line: #dfdfdc;
+  --line-soft: #ececea;
+  --accent: #176b54;
+  --accent-bright: #1e8267;
+  --accent-soft: #e2f0eb;
+  --verified: #176b54;
+  --verified-soft: #e2f0eb;
+  --danger: #b54842;
+  --shadow-warm: rgba(15, 23, 42, 0.06);
+  --shadow-warm-strong: rgba(15, 23, 42, 0.12);
+  --selection-bg: #d4ebe3;
+  --selection-ink: #113a2e;
 
-  --content: 852px;
+  --content: 840px;
   --reading-content: 760px;
-  --sidebar-width: 264px;
+  --sidebar-width: 260px;
   --topbar-height: 56px;
 }
 
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --page: #11100e;
-  --page-glow: #181613;
-  --sidebar: #161411;
-  --surface: #1c1916;
-  --surface-elevated: #25211d;
-  --surface-hover: #2c2722;
-  --surface-soft: #181512;
-  --ink: #eae5e0;
-  --muted: #b7afa5;
-  --faint: #857d73;
-  --line: #3a342e;
-  --line-soft: #2a2621;
-  --accent: #f08a4b;
-  --accent-bright: #ffab72;
-  --accent-soft: rgba(240, 138, 75, 0.14);
-  --verified: #7fc1aa;
-  --verified-soft: rgba(127, 193, 170, 0.14);
+  --page: #131416;
+  --page-glow: #181a1e;
+  --sidebar: #18191c;
+  --surface: #1d1f23;
+  --surface-elevated: #25282e;
+  --surface-hover: #2c3037;
+  --surface-soft: #1a1c20;
+  --ink: #f1f2f4;
+  --muted: #a4a7ae;
+  --faint: #787c85;
+  --line: #2e3138;
+  --line-soft: #25282e;
+  --accent: #38b891;
+  --accent-bright: #52cea7;
+  --accent-soft: rgba(56, 184, 145, 0.14);
+  --verified: #38b891;
+  --verified-soft: rgba(56, 184, 145, 0.14);
   --danger: #eb877c;
   --shadow-warm: rgba(0, 0, 0, 0.28);
-  --shadow-warm-strong: rgba(0, 0, 0, 0.42);
-  --selection-bg: #703915;
-  --selection-ink: #faf7f2;
+  --shadow-warm-strong: rgba(0, 0, 0, 0.44);
+  --selection-bg: rgba(56, 184, 145, 0.28);
+  --selection-ink: #f8fafc;
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     color-scheme: dark;
-    --page: #11100e;
-    --page-glow: #181613;
-    --sidebar: #161411;
-    --surface: #1c1916;
-    --surface-elevated: #25211d;
-    --surface-hover: #2c2722;
-    --surface-soft: #181512;
-    --ink: #eae5e0;
-    --muted: #b7afa5;
-    --faint: #857d73;
-    --line: #3a342e;
-    --line-soft: #2a2621;
-    --accent: #f08a4b;
-    --accent-bright: #ffab72;
-    --accent-soft: rgba(240, 138, 75, 0.14);
-    --verified: #7fc1aa;
-    --verified-soft: rgba(127, 193, 170, 0.14);
+    --page: #131416;
+    --page-glow: #181a1e;
+    --sidebar: #18191c;
+    --surface: #1d1f23;
+    --surface-elevated: #25282e;
+    --surface-hover: #2c3037;
+    --surface-soft: #1a1c20;
+    --ink: #f1f2f4;
+    --muted: #a4a7ae;
+    --faint: #787c85;
+    --line: #2e3138;
+    --line-soft: #25282e;
+    --accent: #38b891;
+    --accent-bright: #52cea7;
+    --accent-soft: rgba(56, 184, 145, 0.14);
+    --verified: #38b891;
+    --verified-soft: rgba(56, 184, 145, 0.14);
     --danger: #eb877c;
     --shadow-warm: rgba(0, 0, 0, 0.28);
-    --shadow-warm-strong: rgba(0, 0, 0, 0.42);
-    --selection-bg: #703915;
-    --selection-ink: #faf7f2;
+    --shadow-warm-strong: rgba(0, 0, 0, 0.44);
+    --selection-bg: rgba(56, 184, 145, 0.28);
+    --selection-ink: #f8fafc;
   }
 }
 
@@ -237,31 +237,19 @@ textarea:focus-visible {
   flex: 0 0 auto;
   align-items: center;
   justify-content: center;
-  border: 1px solid var(--line);
-  background: var(--surface-elevated);
-  color: var(--ink);
-  font-family: var(--font-serif);
-  font-style: italic;
-  font-weight: 600;
-}
-
-.brand-mark::after,
-.assistant-mark::after {
-  content: "";
-  position: absolute;
-  right: 3px;
-  bottom: 3px;
-  width: 3.5px;
-  height: 3.5px;
-  border-radius: 50%;
-  background: var(--accent);
+  border: 1px solid color-mix(in srgb, var(--accent) 26%, var(--line));
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-family: var(--font-sans);
+  font-style: normal;
+  font-weight: 700;
 }
 
 .brand-mark {
   width: 30px;
   height: 30px;
-  border-radius: 6px;
-  font-size: 16px;
+  border-radius: 8px;
+  font-size: 14px;
 }
 
 .brand-copy {
@@ -1225,22 +1213,20 @@ textarea:focus-visible {
 .project-link {
   min-width: 0;
   min-height: 144px;
-  padding: 13px 14px;
+  padding: 14px 15px;
   position: relative;
   display: flex;
   flex-direction: column;
   border: 1px solid var(--line);
-  border-top: 2px solid color-mix(in srgb, var(--accent) 68%, var(--line));
-  border-radius: 6px;
+  border-radius: 10px;
   background: var(--surface);
   transition: background 160ms ease, border-color 160ms ease, box-shadow 180ms ease, transform 160ms ease;
 }
 
 .project-link:hover {
-  background: var(--surface-elevated);
-  border-color: var(--muted);
-  border-top-color: var(--accent);
-  box-shadow: 0 18px 34px -22px var(--shadow-warm-strong);
+  background: var(--surface-soft);
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+  box-shadow: 0 12px 26px -18px var(--shadow-warm-strong);
   transform: translateY(-1px);
 }
 
@@ -1818,9 +1804,8 @@ textarea:focus-visible {
   display: grid;
   gap: 10px;
   border: 1px solid var(--line);
-  border-top: 2px solid var(--accent);
-  border-radius: 7px;
-  background: var(--surface);
+  border-radius: 12px;
+  background: var(--surface-soft);
   animation: contextual-suggestions-enter 220ms ease-out both;
 }
 
