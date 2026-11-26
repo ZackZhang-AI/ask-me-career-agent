@@ -273,7 +273,7 @@ export async function buildChatDelivery(input: PipelineInput): Promise<ChatDeliv
   }
 
   if (!decision.shouldGenerate) {
-    const localGate = validateAnswer(plan.fallbackAnswer, plan);
+    const localGate = validateAnswer(plan.fallbackAnswer, { ...plan, recentAnswers: [] });
     if (!localGate.passed) {
       return emptyDelivery({
         message: serviceUnavailableMessage(),

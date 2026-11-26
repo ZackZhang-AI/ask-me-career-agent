@@ -50,7 +50,7 @@ test("达到上线内容最低数量且经历与项目可单独定位", () => {
 });
 
 test("STAR 已确认公开且保持证据边界", () => {
-  assert.equal(starStories.length, 11);
+  assert.equal(starStories.length, 15);
   assert.equal(starStories.every((item) => item.visibility === "public" && item.status === "active" && item.verification === "self_attested"), true);
   assert.equal(starStories.every((item) => item.limitations.length > 0 && item.claimIds.length > 0 && item.sourceIds.length > 0), true);
   const serialized = JSON.stringify(starStories);
@@ -63,6 +63,7 @@ test("Obsidian 审核通过的九条知识保留精确来源映射", () => {
   const approved = knowledge.filter((item) => /^K(?:1[3-9]|2[01])$/.test(item.id));
   assert.equal(approved.length, 9);
   assert.deepEqual(approved.map((item) => item.id), ["K13", "K14", "K15", "K16", "K17", "K18", "K19", "K20", "K21"]);
+  assert.deepEqual(approved.map((item) => item.id).length, 9);
   assert.deepEqual(approved.map((item) => item.provenance?.candidateId), [
     "obs_eb2e2a404d29bbf2",
     "obs_e4e99c5f3491a3a0",
@@ -101,10 +102,10 @@ test("Obsidian 审核通过的九条知识保留精确来源映射", () => {
 test("核心问题稳定匹配标准答案和评测要求", () => {
   const matched = matchStableAnswer("哪个项目最能代表他的 AI 产品能力？");
   assert.equal(matched?.id, "A03");
-  assert.match(matched?.standardAnswer ?? "", /RAG Knowledge Base System/);
+  assert.match(matched?.standardAnswer ?? "", /租车商家准入|预审/);
   assert.doesNotMatch(matched?.standardAnswer ?? "", /AI Coding Evaluator Agent|百度实习/);
-  assert.deepEqual(matched?.requiredClaimIds, ["C3", "C17", "C18", "C19", "C20", "C21"]);
-  assert.equal(matched?.requiredSourceIds.includes("S3"), true);
+  assert.deepEqual(matched?.requiredClaimIds, ["C31", "C32", "C33", "C34"]);
+  assert.equal(matched?.requiredSourceIds.includes("S14"), true);
 });
 
 test("60 秒介绍提供招聘判断、核心证据与完整来源", () => {
@@ -113,10 +114,11 @@ test("60 秒介绍提供招聘判断、核心证据与完整来源", () => {
   assert.equal((matched?.details?.length ?? 0) >= 4, true);
   assert.equal(matched?.requiredSourceIds.includes("S1"), true);
   assert.equal(matched?.requiredSourceIds.includes("S11"), true);
+  assert.equal(matched?.requiredSourceIds.includes("S14"), true);
 });
 
 test("招聘方高频问题都有结构化证据", () => {
-  const priorityIds = new Set(["A01", "A02", "A03", "A14", "A15"]);
+  const priorityIds = new Set(["A01", "A02", "A03", "A14", "A15", "A37", "A38", "A39", "A41", "A43"]);
   const priorityAnswers = stableAnswers.filter((answer) => priorityIds.has(answer.id));
   assert.equal(priorityAnswers.length, priorityIds.size);
   for (const answer of priorityAnswers) assert.equal((answer.details?.length ?? 0) >= 4, true, answer.id);
@@ -135,14 +137,14 @@ test("核心回答用克制的短词组突出招聘重点", () => {
 test("百川实习按最新简历日期归档且 RAG 明确归属该实习", () => {
   const internship = matchStableAnswer("请介绍一下你的百川智能实习。");
   const experience = knowledge.find((item) => item.id === "K27");
-  const representative = matchStableAnswer("哪个项目最能代表他的 AI 产品能力？");
+  const ragProject = matchStableAnswer("请介绍一下你的 RAG 知识库项目。");
   assert.equal(internship?.id, "A35");
   assert.match(internship?.standardAnswer ?? "", /2026 年 4 月到 6 月/);
   assert.match(internship?.standardAnswer ?? "", /医疗 RAG/);
   assert.equal(internship?.requiredSourceIds.includes("S12"), true);
   assert.match(experience?.content ?? "", /2026 年 4 月至 6 月/);
-  assert.equal(representative?.requiredClaimIds.includes("C18"), true);
-  assert.equal(representative?.requiredSourceIds.includes("S12"), true);
+  assert.equal(ragProject?.requiredClaimIds.includes("C18"), true);
+  assert.equal(ragProject?.requiredSourceIds.includes("S12"), true);
 });
 
 test("最新简历成为回答主线并串联实习与全部项目", () => {
@@ -155,6 +157,7 @@ test("最新简历成为回答主线并串联实习与全部项目", () => {
   assert.match(journey?.standardAnswer ?? "", /德勤 IT 审计/);
   assert.match(journey?.standardAnswer ?? "", /百川医疗 RAG/);
   assert.match(journey?.standardAnswer ?? "", /百度/);
+  assert.match(journey?.standardAnswer ?? "", /滴滴/);
   assert.match(journey?.standardAnswer ?? "", /Ask Me/);
   assert.match(journey?.standardAnswer ?? "", /DeepFlow/);
   assert.match(journey?.standardAnswer ?? "", /Resume Autofill AI/);
@@ -162,7 +165,61 @@ test("最新简历成为回答主线并串联实习与全部项目", () => {
   assert.match(askMe?.standardAnswer ?? "", /48 个 AI 面试用例/);
   assert.match(deepFlow?.standardAnswer ?? "", /Hybrid 检索/);
   assert.match(deepFlow?.standardAnswer ?? "", /Agent Trace/);
-  assert.match(resumeSource?.title ?? "", /2026-08-23/);
+  assert.match(resumeSource?.title ?? "", /2026-11-26/);
+});
+
+test("滴滴三项核心实习项目及严苛数字口径完整入库", () => {
+  const didiInternship = matchStableAnswer("请介绍一下你在滴滴的 AI 产品经理实习。");
+  const rentalOverview = matchStableAnswer("租车商家准入 AI 预审工作台具体做了什么？");
+  const rentalChallenge = matchStableAnswer("租车准入预审工作台遇到的最大挑战是什么？");
+  const rentalModel = matchStableAnswer("租车风控工作台是怎么做模型选型和兜底设计的？");
+  const divaOverview = matchStableAnswer("请介绍一下滴滴的 DiVA AI 营销素材生产工作台项目。");
+  const divaFeedback = matchStableAnswer("面对运营提的 37 条反馈，你是怎么判断需求并排优先级的？");
+  const flightSkill = matchStableAnswer("机票竞品比价 Skill 是如何设计的？");
+  const didiBoundaries = matchStableAnswer("滴滴三个实习项目的数据口径和结论边界分别是什么？");
+
+  assert.equal(didiInternship?.id, "A37");
+  assert.match(didiInternship?.standardAnswer ?? "", /ABC 智能一组/);
+  assert.equal(didiInternship?.requiredSourceIds.includes("S14"), true);
+
+  assert.equal(rentalOverview?.id, "A38");
+  assert.match(rentalOverview?.standardAnswer ?? "", /120 分钟/);
+  assert.match(rentalOverview?.standardAnswer ?? "", /30\s*分钟/);
+
+  assert.equal(rentalChallenge?.id, "A39");
+  assert.match(rentalChallenge?.standardAnswer ?? "", /15\s*处假冲突/);
+  assert.match(rentalChallenge?.standardAnswer ?? "", /40 份/);
+  assert.match(rentalChallenge?.standardAnswer ?? "", /118 份/);
+  assert.match(rentalChallenge?.standardAnswer ?? "", /45\s*秒/);
+
+  assert.equal(rentalModel?.id, "A40");
+  assert.match(rentalModel?.standardAnswer ?? "", /31\/38/);
+  assert.match(rentalModel?.standardAnswer ?? "", /DeepSeek Flash/);
+  assert.match(rentalModel?.standardAnswer ?? "", /575 笔/);
+  assert.match(rentalModel?.standardAnswer ?? "", /234 笔/);
+  assert.doesNotMatch(rentalModel?.standardAnswer ?? "", /GPT-6\.1/);
+
+  assert.equal(divaOverview?.id, "A41");
+  assert.match(divaOverview?.standardAnswer ?? "", /11 个已验收广告位/);
+  assert.match(divaOverview?.standardAnswer ?? "", /60 多份/);
+  assert.match(divaOverview?.standardAnswer ?? "", /40 分钟/);
+  assert.match(divaOverview?.standardAnswer ?? "", /80%/);
+
+  assert.equal(divaFeedback?.id, "A42");
+  assert.match(divaFeedback?.standardAnswer ?? "", /37 条/);
+  assert.match(divaFeedback?.standardAnswer ?? "", /15 条/);
+  assert.match(divaFeedback?.standardAnswer ?? "", /12 条/);
+
+  assert.equal(flightSkill?.id, "A43");
+  assert.match(flightSkill?.standardAnswer ?? "", /80 组/);
+  assert.match(flightSkill?.standardAnswer ?? "", /2,500 条/);
+  assert.match(flightSkill?.standardAnswer ?? "", /10 万条/);
+  assert.match(flightSkill?.standardAnswer ?? "", /57 分钟/);
+  assert.match(flightSkill?.standardAnswer ?? "", /42 分钟/);
+
+  assert.equal(didiBoundaries?.id, "A44");
+  assert.match(didiBoundaries?.standardAnswer ?? "", /不冒充原件 OCR 准确率/);
+  assert.match(didiBoundaries?.standardAnswer ?? "", /而非有效可比航班对/);
 });
 
 test("项目别名和最近上下文可解析多轮指代", () => {
@@ -172,6 +229,11 @@ test("项目别名和最近上下文可解析多轮指代", () => {
     history: [{ role: "assistant", content: "刚才介绍的是 DeepFlow 多 Agent 研究工作台。" }],
   });
   assert.equal(result[0]?.id, "K5");
+
+  const didiFollowup = retrieveKnowledge("这个项目里模型是怎么选的？", {
+    history: [{ role: "user", content: "租车商家准入 AI 预审工作台具体做了什么？" }],
+  });
+  assert.equal(didiFollowup.some((item) => item.id === "K43"), true);
 });
 
 test("检索只返回公开、有效且非未验证内容", () => {
@@ -183,13 +245,16 @@ test("检索只返回公开、有效且非未验证内容", () => {
   }
 });
 
-test("百度确认经历进入内容目录且占位与联系方式不进入", () => {
+test("百度与滴滴确认经历进入内容目录且占位与联系方式不进入", () => {
   const serialized = JSON.stringify(contentCatalog);
   assert.equal(serialized.includes("2026.X"), false);
   assert.equal(serialized.includes("百度"), true);
+  assert.equal(serialized.includes("滴滴"), true);
+  assert.equal(serialized.includes("DiVA"), true);
   assert.equal(serialized.includes("Evaluator Agent"), true);
   assert.equal(serialized.includes("zackzhang124@163.com"), false);
   assert.equal(serialized.includes("15812106204"), false);
+  assert.equal(serialized.includes("GPT-6.1"), false);
 });
 
 test("百度最新手册替换单样例口径并保留 Pilot 结论边界", () => {
@@ -228,13 +293,14 @@ test("30、60、90 秒介绍独立成稿且时长层次清晰", () => {
   assert.equal(new Set(Object.values(introductions)).size, 3);
   for (const answer of Object.values(introductions)) {
     assert.match(answer, /百度/);
+    assert.match(answer, /滴滴/);
     assert.doesNotMatch(answer, /Claim|Source|证据边界/);
   }
 });
 
 test("核心问题拥有独立判断任务，不复用同一份回答", () => {
   assert.equal(stableAnswers.every((answer) => answer.evaluationGoal && answer.exclusivePoints.length && answer.followUpQuestions.length), true);
-  const priority = ["A01", "A02", "A03", "A05", "A15"].map((id) => stableAnswers.find((answer) => answer.id === id)!);
+  const priority = ["A01", "A02", "A03", "A05", "A15", "A37", "A38", "A39", "A41", "A43"].map((id) => stableAnswers.find((answer) => answer.id === id)!);
   assert.equal(new Set(priority.map((answer) => answer.responseShape)).size >= 4, true);
   for (let left = 0; left < priority.length; left += 1) {
     for (let right = left + 1; right < priority.length; right += 1) {

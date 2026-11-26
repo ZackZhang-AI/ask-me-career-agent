@@ -132,9 +132,9 @@ export async function planDeepSeekQuestion(input: PlanQuestionInput) {
 可选 questionMode：agent_meta（询问 Agent 能力或质疑回答方式）、candidate_fact（候选人的真实经历、结果或任职事实）、candidate_reasoning（面试中的方法、动机、假设和判断）。
 可选 evidencePolicy：required（必须有公开事实）、supporting（事实用于增强但不限制方法论）、none（Agent 能力说明或通用回答）。
 可选 answerIntent：agent_identity, capability_scope, introduction, career_transition, role_fit, representative_project, project_overview, project_problem, contribution, ai_collaboration, challenge, diagnosis, result, limitation, skills, experience, experience_value, privacy, education, credentials, hiring_recommendation, general。
-可选 topic：profile, role_fit, baidu, rag, deepflow, ask_me, local_tools, audit, statistics, skills, enterprise_ai, agent, unknown。
+可选 topic：profile, role_fit, didi, baidu, rag, deepflow, ask_me, local_tools, audit, statistics, skills, enterprise_ai, agent, unknown。
 可选 facet：overview, problem, method, contribution, architecture, collaboration, evaluation, transfer, example, result, boundary, fit。
-activeProject 只能省略或选择 baidu-ai-coding-evaluation, rag-knowledge-base, deepflow, ask-me, local-first-tools, audit-tools。focusTerms 与 requestedDimensions 各写本题需要的 1-4 项；targetRole 仅在问题明确提到岗位时填写；confidence 是 0-1。必须输出完整 JSON。`,
+activeProject 只能省略或选择 didi-internship, didi-rental-audit, didi-diva, didi-flight-skill, baidu-ai-coding-evaluation, rag-knowledge-base, deepflow, ask-me, local-first-tools, audit-tools。focusTerms 与 requestedDimensions 各写本题需要的 1-4 项；targetRole 仅在问题明确提到岗位时填写；confidence 是 0-1。必须输出完整 JSON。`,
       prompt: `最近问题：${recentQuestions.length ? recentQuestions.join("｜") : "无"}\n当前问题：${input.question}\n结构示例：{"topic":"profile","facet":"transfer","answerIntent":"career_transition","questionMode":"candidate_fact","evidencePolicy":"required","focusTerms":["职业转型动机","能力连续性"],"requestedDimensions":["选择原因","经历迁移"],"useHistory":true,"confidence":0.92}`,
       providerOptions: deepSeekProviderOptions("fast"),
       temperature: 0.1,

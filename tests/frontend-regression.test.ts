@@ -9,6 +9,9 @@ const actionsSource = readFileSync(new URL("../components/answer-actions.tsx", i
 const globalStyles = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8");
 const revealSource = readFileSync(new URL("../components/use-stream-reveal.ts", import.meta.url), "utf8");
 const revealCoreSource = readFileSync(new URL("../lib/stream-reveal.ts", import.meta.url), "utf8");
+const topbarSource = readFileSync(new URL("../components/chat-topbar.tsx", import.meta.url), "utf8");
+const formattedAnswerSource = readFileSync(new URL("../components/formatted-answer.tsx", import.meta.url), "utf8");
+const evidencePanelSource = readFileSync(new URL("../components/evidence-panel.tsx", import.meta.url), "utf8");
 
 test("回答首字出现前保留可感知的加载状态", () => {
   const loadingSources = `${chatSource}\n${thinkingSource}`;
@@ -61,4 +64,26 @@ test("安全语义片段通过独立队列转为自适应逐字展示", () => {
   assert.match(revealCoreSource, /Intl\.Segmenter\("zh", \{ granularity: "grapheme" \}\)/);
   assert.match(revealCoreSource, /MAX_FINISHING_TAIL_MS = 1_500/);
   assert.doesNotMatch(chatSource, /PRESET_REVEAL_INTERVAL_MS/);
+});
+
+test("保持原版简洁清爽白底绿accent视觉，同时保留移动端抽屉、能力内联展开与引用微交互", () => {
+  assert.match(globalStyles, /--page:\s*#ffffff/i);
+  assert.match(globalStyles, /--sidebar:\s*#f8f8f7/i);
+  assert.match(globalStyles, /--accent:\s*#176b54/i);
+  assert.match(chatSource, /我是\{profile\.name\}的 AI Career Agent/);
+  assert.match(chatSource, /从您可能最关心的问题开始吧。/);
+  assert.match(appFrameSource, /AI Career Agent/);
+  assert.match(appFrameSource, /快速了解/);
+  assert.doesNotMatch(appFrameSource, /CANDIDATE INDEX/);
+  assert.doesNotMatch(chatSource, /CAREER AGENT · PUBLIC EVIDENCE/);
+  assert.match(topbarSource, /href="\/resume"/);
+  assert.match(topbarSource, /className="return-home"/);
+  assert.match(appFrameSource, /is-mobile-open/);
+  assert.match(appFrameSource, /strength-panel/);
+  assert.doesNotMatch(appFrameSource, /strength-flyout/);
+  assert.match(chatSource, /event\.nativeEvent\.isComposing/);
+  assert.doesNotMatch(chatSource, /disabled=\{loading\}\s*\/>/);
+  assert.match(formattedAnswerSource, /\.sort\(\(left, right\) =>/);
+  assert.match(evidencePanelSource, /className="source-index"/);
+  assert.match(evidencePanelSource, /is-highlighted/);
 });

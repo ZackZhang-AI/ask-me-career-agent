@@ -25,6 +25,7 @@ export type ConversationDepth = "overview" | "follow_up" | "deep_dive";
 export type QuestionTopic =
   | "profile"
   | "role_fit"
+  | "didi"
   | "baidu"
   | "rag"
   | "deepflow"

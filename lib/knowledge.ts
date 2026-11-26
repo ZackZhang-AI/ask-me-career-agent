@@ -73,7 +73,8 @@ export function resolveRetrievalQuery(question: string, history: ChatMessage[] =
   const normalized = normalizeSearchText(base);
   const matchedProjects = Object.entries(contentCatalog.aliases)
     .filter(([, aliases]) => aliases.some((alias) => normalized.includes(normalizeSearchText(alias))))
-    .map(([project]) => project);
+    .map(([project]) => project)
+    .filter((project, _, all) => project !== "didi-internship" || !all.some((item) => ["didi-rental-audit", "didi-diva", "didi-flight-skill"].includes(item)));
   return {
     text: base.trim(),
     normalized,

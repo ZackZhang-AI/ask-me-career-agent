@@ -108,3 +108,39 @@ test("长篇契约回答使用两到三个高信息量阅读重点", () => {
     assert.equal(emphasized.every(isHighSignalEmphasis), true, `${contract.id}: ${emphasized.join(" | ")}`);
   }
 });
+
+test("滴滴实习与三大项目契约精准绑定子项目并保持多轮指代隔离", () => {
+  const didiFixtures = [
+    { question: "请介绍一下你在滴滴的 AI 产品经理实习。", id: "didi_internship", project: "didi-internship", mustMatch: /ABC 智能一组/ },
+    { question: "租车商家准入 AI 预审工作台具体做了什么？", id: "didi_rental_overview", project: "didi-rental-audit", mustMatch: /120 分钟/ },
+    { question: "租车准入预审工作台遇到的最大挑战是什么？", id: "didi_rental_challenge", project: "didi-rental-audit", mustMatch: /45\s*秒/ },
+    { question: "租车风控工作台是怎么做模型选型和兜底设计的？", id: "didi_rental_model", project: "didi-rental-audit", mustMatch: /31\/38/ },
+    { question: "银行流水和征信核验中哪些交给规则、哪些留给人工？", id: "didi_rental_rules", project: "didi-rental-audit", mustMatch: /575\s*笔/ },
+    { question: "DiVA 营销素材工作台为什么采用模板约束加局部生成？", id: "didi_diva_overview", project: "didi-diva", mustMatch: /11 个已验收广告位/ },
+    { question: "面对运营提的 37 条反馈，你是怎么判断需求并排优先级的？", id: "didi_diva_feedback", project: "didi-diva", mustMatch: /37 条/ },
+    { question: "机票竞品比价 Skill 是如何设计的？", id: "didi_flight_skill", project: "didi-flight-skill", mustMatch: /2,500 条/ },
+    { question: "滴滴三个实习项目的数据口径和结论边界分别是什么？", id: "didi_metrics_boundary", project: "didi-internship", mustMatch: /不冒充原件 OCR 准确率/ },
+  ] as const;
+
+  for (const fixture of didiFixtures) {
+    const contract = findQuestionContract(fixture.question);
+    assert.equal(contract?.id, fixture.id);
+    assert.equal(contract?.frame.topic, "didi");
+    assert.equal(contract?.frame.activeProject, fixture.project);
+    assert.match(contract?.fallbackAnswer ?? "", fixture.mustMatch);
+    assert.doesNotMatch(contract?.fallbackAnswer ?? "", /DeepFlow|Thirty-Minute Brain|Evaluator Agent|GPT-6\.1/);
+  }
+
+  const divaFollowupFrame = buildLocalQuestionFrame("这个项目里你本人具体负责什么？", [
+    { role: "user", content: "DiVA 营销素材工作台为什么采用模板约束加局部生成？" },
+    { role: "assistant", content: "DiVA 采用模板约束加局部生成。" },
+  ]);
+  assert.equal(divaFollowupFrame.topic, "didi");
+  assert.equal(divaFollowupFrame.activeProject, "didi-diva");
+
+  const flightFollowupFrame = buildLocalQuestionFrame("它遇到登录验证码或者单步失败怎么恢复？", [
+    { role: "user", content: "机票竞品比价 Skill 是如何设计的？" },
+  ]);
+  assert.equal(flightFollowupFrame.topic, "didi");
+  assert.equal(flightFollowupFrame.activeProject, "didi-flight-skill");
+});

@@ -1,10 +1,12 @@
 export const profile = {
   name: "张倬玮",
+  englishName: "ZACK ZHANG",
   role: "AI 产品经理候选人",
   school: "东北大学",
   schoolTags: ["985", "211", "双一流"],
   major: "应用统计学",
   graduation: "2027 届",
+  portfolio: "https://zackzhang.vercel.app",
   github: "https://github.com/ZackZhang-AI",
   email: "zackzhang124@163.com",
   phone: "15812106204",

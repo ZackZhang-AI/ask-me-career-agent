@@ -20,6 +20,7 @@ interface EvidencePanelProps {
   answerIndex: number;
   sources: Source[];
   expanded: boolean;
+  highlightedSourceId?: string | null;
   onExpandedChange: (expanded: boolean) => void;
   onSourceOpen: (sourceId: string) => void;
 }
@@ -28,6 +29,7 @@ export function EvidencePanel({
   answerIndex,
   sources,
   expanded,
+  highlightedSourceId,
   onExpandedChange,
   onSourceOpen,
 }: EvidencePanelProps) {
@@ -42,23 +44,40 @@ export function EvidencePanel({
         onToggle={(event) => onExpandedChange(event.currentTarget.open)}
       >
         <summary>
-          <span className="evidence-summary-title">核验依据</span>
+          <span className="evidence-summary-title">
+            核验依据
+            <small className="evidence-count">{sources.length}</small>
+          </span>
           <span className="evidence-preview" aria-label="关键依据">
-            {keySources.map((source) => <span key={source.id}>{source.title}</span>)}
+            {keySources.map((source, idx) => (
+              <span key={source.id}>
+                <em>{idx + 1}</em>
+                {source.title}
+              </span>
+            ))}
             {sources.length > keySources.length && <small>+{sources.length - keySources.length}</small>}
           </span>
-          <CaretDownIcon size={15} aria-hidden="true" />
+          <CaretDownIcon size={14} aria-hidden="true" />
         </summary>
         <div className="evidence-list">
-          {sources.map((source) => (
+          {sources.map((source, sourceIdx) => (
             <details
               id={`source-${answerIndex}-${source.id}`}
+              className={`source-item${highlightedSourceId === source.id ? " is-highlighted" : ""}`}
               key={source.id}
               onToggle={(event) => event.currentTarget.open && onSourceOpen(source.id)}
             >
               <summary>
-                <span>{source.title}</span>
-                <CaretDownIcon size={15} aria-hidden="true" />
+                <span className="source-summary-main">
+                  <span className="source-index" aria-hidden="true">{sourceIdx + 1}</span>
+                  <span className="source-title-text">{source.title}</span>
+                </span>
+                <span className="source-summary-meta">
+                  <span className={`source-badge is-${source.verification}`}>
+                    {verificationLabels[source.verification]}
+                  </span>
+                  <CaretDownIcon size={14} aria-hidden="true" />
+                </span>
               </summary>
               <div className="source-detail">
                 <dl className="source-facts">
@@ -67,12 +86,14 @@ export function EvidencePanel({
                   <div><dt>可核验内容</dt><dd>{source.supports}</dd></div>
                   <div><dt>当前不能证明</dt><dd>{source.limitations}</dd></div>
                 </dl>
-                <p className="source-checked">最后检查：{source.lastChecked}</p>
-                {source.url && (
-                  <a href={source.url} target="_blank" rel="noreferrer">
-                    查看公开来源 <ArrowUpRightIcon size={14} aria-hidden="true" />
-                  </a>
-                )}
+                <div className="source-detail-footer">
+                  <p className="source-checked">最后检查：{source.lastChecked}</p>
+                  {source.url && (
+                    <a href={source.url} target="_blank" rel="noreferrer">
+                      查看公开来源 <ArrowUpRightIcon size={13} aria-hidden="true" />
+                    </a>
+                  )}
+                </div>
               </div>
             </details>
           ))}

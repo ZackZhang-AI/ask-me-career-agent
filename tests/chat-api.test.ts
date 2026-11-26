@@ -103,10 +103,10 @@ test("安全拒答、证据不足与核心稳定回答返回标准 NDJSON 状态
   assert.equal(verifiedMeta.mode, "stable");
   assert.equal(verifiedMeta.responseStatus, "completed");
   assert.equal(verifiedMeta.disposition, "answer");
-  assert.equal((verifiedMeta.claimIds as string[]).includes("C3"), true);
-  assert.equal((verifiedMeta.sourceIds as string[]).includes("S3"), true);
+  assert.equal((verifiedMeta.claimIds as string[]).includes("C32"), true);
+  assert.equal((verifiedMeta.sourceIds as string[]).includes("S14"), true);
   assert.equal(Array.isArray(verifiedMeta.citations), true);
-  assert.equal((verifiedMeta.citations as Array<{ sourceIds: string[] }>).some((citation) => citation.sourceIds.includes("S3")), true);
+  assert.equal((verifiedMeta.citations as Array<{ sourceIds: string[] }>).some((citation) => citation.sourceIds.includes("S14")), true);
   assert.equal(typeof verified.at(-1).latencyMs, "number");
   assert.equal(verified[0].type, "stage");
   assert.equal(verified[0].stage, "understanding");
@@ -418,7 +418,7 @@ test("核心稳定回答不进入模型且始终使用事实骨架", async () =>
   const answer = responseEvents.filter((event) => event.type === "delta").map((event) => event.content).join("");
   assert.equal(calls, 0);
   assert.equal(metaEvent(responseEvents).mode, "stable");
-  assert.match(answer, /RAG Knowledge Base System/);
+  assert.match(answer, /租车商家准入/);
   assert.doesNotMatch(answer, /AI Coding Evaluator Agent|百度实习/);
   assert.doesNotMatch(answer, /校园数据门户|30 人|90%/);
   assert.equal(responseEvents.at(-1).responseStatus, "completed");
@@ -504,3 +504,80 @@ test("Pro 审校预算不足时不生成未经审校的开放题答案", async (
   assert.match(answer, /抱歉，这次回答没有成功生成/);
   assert.doesNotMatch(answer, /工程团队|客户交付|积极反馈/);
 });
+
+test("滴滴实习与风控挑战问题通过 /api/chat 返回完整第一人称流式回答与 S14 来源", async () => {
+  const internshipEvents = await events(await POST(request({
+    sessionId: "api-didi-internship",
+    messages: [{ role: "user", content: "请介绍一下你在滴滴的 AI 产品经理实习。" }],
+  })));
+  const internshipAnswer = internshipEvents
+    .filter((event) => event.type === "delta")
+    .map((event) => event.content)
+    .join("");
+  const internshipMeta = metaEvent(internshipEvents);
+
+  assert.equal(internshipMeta.mode, "stable");
+  assert.equal((internshipMeta.sourceIds as string[] | undefined)?.includes("S14"), true);
+  assert.match(internshipAnswer, /ABC 智能一组/);
+  assert.match(internshipAnswer, /120 分钟/);
+  assert.match(internshipAnswer, /DiVA/);
+  assert.match(internshipAnswer, /2,500 条/);
+
+  const challengeEvents = await events(await POST(request({
+    sessionId: "api-didi-challenge",
+    messages: [
+      { role: "user", content: "租车商家准入 AI 预审工作台具体做了什么？" },
+      { role: "assistant", content: "租车商家准入 AI 预审工作台完成了 100 多笔试点预审。" },
+      { role: "user", content: "租车准入预审工作台遇到的最大挑战是什么？" },
+    ],
+  })));
+  const challengeAnswer = challengeEvents
+    .filter((event) => event.type === "delta")
+    .map((event) => event.content)
+    .join("");
+  const challengeMeta = metaEvent(challengeEvents);
+
+  assert.equal(challengeMeta.mode, "stable");
+  assert.equal((challengeMeta.sourceIds as string[] | undefined)?.includes("S14"), true);
+  assert.match(challengeAnswer, /15\s*处假冲突/);
+  assert.match(challengeAnswer, /40 份/);
+  assert.match(challengeAnswer, /45\s*秒/);
+  assert.equal((challengeMeta.followUpQuestions as string[] | undefined)?.length, 3);
+});
+
+test("口语化求职动机问题与同会话重复核心问题均稳定返回回答而不误触发服务不可用", async () => {
+  const whyPmEvents = await events(await POST(request({
+    sessionId: "api-why-pm",
+    messages: [{ role: "user", content: "你为什么做产品经理" }],
+  })));
+  const whyPmAnswer = whyPmEvents.filter((event) => event.type === "delta").map((event) => event.content).join("");
+  assert.equal(metaEvent(whyPmEvents).mode, "stable");
+  assert.equal(whyPmEvents.at(-1)?.responseStatus, "completed");
+  assert.doesNotMatch(whyPmAnswer, /抱歉，这次回答没有成功生成/);
+  assert.match(whyPmAnswer, /产品经理/);
+  assert.match(whyPmAnswer, /滴滴|百度|百川/);
+
+  const firstRoleFitEvents = await events(await POST(request({
+    sessionId: "api-repeat-role-fit",
+    messages: [{ role: "user", content: "你为什么适合 AI 产品经理岗位？" }],
+  })));
+  const firstRoleFitAnswer = firstRoleFitEvents.filter((event) => event.type === "delta").map((event) => event.content).join("");
+  assert.equal(firstRoleFitEvents.at(-1)?.responseStatus, "completed");
+
+  const secondRoleFitEvents = await events(await POST(request({
+    sessionId: "api-repeat-role-fit",
+    messages: [
+      { role: "user", content: "你为什么适合 AI 产品经理岗位？" },
+      { role: "assistant", content: firstRoleFitAnswer },
+      { role: "user", content: "你为什么做产品经理" },
+      { role: "assistant", content: "抱歉，这次回答没有成功生成。为了避免展示不完整或不准确的内容，我先没有保留它。你可以点击“重新回答”再试一次。" },
+      { role: "user", content: "你为什么适合 AI 产品经理岗位？" },
+    ],
+  })));
+  const secondRoleFitAnswer = secondRoleFitEvents.filter((event) => event.type === "delta").map((event) => event.content).join("");
+  assert.equal(metaEvent(secondRoleFitEvents).mode, "stable");
+  assert.equal(secondRoleFitEvents.at(-1)?.responseStatus, "completed");
+  assert.doesNotMatch(secondRoleFitAnswer, /抱歉，这次回答没有成功生成/);
+  assert.match(secondRoleFitAnswer, /适合 AI 产品经理岗位/);
+});
+
