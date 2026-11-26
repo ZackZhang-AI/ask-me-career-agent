@@ -7,7 +7,7 @@ import { getFollowUpQuestions } from "./question-suggestions.ts";
 import { buildLocalQuestionFrame, findQuestionContract, frameFromContract } from "./question-contracts";
 import { buildAnswerBrief, buildInterviewConversationContext } from "./interview-context";
 
-const boundaryPattern = /短板|不足|限制|边界|风险|真实性|真实数据|用户(?:数|规模|反馈|测试)|增长|留存|生产(?:状态|规模|环境)|完成(?:了吗|情况)|未完成|个人贡献(?:比例|边界)/;
+const boundaryPattern = /短板|不足|缺点|弱点|限制|边界|风险|真实性|真实数据|用户(?:数|规模|反馈|测试)|增长|留存|生产(?:状态|规模|环境)|完成(?:了吗|情况)|未完成|个人贡献(?:比例|边界)/;
 const knownOrganizations = ["东北大学", "百川智能", "百度", "滴滴", "德勤", "容诚", "ACCA"];
 const diagnosticMethodFacts = [
   "如果同一组 Bad Case 没有改善，优先确认评测口径与失败分类是否稳定，避免把指标波动误判为方案变化。",
@@ -38,8 +38,8 @@ const intentPatterns: Array<[AnswerIntent, RegExp]> = [
   ["credentials", /证书|ACCA|资质/],
   ["skills", /技术能力|技术栈|会什么|数据分析|(?:AI\s*)?评测|如何评估|有哪些实践/i],
   ["result", /结果|量化(?:结果|效果)|效果数据|用户规模|增长|留存|上线|生产状态|完成(?:了吗|情况)/],
-  ["limitation", /短板|不足|弱点|限制|能力缺口/],
-  ["career_transition", /(?:为什么|为何).{0,8}(?:从)?(?:财会|会计|财务|审计|统计)(?!问题)(?:背景|专业|经历)?.{0,8}(?:转向|转(?!化)|选择|改做|走到|进入).{0,8}(?:AI\s*产品|产品经理|产品)|(?:(?:从)(?:财会|会计|财务|审计|统计|原专业|传统行业)|(?:财会|会计|财务|审计|统计|原专业|传统行业)(?:背景|专业|经历)).{0,12}(?:转向|转(?!化)|选择|改做|走到|进入).{0,8}(?:AI\s*产品|产品经理|产品)|(?:为什么|为何).{0,8}转向\s*AI\s*产品/i],
+  ["limitation", /短板|不足|缺点|弱点|限制|能力缺口/],
+  ["career_transition", /(?:为什么|为何).{0,8}(?:从)?(?:财会|会计|财务|审计|统计)(?!问题)(?:背景|专业|经历)?.{0,8}(?:转向|转(?!化)|选择|改做|走到|进入).{0,8}(?:AI\s*产品|产品经理|产品)|(?:(?:从)(?:财会|会计|财务|审计|统计|原专业|传统行业)|(?:财会|会计|财务|审计|统计|原专业|传统行业)(?:背景|专业|经历)).{0,12}(?:转向|转(?!化)|选择|改做|走到|进入).{0,8}(?:AI\s*产品|产品经理|产品)|(?:为什么|为何).{0,8}转向\s*AI\s*产品|(?:为什么|为何).{0,8}(?!.{0,6}(?:适合|胜任|契合))(?:想|要|决定|选择)?(?:做|从事|当|走|求职|投递)\s*(?:AI\s*产品(?:经理)?|产品经理|产品(?:岗位|工作|方向))|(?:求职动机|职业选择原因)/i],
   ["role_fit", /为什么(?:选|选择|适合)|岗位匹配|入职.*做什么|优势/],
   ["representative_project", /代表项目|最能代表|最有价值的项目/],
   ["introduction", /自我介绍|介绍一下|60\s*秒/],
@@ -295,7 +295,11 @@ export function buildAnswerPlan(
   const frame = frameInput ?? (contract ? frameFromContract(contract) : buildLocalQuestionFrame(question, history));
   const intent = intentFromFrame(frame, detectIntent(question, stableAnswer));
   const skeleton = stableAnswer?.factSkeleton;
-  const historyText = history.filter((message) => message.role === "assistant").slice(-6).map((message) => message.content).join("\n");
+  const historyText = history
+    .filter((message) => message.role === "assistant" && !message.content.startsWith("抱歉，这次回答没有成功生成"))
+    .slice(-6)
+    .map((message) => message.content)
+    .join("\n");
   const candidateStories = getRelatedStarStories(items, 4);
   const conversationContext = buildInterviewConversationContext({ history, frame, items, stories: candidateStories });
   const storyIntent = ["challenge", "contribution", "representative_project"].includes(intent)
@@ -397,7 +401,10 @@ export function buildAnswerPlan(
     closingPurpose,
     targetLength: contract?.frame.targetLength ?? targetLengthFor(intent, responseShape, detailLevel, stableAnswer),
     followUpQuestions: getFollowUpQuestions(question, askedQuestions, 3, stableAnswer?.followUpQuestions),
-    recentAnswers: history.filter((message) => message.role === "assistant").slice(-3).map((message) => message.content),
+    recentAnswers: history
+      .filter((message) => message.role === "assistant" && !message.content.startsWith("抱歉，这次回答没有成功生成"))
+      .slice(-3)
+      .map((message) => message.content),
     conversationContext,
     brief,
     answerableWithoutRetrievedEvidence: frame.questionMode !== "candidate_fact" || metaIntents.includes(intent) || ["career_transition", "role_fit"].includes(intent) || Boolean(contract),
@@ -430,7 +437,7 @@ export function buildContext(items: KnowledgeItem[], plan?: AnswerPlan) {
     `最近已经使用的事实或故事：${[...plan.usedFactIds, ...plan.usedStoryIds].join("；") || "无"}`,
     `避免重复：${plan.avoidPoints.join("；") || "无"}`,
     `结尾任务：${plan.closingPurpose}`,
-    `不能补充：${plan.forbiddenDetails.join("；")}`,
+    `不能补充：${plan.forbiddenDetails.join("；")}；未在 <material> 或“只能使用这些事实”中明确出现的公司/学校名称和具体数字一律不要提及。`,
     `禁止混入这些无关主题：${plan.forbiddenTopics.join("、") || "无"}。`,
     plan.shouldMentionLimitations && plan.limitations ? `需要简短说明现实阶段：${plan.limitations}` : "不要主动讨论项目限制、材料核验或候选人短板。",
     "</answer_task>",

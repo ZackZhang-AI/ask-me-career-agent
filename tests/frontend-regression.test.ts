@@ -9,9 +9,7 @@ const actionsSource = readFileSync(new URL("../components/answer-actions.tsx", i
 const globalStyles = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8");
 const revealSource = readFileSync(new URL("../components/use-stream-reveal.ts", import.meta.url), "utf8");
 const revealCoreSource = readFileSync(new URL("../lib/stream-reveal.ts", import.meta.url), "utf8");
-const layoutSource = readFileSync(new URL("../app/layout.tsx", import.meta.url), "utf8");
 const topbarSource = readFileSync(new URL("../components/chat-topbar.tsx", import.meta.url), "utf8");
-const themeToggleSource = readFileSync(new URL("../components/theme-toggle.tsx", import.meta.url), "utf8");
 const formattedAnswerSource = readFileSync(new URL("../components/formatted-answer.tsx", import.meta.url), "utf8");
 const evidencePanelSource = readFileSync(new URL("../components/evidence-panel.tsx", import.meta.url), "utf8");
 
@@ -68,16 +66,18 @@ test("安全语义片段通过独立队列转为自适应逐字展示", () => {
   assert.doesNotMatch(chatSource, /PRESET_REVEAL_INTERVAL_MS/);
 });
 
-test("保持清爽现代白底绿accent风格、双主题切换、移动端抽屉与溯源微交互", () => {
+test("保持原版简洁清爽白底绿accent视觉，同时保留移动端抽屉、能力内联展开与引用微交互", () => {
   assert.match(globalStyles, /--page:\s*#ffffff/i);
+  assert.match(globalStyles, /--sidebar:\s*#f8f8f7/i);
   assert.match(globalStyles, /--accent:\s*#176b54/i);
-  assert.match(globalStyles, /:root\[data-theme="dark"\]/);
-  assert.match(layoutSource, /ask-me-theme/);
-  assert.match(topbarSource, /<ThemeToggle/);
-  assert.match(topbarSource, /profile\.portfolio/);
+  assert.match(chatSource, /我是\{profile\.name\}的 AI Career Agent/);
+  assert.match(chatSource, /从您可能最关心的问题开始吧。/);
+  assert.match(appFrameSource, /AI Career Agent/);
+  assert.match(appFrameSource, /快速了解/);
+  assert.doesNotMatch(appFrameSource, /CANDIDATE INDEX/);
+  assert.doesNotMatch(chatSource, /CAREER AGENT · PUBLIC EVIDENCE/);
   assert.match(topbarSource, /href="\/resume"/);
   assert.match(topbarSource, /className="return-home"/);
-  assert.match(themeToggleSource, /useSyncExternalStore/);
   assert.match(appFrameSource, /is-mobile-open/);
   assert.match(appFrameSource, /strength-panel/);
   assert.doesNotMatch(appFrameSource, /strength-flyout/);

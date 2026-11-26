@@ -2,7 +2,7 @@ const updated = "2026-11-26";
 
 export const candidateNarrative = {
   lastUpdated: updated,
-  positioning: "以应用统计学和企业流程理解为底座，贯通医疗 RAG、多模型评测与滴滴三项内部业务提效闭环的 AI 产品经理应届候选人。",
+  positioning: "以应用统计学、企业流程理解与真实业务 AI 工作流落地为底座的 AI 产品经理应届候选人。",
   journey: ["应用统计学与德勤 IT 审计", "百川医疗 RAG", "百度模型评测", "滴滴 AI 业务工作流"],
   differentiators: [
     { id: "evaluation", label: "模型评测", statement: "能把模型与 OCR 效果拆成指标、Gate、对照集、Bad Case 和可复核动作。" },

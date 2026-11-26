@@ -9,9 +9,11 @@ const answerIntents = ["agent_identity", "capability_scope", "introduction", "ca
 const careerTransitionPattern = /(?:为什么|为何).{0,12}(?:(?:从)?(?:财会|会计|财务|审计|统计)(?!问题)(?:背景|专业|经历)?.{0,12}(?:转向|转型|转(?!化)|选择|改做|走到|进入)|(?:转向|转型|选择|改做|走到|进入)).{0,12}(?:AI\s*产品|产品经理|产品)|(?:(?:从)(?:财会|会计|财务|审计|统计|原专业|传统行业)|(?:财会|会计|财务|审计|统计|原专业|传统行业)(?:背景|专业|经历)).{0,12}(?:转向|转型|转(?!化)|选择|改做|走到|进入).{0,8}(?:AI\s*产品|产品经理|产品)/i;
 const careerTransitionContextPattern = /(?:财会|会计|财务|审计|统计|传统行业).{0,24}(?:产品|AI).{0,14}(?:连续|迁移|选择|适合|方向|准备)|(?:为什么|为何|如何|怎么).{0,12}(?:转型|转向|选择).{0,14}(?:AI|产品)/i;
 const careerTransitionActionPattern = /(?:转型|转向|转(?!化)|改做|走到|进入|从.{0,12}(?:到|选择)|不继续.{0,12}(?:而)?(?:选择|做)|选择.{0,12}(?:AI|产品|而不是)|连续性|做了哪些准备)/i;
+const pmMotivationPattern = /(?:为什么|为何).{0,8}(?!.{0,6}(?:适合|胜任|契合))(?:想|要|决定|选择)?(?:做|从事|当|走|求职|投递)\s*(?:AI\s*产品(?:经理)?|产品经理|产品(?:岗位|工作|方向))|(?:求职动机|职业选择原因)/i;
 const experienceValuePattern = /(?:(?:(?:应用)?统计学?|所学|你的|他的|候选人的|原)(?:这个)?专业(?:背景)?|专业背景|之前的?经历|过往经历|审计(?:经历|训练)?|财会(?:经历|背景)?|数据分析(?:能力|背景)?).{0,28}(?:对.{0,12})?(?:做|求职|支持|帮助|价值|作用|迁移|产品判断).{0,16}(?:AI\s*产品|产品|决策|能力)?|(?:AI\s*产品|产品决策).{0,18}(?:帮助|价值|作用|支持|迁移)/i;
 
 export function hasCareerTransitionSignature(question: string) {
+  if (pmMotivationPattern.test(question)) return true;
   return careerTransitionActionPattern.test(question)
     && (careerTransitionPattern.test(question) || careerTransitionContextPattern.test(question));
 }
@@ -45,7 +47,7 @@ export function inferAnswerIntent(question: string, topic: QuestionTopic = "unkn
   if (/个人贡献|你做了什么|你负责|具体做了|你的工作|主导/i.test(question)) return "contribution";
   if (/没有改善|没改善|没有效果|没效果|优先排查|先排查|先.{0,3}看什么|定位问题|(?:如何|怎么).{0,4}定位|为什么没有/i.test(question)) return "diagnosis";
   if (/隐私|机密|企业数据|数据边界/i.test(question)) return "privacy";
-  if (/短板|不足|弱点|限制|能力缺口/i.test(question) || facet === "boundary") return "limitation";
+  if (/短板|不足|缺点|弱点|限制|能力缺口/i.test(question) || facet === "boundary") return "limitation";
   if (/结果|量化(?:结果|效果)|效果数据|用户规模|增长|留存|上线|生产状态|完成(?:了吗|情况)/i.test(question) || facet === "result") return "result";
   if (/代表项目|最能代表|最有价值的项目/i.test(question)) return "representative_project";
   if (/自我介绍|介绍一下自己|60\s*秒/i.test(question)) return "introduction";
@@ -162,7 +164,7 @@ function define(input: ContractInput): QuestionContract {
 
 export const questionContracts: QuestionContract[] = [
   define({
-    id: "intro", question: "60 秒了解张倬玮。", aliases: ["请用 60 秒介绍张倬玮。", "请介绍一下你自己。"], topic: "profile", facet: "overview",
+    id: "intro", question: "60 秒了解张倬玮。", aliases: ["请用 60 秒介绍张倬玮。", "请介绍一下你自己。", "介绍一下你自己", "自我介绍一下", "做个自我介绍", "请做一下自我介绍"], topic: "profile", facet: "overview",
     dimensions: ["候选人定位", "真实 AI 产品实习", "项目能力主线"], knowledge: ["K1", "K40", "K22", "K27", "K37", "K2"], stories: ["ST11"], shape: "narrative", length: { min: 430, max: 600 },
     goal: "让面试官快速形成是否值得继续沟通的候选人判断。", thesis: "我是张倬玮，一名把数据评测、企业业务理解和 AI 工作流落地结合起来的应用统计学学生。",
     required: ["应用统计学与审计基础", "百川百度与滴滴 AI 产品实习", "人机规则边界与产品落地"], direct: ["张倬玮", "百川", "百度", "滴滴", "AI 产品"],
@@ -170,7 +172,7 @@ export const questionContracts: QuestionContract[] = [
     next: ["didi_internship", "baidu_internship", "representative_project"],
   }),
   define({
-    id: "role_fit", question: "你为什么适合 AI 产品经理岗位？", aliases: ["他为什么适合 AI 产品经理岗位？", "你能为 AI 产品团队带来什么价值？", "他能为 AI 产品团队带来什么价值？"], topic: "role_fit", facet: "fit",
+    id: "role_fit", question: "你为什么适合 AI 产品经理岗位？", aliases: ["他为什么适合 AI 产品经理岗位？", "你能为 AI 产品团队带来什么价值？", "他能为 AI 产品团队带来什么价值？", "你为什么适合这个岗位？", "为什么录用你？", "为什么选择你？", "你做 AI 产品经理的优势是什么？"], topic: "role_fit", facet: "fit",
     dimensions: ["岗位匹配", "真实 AI 产品实践", "自主产品验证", "入职价值"], knowledge: ["K2", "K40", "K22", "K27", "K12", "K5", "K37"], stories: ["ST11", "ST12"], shape: "fit_mapping", length: { min: 360, max: 540 },
     goal: "说明候选人与初级 AI 产品岗位的具体匹配关系。", thesis: "我适合 AI 产品岗位，核心不是会使用模型，而是能把真实工作流、质量验证和工程落地连起来。",
     required: ["模型评测与归因", "企业流程与人机规则边界", "Ask Me 与 DeepFlow 自主验证", "产品工程推进能力"], direct: ["适合", "评测", "业务", "落地"],
@@ -178,7 +180,7 @@ export const questionContracts: QuestionContract[] = [
     next: ["didi_internship", "representative_project", "baidu_internship"],
   }),
   define({
-    id: "baichuan_internship", question: "请介绍一下你的百川智能实习。", aliases: ["你在百川智能实习期间主要做了什么？", "百川智能实习做了什么？", "请介绍你的医疗 RAG 实习。"], topic: "rag", facet: "overview",
+    id: "baichuan_internship", question: "请介绍一下你的百川智能实习。", aliases: ["你在百川智能实习期间主要做了什么？", "百川智能实习做了什么？", "百川实习做了什么？", "聊聊你在百川的实习", "说说百川智能的实习", "请介绍你的医疗 RAG 实习。"], topic: "rag", facet: "overview",
     dimensions: ["实习顺序", "业务问题", "个人工作", "评测结果与边界"], knowledge: ["K27", "K4", "K28", "K31", "K35", "K36"], stories: ["ST10", "ST1"], shape: "narrative", length: { min: 360, max: 540 }, forbidden: ["deepflow", "local_tools"],
     goal: "让面试官快速确认百川实习的日期、业务问题、个人工作和事实边界。", thesis: "2026 年 4 月到 6 月，我在百川智能参与 AI 产品经理实习，主要项目是企业级医疗 RAG 知识库问答系统。",
     required: ["2026 年 4 月到 6 月", "医疗 RAG 业务问题", "需求产品评测三类工作", "脱敏 Demo 边界"], direct: ["百川智能", "医疗 RAG", "实习"],
@@ -186,7 +188,7 @@ export const questionContracts: QuestionContract[] = [
     next: ["project_contribution", "rag_architecture", "evaluation"],
   }),
   define({
-    id: "baidu_internship", question: "请介绍一下你的百度 AI 产品经理实习。", aliases: ["你在百度实习期间主要做了什么？", "请用 90 秒介绍这段百度实习。", "你的百度实习经历是什么？"], topic: "baidu", facet: "overview",
+    id: "baidu_internship", question: "请介绍一下你的百度 AI 产品经理实习。", aliases: ["你在百度实习期间主要做了什么？", "请用 90 秒介绍这段百度实习。", "你的百度实习经历是什么？", "百度实习做了什么？", "聊聊你在百度的实习", "说说百度的实习"], topic: "baidu", facet: "overview",
     dimensions: ["工作主线", "重点项目", "结果边界"], knowledge: ["K22", "K23", "K24", "K25", "K26", "K32", "K33", "K34"], stories: ["ST9"], shape: "narrative", length: { min: 360, max: 540 },
     goal: "让面试官快速确认百度实习的真实性、工作主线与项目深度。", thesis: "我在百度实习的工作主线是模型与 AI Coding 产品评测，重点参与 WebDev E2E Bench 和多模型 Pilot。",
     required: ["模型评测与 Bad Case 归因", "六类任务七维指标与 Gate", "36 次 Pilot 与结论边界"], direct: ["百度", "评测", "Pilot"],
@@ -194,7 +196,7 @@ export const questionContracts: QuestionContract[] = [
     next: ["baidu_contribution", "baidu_project", "baidu_metrics"],
   }),
   define({
-    id: "representative_project", question: "哪个项目最能代表你的 AI 产品能力？", aliases: ["哪个项目最能代表他的 AI 产品能力？", "哪个公开项目最能代表你的 AI 产品能力？", "哪个公开项目最能代表他的 AI 产品能力？"], topic: "rag", facet: "overview",
+    id: "representative_project", question: "哪个项目最能代表你的 AI 产品能力？", aliases: ["哪个项目最能代表他的 AI 产品能力？", "哪个公开项目最能代表你的 AI 产品能力？", "哪个公开项目最能代表他的 AI 产品能力？", "你最满意的一个项目是什么？", "代表项目是什么？"], topic: "rag", facet: "overview",
     dimensions: ["项目问题", "产品判断", "验证边界"], knowledge: ["K4", "K28", "K29", "K31", "K35", "K36"], stories: ["ST10", "ST1"], shape: "project_arc", length: { min: 390, max: 540 }, forbidden: ["baidu", "deepflow", "local_tools", "audit"],
     goal: "用 RAG 项目证明候选人的问题定义、方案取舍、评测设计与工程落地能力。", thesis: "最能代表我 AI 产品能力的是 RAG Knowledge Base System。",
     required: ["医疗私有文档可信问答", "四层架构和评测闭环", "公开脱敏与未完成边界"], direct: ["RAG", "百川", "Rerank", "评测"],
@@ -350,7 +352,7 @@ export const questionContracts: QuestionContract[] = [
     next: ["project_contribution", "speed_quality", "technical_skills"],
   }),
   define({
-    id: "differentiation", question: "你最值得面试官关注的三项优势是什么？", aliases: ["他最值得面试官关注的三项优势是什么？"], topic: "role_fit", facet: "fit",
+    id: "differentiation", question: "你最值得面试官关注的三项优势是什么？", aliases: ["他最值得面试官关注的三项优势是什么？", "你的优势是什么？", "你的核心优势是什么？", "你最大的优势是什么？", "你有什么优势？"], topic: "role_fit", facet: "fit",
     dimensions: ["数据评测", "企业业务", "产品落地"], knowledge: ["K2", "K3", "K8", "K4"], shape: "fit_mapping", length: { min: 280, max: 440 }, goal: "形成清晰可记忆的差异点。",
     thesis: "我最值得关注的三项优势是数据评测、企业业务理解和产品工程落地。", required: ["数据评测", "审计业务理解", "AI 产品落地"], direct: ["三项优势", "数据", "业务", "落地"],
     fallback: "我最值得面试官关注的三项优势是 **数据评测**、**企业业务理解**和**产品工程落地**。第一，应用统计学背景让我习惯先定义指标、建立基线并通过失败样本定位问题，而不是只凭演示感受判断 AI 效果。\n\n第二，德勤 IT 审计和容诚财务审计经历让我理解复杂流程、证据口径、权限风险和人工复核，这使我更适合思考企业 AI，而不只是消费级聊天功能。第三，我通过 RAG、DeepFlow 和 Ask Me 等项目，把产品定位、检索或 Agent 工作流、评测设计和工程实现连成可演示链路。三者结合，让我能够在业务、数据和技术之间完成翻译，并把讨论推进到可验证的产品动作。",
@@ -456,7 +458,7 @@ export const questionContracts: QuestionContract[] = [
   }),
   define({
     id: "didi_internship", question: "请介绍一下你在滴滴的 AI 产品经理实习。",
-    aliases: ["介绍一下你在滴滴的实习。", "你在滴滴实习期间主要做了什么？", "整体介绍一下你在滴滴这段实习。", "你的滴滴实习经历是什么？", "你在滴滴 ABC 智能一组做了什么？"],
+    aliases: ["介绍一下你在滴滴的实习。", "你在滴滴实习期间主要做了什么？", "整体介绍一下你在滴滴这段实习。", "你的滴滴实习经历是什么？", "你在滴滴 ABC 智能一组做了什么？", "滴滴实习做了什么？", "聊聊你在滴滴的实习", "说说滴滴的实习", "你在滴滴做了哪些项目？"],
     topic: "didi", facet: "overview", activeProject: "didi-internship",
     dimensions: ["实习角色与业务承接", "三个 0—1 项目闭环", "人机规则边界方法论"],
     knowledge: ["K40", "K41", "K44", "K46"], stories: ["ST12", "ST14"], shape: "narrative", length: { min: 420, max: 600 },
@@ -470,7 +472,7 @@ export const questionContracts: QuestionContract[] = [
   }),
   define({
     id: "didi_rental_overview", question: "租车商家准入 AI 预审工作台具体做了什么？",
-    aliases: ["请介绍一下你的租车商家准入 AI 预审工作台项目。", "滴滴的租车风控预审工作台做了什么？", "租车准入预审工作台解决了什么问题？", "为什么租车风控工作台一期不做全自动审批放行？"],
+    aliases: ["请介绍一下你的租车商家准入 AI 预审工作台项目。", "滴滴的租车风控预审工作台做了什么？", "租车准入预审工作台解决了什么问题？", "为什么租车风控工作台一期不做全自动审批放行？", "介绍一下租车风控项目", "讲讲滴滴的租车项目", "租车预审工作台是怎么做的？"],
     topic: "didi", facet: "overview", activeProject: "didi-rental-audit",
     dimensions: ["业务痛点与一期取舍", "三方 SOP 与人机规则四步协同", "试点预审结果"],
     knowledge: ["K41", "K42", "K43"], stories: ["ST12", "ST13"], shape: "project_arc", length: { min: 380, max: 560 },
@@ -484,7 +486,7 @@ export const questionContracts: QuestionContract[] = [
   }),
   define({
     id: "didi_rental_challenge", question: "租车准入预审工作台遇到的最大挑战是什么？",
-    aliases: ["租车商家准入预审工作台最大的难点是什么？", "讲一个滴滴风控工作台踩坑复盘的案例。", "你是怎么解决风控原件识别不准和 15 处假冲突的？", "风控工作台为什么拆开 OCR 看图和大模型理解？"],
+    aliases: ["租车商家准入预审工作台最大的难点是什么？", "讲一个滴滴风控工作台踩坑复盘的案例。", "你是怎么解决风控原件识别不准和 15 处假冲突的？", "风控工作台为什么拆开 OCR 看图和大模型理解？", "滴滴实习遇到的最大挑战是什么？", "15 处假冲突是怎么解决的？"],
     topic: "didi", facet: "example", activeProject: "didi-rental-audit",
     dimensions: ["局部重读踩坑与 15 处假冲突", "40 份难例 OCR 盲测与提取规则重构", "118 份复测与 45 秒零假冲突验证"],
     knowledge: ["K42", "K41"], stories: ["ST12"], shape: "star", length: { min: 400, max: 580 },
@@ -498,7 +500,7 @@ export const questionContracts: QuestionContract[] = [
   }),
   define({
     id: "didi_rental_model", question: "租车风控工作台是怎么做模型选型和兜底设计的？",
-    aliases: ["风控预审工作台的模型是怎么选的？", "为什么风控工作台主力选 DeepSeek Flash 并配按需备用？", "38 个脱敏审核对照题是怎么评测模型的？"],
+    aliases: ["风控预审工作台的模型是怎么选的？", "为什么风控工作台主力选 DeepSeek Flash 并配按需备用？", "38 个脱敏审核对照题是怎么评测模型的？", "风控模型是怎么选的？"],
     topic: "didi", facet: "evaluation", activeProject: "didi-rental-audit",
     dimensions: ["38 题对照与错误放行风险观察", "DeepSeek Flash 主力与 GPT 按需备用", "数据口径边界"],
     knowledge: ["K43", "K42"], stories: ["ST13"], shape: "fit_mapping", length: { min: 380, max: 560 },
@@ -526,7 +528,7 @@ export const questionContracts: QuestionContract[] = [
   }),
   define({
     id: "didi_diva_overview", question: "DiVA 营销素材工作台为什么采用模板约束加局部生成？",
-    aliases: ["请介绍一下滴滴的 DiVA AI 营销素材生产工作台项目。", "DiVA 营销素材生产工作台具体做了什么？", "为什么 DiVA 不让 AI 直接生成整张成品海报？", "机酒国庆营销活动里 DiVA 取得了什么效果？"],
+    aliases: ["请介绍一下滴滴的 DiVA AI 营销素材生产工作台项目。", "DiVA 营销素材生产工作台具体做了什么？", "为什么 DiVA 不让 AI 直接生成整张成品海报？", "机酒国庆营销活动里 DiVA 取得了什么效果？", "介绍一下 DiVA 项目", "讲讲 DiVA 营销素材工作台"],
     topic: "didi", facet: "overview", activeProject: "didi-diva",
     dimensions: ["跨点位做图痛点", "模板约束加局部生成取舍", "四步适配工作流与国庆活动效果"],
     knowledge: ["K44", "K45"], stories: ["ST14"], shape: "project_arc", length: { min: 360, max: 540 },
@@ -540,7 +542,7 @@ export const questionContracts: QuestionContract[] = [
   }),
   define({
     id: "didi_diva_feedback", question: "面对运营提的 37 条反馈，你是怎么判断需求并排优先级的？",
-    aliases: ["DiVA 试用期 37 条运营反馈是怎么处理的？", "为什么 37 条业务反馈里驳回了 12 条？", "你是怎么从收需求变成判断需求的？"],
+    aliases: ["DiVA 试用期 37 条运营反馈是怎么处理的？", "为什么 37 条业务反馈里驳回了 12 条？", "你是怎么从收需求变成判断需求的？", "37 条反馈是怎么处理的？"],
     topic: "didi", facet: "method", activeProject: "didi-diva",
     dimensions: ["拆开业务目标与建议做法", "三类根因分流与具体案例", "四维排期与沟通边界"],
     knowledge: ["K45", "K44"], stories: ["ST14"], shape: "star", length: { min: 380, max: 560 },
@@ -554,7 +556,7 @@ export const questionContracts: QuestionContract[] = [
   }),
   define({
     id: "didi_flight_skill", question: "机票竞品比价 Skill 是如何设计的？",
-    aliases: ["请介绍一下滴滴的机票竞品比价 Skill 项目。", "为什么机票竞品比价要做成三层 Skill 而不是普通脚本？", "机票比价 Skill 的同航班匹配和异常恢复怎么做？"],
+    aliases: ["请介绍一下滴滴的机票竞品比价 Skill 项目。", "为什么机票竞品比价要做成三层 Skill 而不是普通脚本？", "机票比价 Skill 的同航班匹配和异常恢复怎么做？", "介绍一下机票比价项目", "讲讲机票比价 Skill"],
     topic: "didi", facet: "architecture", activeProject: "didi-flight-skill",
     dimensions: ["可比输入契约与待核查规则", "六步链路与入口主体引用三层架构", "57 分钟瓶颈剖析与检查点补跑"],
     knowledge: ["K46", "K47"], stories: ["ST15"], shape: "project_arc", length: { min: 400, max: 580 },
@@ -579,6 +581,45 @@ export const questionContracts: QuestionContract[] = [
     direct: ["滴滴", "统计口径", "指标"],
     fallback: "对滴滴这三个内部项目的量化结果，我坚持按各自真实统计口径回答，不把阶段验证或采集吞吐混同为全量终态指标。\n\n**风控试点与盲测**：租车准入工作台“100 多笔试点、单户人工预审由约 120 分钟降至 30 分钟、累计省下 150 多小时”来自近期业务使用反馈，代表预审人效提升，不等同于坏账率下降；38 题选型里的 31/38 是整理后脱敏审核题参考一致数，不冒充原件 OCR 准确率；40 份样本盲测与 118 份材料 100% 通过属于项目内难例复测，9 条征信冲突与 575/234 笔流水则是单户样本深度验证。\n\n**DiVA去重采用账**：机酒国庆活动的“11 个已验收广告位、60 多份采用素材、单批耗时 2 小时降至 40 分钟、首次验收通过率 80%”按业务去重采用口径统计；模板约束对比整图直出是错误成本驱动的方案取舍而非线上随机 A/B；试用期 37 条反馈中的 12 条驳回包含替代路径与暂缓项，不简单贴“假需求”标签。\n\n**比价两阶段口径**：机票比价 Skill 简历基线为“80 组航线、人工耗时降 75%”，近期扩展吞吐为“累计近 2,500 条航线任务、超 10 万条原始抓取记录”；超 10 万条是原始抓取量而非有效可比航班对，试行价差用于定位待核查线索而非正式双端低价率。",
     next: ["didi_rental_challenge", "didi_diva_feedback", "baidu_reliability"],
+  }),
+  define({
+    id: "why_pm", question: "你为什么想做 AI 产品经理？",
+    aliases: ["你为什么做产品经理", "你为什么做产品经理？", "为什么做产品经理", "为什么做产品经理？", "你为什么想做产品经理", "你为什么想做产品经理？", "为什么想做产品经理？", "你为什么做 AI 产品经理", "你为什么做 AI 产品经理？", "为什么做 AI 产品经理？", "为什么想做 AI 产品？", "你为什么选择做产品经理？", "为什么选择做产品经理？", "你为什么选择做 AI 产品经理？", "你的求职动机是什么？", "为什么想走产品经理方向？"],
+    topic: "profile", facet: "transfer",
+    dimensions: ["从检查走向定义的起点", "百川百度滴滴实战验证", "产品价值与长期动机"],
+    knowledge: ["K1", "K2", "K3", "K8", "K27", "K22", "K40", "K12"], stories: ["ST11", "ST12"], shape: "narrative", length: { min: 360, max: 540 },
+    goal: "回答为什么选择做产品经理/AI 产品经理，展现有真实项目与实习支撑的演进路径。",
+    thesis: "我选择做 AI 产品经理，是在统计学习、企业审计与三段 AI 实习中逐步确认：我最擅长把真实业务阻力、数据验证和模型能力拧成可用闭环。",
+    required: ["应用统计学与德勤审计痛点起点", "百川百度滴滴三段实习实战闭环", "人机规则协同与独立产品验证"],
+    direct: ["选择", "产品经理", "业务"],
+    fallback: "我选择做 AI 产品经理，不是临时起意追热点，而是在统计学习、企业审计和几段 AI 实习里一步步确认：我最擅长也最享受把真实**业务阻力与模型能力**、数据验证拧成一条可用工作流。\n\n早期在东北大学学应用统计学、在德勤做 IT 审计时，我发现一线业务最耗人的往往不是高深决策，而是跨系统核对、脏乱资料提取和口径对齐；但我不想只停留在事后检查问题，更想往前一步定义工具去消掉这些摩擦，于是自己动手做出了审计日志抽查与资料归档原型。\n\n随后进入百川医疗 RAG、百度 AI Coding 多模型评测和滴滴 ABC 智能一组实习，我真正走通了从**拆透业务流程**到划清模型、确定性规则与人工边界的全过程——比如把租车单户预审从约 120 分钟压到 30 分钟，把 DiVA 单批素材交付从 2 小时压到 40 分钟，同时独立完成了 Ask Me 与 DeepFlow。这种用数据定位根因、把不确定模型变成业务真敢用的闭环的成就感，让我坚定了走**AI产品经理**方向。",
+    next: ["didi_internship", "role_fit", "representative_project"],
+  }),
+  define({
+    id: "internships_overview", question: "请介绍一下你的实习经历。",
+    aliases: ["你有哪些实习经历？", "你有几段实习经历？", "你有几段实习？", "介绍一下你的实习经历", "你的实习经历有哪些？", "讲讲你的实习经历", "说说你的实习经历"],
+    topic: "profile", facet: "overview",
+    dimensions: ["审计流程底座", "百川 RAG 与百度评测", "滴滴三项 0—1 业务工作流"],
+    knowledge: ["K1", "K8", "K27", "K22", "K40", "K41", "K44", "K46"], stories: ["ST11", "ST12"], shape: "narrative", length: { min: 380, max: 560 },
+    goal: "清晰串讲四段实习的时间线、核心产出与能力递进，方便面试官继续深挖。",
+    thesis: "我共有四段连续递进的实习经历，覆盖从企业审计流程到医疗 RAG、多模型评测与滴滴业务工作流 0—1 落地。",
+    required: ["容诚与德勤审计流程底座", "百川医疗 RAG 与百度 36 次 Pilot", "滴滴风控准入 DiVA 与机票比价三项工作流"],
+    direct: ["四段", "实习", "百川", "百度", "滴滴"],
+    fallback: "我共有四段连续递进的实习经历，完整覆盖了从企业流程理解到 RAG、多模型评测和业务向 AI 工作流 0—1 落地的演进过程。\n\n第一段是 2025 年初在容诚及 2026 年 1 月至 4 月在德勤的审计与 IT 审计实习，参与 30 余份操作系统与 APP 底稿复核并用 Prompt 辅助数据脱敏，帮我打下了严密的**流程与证据链意识**。第二段是 2026 年 4 月至 6 月在百川智能担任 AI 产品实习生，围绕企业级医疗 RAG 知识库参与需求梳理、四层功能设计和三轮累计 30 次 QA 评测，定位出多跳问答弱项。\n\n第三段是 2026 年 6 月至 8 月在百度担任 AI 产品实习生，聚焦**多模型评测归因**，参与设计六类 Web 任务与七维 Gate，推进 6 个模型 36 次正式 Pilot 与 Qwen 协议级受控诊断。第四段是 2026 年 9 月至今在滴滴 ABC 智能一组担任 AI 产品实习生，从 0 到 1 推进**三项业务工作流**——租车商家准入预审工作台（单户人工预审由约 120 分钟降至 30 分钟）、DiVA 营销素材工作台（国庆 11 个点位首审通过率 80%）和机票竞品比价 Skill（累计近 2,500 条航线任务）。",
+    next: ["didi_internship", "baidu_contribution", "baichuan_internship"],
+  }),
+  define({
+    id: "candidate_shortcoming", question: "你的主要短板是什么？",
+    aliases: ["他的主要短板是什么？", "你的缺点是什么？", "你的短板是什么？", "你有什么不足？", "你有什么缺点？", "你的优缺点是什么？", "你目前最大的不足是什么？"],
+    topic: "profile", facet: "boundary",
+    dimensions: ["长周期线上与商业化经验边界", "区分原型完成与产品成功", "进入业务团队后的补强计划"],
+    knowledge: ["K2", "K12", "K40"], stories: [], shape: "shortcoming", length: { min: 320, max: 480 },
+    goal: "诚实说明当前经验阶段边界并给出清晰可执行的成长路径。",
+    thesis: "我目前最需要补强的，是把原型与内部试点阶段的产品判断延伸到更长周期的真实用户规模运营和商业化闭环中。",
+    required: ["缺少长周期大规模商业化完整经历", "主动区分原型可用与产品长期成功", "通过真实业务指标与上线复盘补强"],
+    direct: ["补强", "原型", "真实"],
+    fallback: "我目前最需要补强的，是把原型与内部试点阶段的产品判断延伸到更长周期的真实用户运营、生产稳定性和商业结果闭环中。现阶段我已经能独立完成问题拆解、人机规则边界设计、原型推进和评测归因，但还缺少在长周期大流量业务里持续迭代留存与商业化的完整经历。\n\n**原型不等于产品成功**：如果只停留在原型或短期试点，容易高估功能完成度，却低估推广阻力、异常长尾和长期维护成本。因此我在滴滴、百度与百川的实践中都会主动区分“功能跑通”“业务敢用”和“长期商业价值”，绝不把阶段提效直接包装成终局成功。\n\n**用行为和结果验证**：进入正式业务团队后，我会主动扎进真实用户反馈、线上漏斗指标和跨职能上线复盘里补齐长周期运营经验；同时在入职初期就能贡献快速拆透复杂流程、搭建评测基线和用 Bad Case 驱动迭代的实战能力。",
+    next: ["role_fit", "didi_metrics_boundary", "baidu_reliability"],
   }),
 ];
 
@@ -631,7 +672,7 @@ const topicPatterns: Array<[QuestionTopic, RegExp]> = [
   ["statistics", /统计|指标|样本|数据分析|产品决策/i],
   ["enterprise_ai", /企业级?\s*ai|企业场景|业务问题.*(?:ai|产品)/i],
   ["role_fit", /岗位|(?:这个|该|目标)?岗(?:位)?|匹配|契合|适合|胜任|优势|团队价值/i],
-  ["profile", /自我介绍|介绍一下|背景|经历组合/i],
+  ["profile", /自我介绍|介绍一下|背景|经历组合|几段实习|哪些实习/i],
   ["skills", /技能|技术|评测|ai\s*编程|协作|sql|python|fastapi|ragas/i],
   ["ask_me", /ask\s*me|数字分身/i],
 ];
@@ -639,7 +680,7 @@ const topicPatterns: Array<[QuestionTopic, RegExp]> = [
 const facetPatterns: Array<[QuestionFacet, RegExp]> = [
   ["example", /举例|例子|案例/i], ["contribution", /贡献|负责|做了什么|核心工作|职责/i], ["collaboration", /协作|分工|交接|配合/i],
   ["evaluation", /评测|评估|指标|验收|效果|质量|错误|失败|检查|bad\s*case/i], ["transfer", /迁移|沉淀|帮助|支持/i], ["result", /结果|成果|完成|上线|规模/i],
-  ["boundary", /短板|不足|限制|边界|风险/i], ["architecture", /架构|链路|技术方案/i], ["method", /方法|如何|怎么|思考|取舍/i],
+  ["boundary", /短板|不足|缺点|限制|边界|风险/i], ["architecture", /架构|链路|技术方案/i], ["method", /方法|如何|怎么|思考|取舍/i],
   ["problem", /解决.*问题|什么问题|痛点/i], ["fit", /匹配|契合|适合|胜任|优势|价值|能力组合/i],
 ];
 

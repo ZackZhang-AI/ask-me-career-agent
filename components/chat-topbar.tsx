@@ -2,13 +2,11 @@
 
 import {
   ArrowLeftIcon,
-  ArrowUpRightIcon,
   FileTextIcon,
   ListIcon,
 } from "@phosphor-icons/react";
 import { profile } from "@/lib/profile";
 import { useConversationControl } from "./conversation-control";
-import { ThemeToggle } from "./theme-toggle";
 
 export function ChatTopbar() {
   const {
@@ -42,7 +40,7 @@ export function ChatTopbar() {
             startNewConversation();
           }}
         >
-          <span className="brand-mark" aria-hidden="true">Z</span>
+          <span className="brand-mark" aria-hidden="true">A</span>
           <strong>Ask Me</strong>
         </a>
 
@@ -59,34 +57,15 @@ export function ChatTopbar() {
         )}
 
         <div className="chat-context">
-          <strong>{profile.englishName}</strong>
-          <span className="brand-dot" aria-hidden="true">●</span>
-          <span>AI 分身 · 公开资料问答</span>
+          <strong>{profile.name}</strong>
+          <span>公开资料问答</span>
         </div>
       </div>
 
-      <div className="topbar-actions">
-        <a
-          id="topbar-portfolio-link"
-          className="portfolio-topbar-link"
-          href={profile.portfolio}
-          target="_blank"
-          rel="noreferrer"
-          data-track-event="project_opened"
-          data-track-detail="portfolio"
-        >
-          <span>个人作品集</span>
-          <ArrowUpRightIcon size={13} aria-hidden="true" />
-        </a>
-
-        <ThemeToggle />
-
-        <a id="topbar-resume-link" className="resume-link" href="/resume">
-          <FileTextIcon size={15} aria-hidden="true" />
-          <span className="resume-label-desktop">查看最新简历</span>
-          <span className="resume-label-mobile">简历</span>
-        </a>
-      </div>
+      <a id="topbar-resume-link" className="resume-link" href="/resume">
+        <span>查看最新简历</span>
+        <FileTextIcon size={16} aria-hidden="true" />
+      </a>
     </header>
   );
 }

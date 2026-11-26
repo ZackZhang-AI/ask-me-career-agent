@@ -19,27 +19,9 @@ export const metadata: Metadata = {
   description: "一个可验证、可追溯的 AI 产品经理求职数字分身。",
 };
 
-const themeInitScript = `
-(function () {
-  try {
-    var stored = window.localStorage.getItem("ask-me-theme");
-    if (stored === "light" || stored === "dark") {
-      document.documentElement.dataset.theme = stored;
-    } else if (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches) {
-      document.documentElement.dataset.theme = "dark";
-    } else {
-      document.documentElement.dataset.theme = "light";
-    }
-  } catch (e) {}
-})();
-`;
-
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="zh-CN" suppressHydrationWarning>
-      <head>
-        <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
-      </head>
+    <html lang="zh-CN">
       <body className={`${geist.variable} ${mono.variable}`}>
         {children}
       </body>

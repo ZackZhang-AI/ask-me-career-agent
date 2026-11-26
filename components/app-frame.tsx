@@ -5,11 +5,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowSquareOutIcon,
   ArrowUpRightIcon,
-  CaretDownIcon,
+  CaretRightIcon,
   CheckIcon,
   CompassIcon,
-  CopySimpleIcon,
   EnvelopeSimpleIcon,
+  FileTextIcon,
   GithubLogoIcon,
   PhoneIcon,
   PlusIcon,
@@ -26,10 +26,13 @@ import { useConversationHistory } from "./use-conversation-history";
 const capabilityItemQuestions: Record<string, string> = {
   "SQL / Python 数据分析": "你的核心技术能力有哪些？",
   "指标与评测集设计": "AI Coding 评测的七维指标和硬门槛如何设计？",
+  "风控 38 题与 OCR 盲测": "租车风控工作台是怎么做模型选型和兜底设计的？",
   "RAGAS 与 Badcase 分析": "你如何分析和归因 AI Coding 的 Bad Case？",
+  "滴滴三方风控预审 SOP": "租车商家准入 AI 预审工作台具体做了什么？",
   "财务审计流程": "举一个审计问题转成产品的例子。",
   "IT 审计与日志核查": "你的 IT 审计日志抽查助手能做什么？",
   "企业数据与风险边界": "你对企业级 AI 场景有哪些理解？",
+  "滴滴风控 / DiVA / 比价 Skill": "请介绍一下你在滴滴的 AI 产品经理实习。",
   "RAG 知识库系统": "你的 RAG 项目如何设计混合检索和引用溯源？",
   "Multi-Agent 工作流": "DeepFlow 体现了你哪些多 Agent 产品思考？",
   "Web 与桌面原型": "你有哪些可以直接演示的项目成果？",
@@ -160,7 +163,7 @@ export function AppFrame({ children }: { children: ReactNode }) {
         <aside
           id="candidate-sidebar"
           className={`sidebar${sidebarCollapsed ? " is-collapsed" : ""}${mobileDrawerOpen ? " is-mobile-open" : ""}`}
-          aria-label="候选人档案与会话导航"
+          aria-label="候选人信息"
         >
           <div className="sidebar-header">
             <div className="sidebar-title-row">
@@ -173,10 +176,10 @@ export function AppFrame({ children }: { children: ReactNode }) {
                   startNewConversation();
                 }}
               >
-                <span className="brand-mark" aria-hidden="true">Z</span>
+                <span className="brand-mark" aria-hidden="true">A</span>
                 <span className="brand-copy">
                   <strong>Ask Me</strong>
-                  <small>ZACK ZHANG · AI 分身</small>
+                  <small>AI Career Agent</small>
                 </span>
               </a>
 
@@ -189,7 +192,7 @@ export function AppFrame({ children }: { children: ReactNode }) {
                 title={sidebarCollapsed ? "展开侧边栏" : "收起侧边栏"}
                 onClick={() => setSidebarCollapsed((current) => !current)}
               >
-                <SidebarSimpleIcon size={17} weight="regular" aria-hidden="true" />
+                <SidebarSimpleIcon size={18} weight="bold" aria-hidden="true" />
               </button>
 
               <button
@@ -198,7 +201,7 @@ export function AppFrame({ children }: { children: ReactNode }) {
                 aria-label="关闭侧边导航栏"
                 onClick={() => setMobileDrawerOpen(false)}
               >
-                <XIcon size={17} weight="regular" aria-hidden="true" />
+                <XIcon size={18} weight="regular" aria-hidden="true" />
               </button>
             </div>
 
@@ -210,7 +213,7 @@ export function AppFrame({ children }: { children: ReactNode }) {
               aria-label="新对话"
               title={sidebarCollapsed ? "新对话" : undefined}
             >
-              <PlusIcon size={15} weight="bold" aria-hidden="true" />
+              <PlusIcon size={17} weight="bold" aria-hidden="true" />
               <span className="new-chat-label">新对话</span>
             </button>
           </div>
@@ -225,7 +228,7 @@ export function AppFrame({ children }: { children: ReactNode }) {
             />
 
             <section className="sidebar-section" aria-labelledby="profile-label">
-              <p className="sidebar-label" id="profile-label">CANDIDATE INDEX · 能力导览</p>
+              <p className="sidebar-label" id="profile-label">快速了解</p>
               <div className="profile-summary">
                 <span className="profile-avatar" aria-hidden="true">张</span>
                 <div className="profile-copy">
@@ -237,7 +240,6 @@ export function AppFrame({ children }: { children: ReactNode }) {
               <ul className="strength-nav">
                 {capabilityNavigation.map((capability, index) => {
                   const isOpen = openCapabilityIndex === index;
-                  const numLabel = String(index + 1).padStart(2, "0");
                   return (
                     <li className={`strength-item${isOpen ? " is-open" : ""}`} key={capability.title}>
                       <button
@@ -247,9 +249,8 @@ export function AppFrame({ children }: { children: ReactNode }) {
                         aria-controls={`capability-panel-${index}`}
                         onClick={() => setOpenCapabilityIndex((current) => (current === index ? null : index))}
                       >
-                        <span className="strength-num" aria-hidden="true">{numLabel}</span>
-                        <span className="strength-title">{capability.title}</span>
-                        <CaretDownIcon size={13} aria-hidden="true" />
+                        <span>{capability.title}</span>
+                        <CaretRightIcon size={13} aria-hidden="true" />
                       </button>
 
                       {isOpen && (
@@ -257,7 +258,7 @@ export function AppFrame({ children }: { children: ReactNode }) {
                           className="strength-panel"
                           id={`capability-panel-${index}`}
                           role="group"
-                          aria-label={`${capability.title}细分方向`}
+                          aria-label={`${capability.title}二级能力`}
                         >
                           <p>{capability.summary}</p>
                           <ul className="strength-sublist">
@@ -278,7 +279,7 @@ export function AppFrame({ children }: { children: ReactNode }) {
                             type="button"
                             onClick={() => enqueueQuestion(capability.question)}
                           >
-                            <span>综合提问该方向</span>
+                            <span>了解该方向全貌</span>
                             <ArrowUpRightIcon size={13} aria-hidden="true" />
                           </button>
                         </div>
@@ -292,20 +293,6 @@ export function AppFrame({ children }: { children: ReactNode }) {
 
           <div className="sidebar-footer">
             <a
-              href={profile.portfolio}
-              target="_blank"
-              rel="noreferrer"
-              data-track-event="project_opened"
-              data-track-detail="portfolio"
-              aria-label="个人作品集"
-              title={sidebarCollapsed ? "个人作品集" : undefined}
-            >
-              <CompassIcon size={16} aria-hidden="true" />
-              <span>个人作品集</span>
-              <ArrowSquareOutIcon className="external-icon" size={14} aria-hidden="true" />
-            </a>
-
-            <a
               href={profile.github}
               target="_blank"
               rel="noreferrer"
@@ -314,74 +301,71 @@ export function AppFrame({ children }: { children: ReactNode }) {
               aria-label="GitHub 项目"
               title={sidebarCollapsed ? "GitHub 项目" : undefined}
             >
-              <GithubLogoIcon size={16} aria-hidden="true" />
+              <GithubLogoIcon size={17} aria-hidden="true" />
               <span>GitHub 项目</span>
-              <ArrowSquareOutIcon className="external-icon" size={14} aria-hidden="true" />
+              <ArrowSquareOutIcon className="external-icon" size={15} aria-hidden="true" />
             </a>
 
-            <div className="contact-copy-row">
-              <button
-                type="button"
-                className="contact-copy-btn"
-                data-track-event="contact_opened"
-                data-track-detail="email"
-                aria-label="复制候选人邮箱"
-                title={sidebarCollapsed ? `复制邮箱：${profile.email}` : profile.email}
-                onClick={() => void copyContactValue("email", profile.email)}
-              >
-                {copiedContact === "email" ? (
-                  <CheckIcon size={16} weight="bold" aria-hidden="true" />
-                ) : (
-                  <EnvelopeSimpleIcon size={16} aria-hidden="true" />
-                )}
-                <span>{copiedContact === "email" ? "已复制邮箱" : profile.email}</span>
-                <CopySimpleIcon className="copy-hint-icon" size={13} aria-hidden="true" />
-              </button>
-              <a
-                className="contact-direct-link"
-                href={`mailto:${profile.email}`}
-                data-track-event="contact_opened"
-                data-track-detail="email"
-                aria-label="发送邮件"
-                title="直接打开邮件客户端"
-              >
-                <ArrowUpRightIcon size={13} aria-hidden="true" />
-              </a>
-            </div>
+            <a
+              href={profile.portfolio}
+              target="_blank"
+              rel="noreferrer"
+              data-track-event="project_opened"
+              data-track-detail="portfolio"
+              aria-label="个人作品集"
+              title={sidebarCollapsed ? "个人作品集" : undefined}
+            >
+              <CompassIcon size={17} aria-hidden="true" />
+              <span>个人作品集</span>
+              <ArrowSquareOutIcon className="external-icon" size={15} aria-hidden="true" />
+            </a>
 
-            <div className="contact-copy-row">
-              <button
-                type="button"
-                className="contact-copy-btn"
-                data-track-event="contact_opened"
-                data-track-detail="phone"
-                aria-label="复制候选人电话"
-                title={sidebarCollapsed ? `复制电话：${profile.phone}` : profile.phone}
-                onClick={() => void copyContactValue("phone", profile.phone)}
-              >
-                {copiedContact === "phone" ? (
-                  <CheckIcon size={16} weight="bold" aria-hidden="true" />
-                ) : (
-                  <PhoneIcon size={16} aria-hidden="true" />
-                )}
-                <span>{copiedContact === "phone" ? "已复制电话" : profile.phone}</span>
-                <CopySimpleIcon className="copy-hint-icon" size={13} aria-hidden="true" />
-              </button>
-              <a
-                className="contact-direct-link"
-                href={`tel:${profile.phone}`}
-                data-track-event="contact_opened"
-                data-track-detail="phone"
-                aria-label="拨打电话"
-                title="直接拨号"
-              >
-                <ArrowUpRightIcon size={13} aria-hidden="true" />
-              </a>
-            </div>
+            <button
+              type="button"
+              className="sidebar-footer-btn"
+              data-track-event="contact_opened"
+              data-track-detail="email"
+              aria-label="发送邮件"
+              title={sidebarCollapsed ? `复制邮箱：${profile.email}` : `点击复制邮箱：${profile.email}`}
+              onClick={() => void copyContactValue("email", profile.email)}
+            >
+              {copiedContact === "email" ? (
+                <CheckIcon size={17} weight="bold" aria-hidden="true" />
+              ) : (
+                <EnvelopeSimpleIcon size={17} aria-hidden="true" />
+              )}
+              <span>{copiedContact === "email" ? "已复制邮箱" : "发送邮件"}</span>
+            </button>
+
+            <button
+              type="button"
+              className="sidebar-footer-btn"
+              data-track-event="contact_opened"
+              data-track-detail="phone"
+              aria-label="电话联系"
+              title={sidebarCollapsed ? `复制电话：${profile.phone}` : `点击复制电话：${profile.phone}`}
+              onClick={() => void copyContactValue("phone", profile.phone)}
+            >
+              {copiedContact === "phone" ? (
+                <CheckIcon size={17} weight="bold" aria-hidden="true" />
+              ) : (
+                <PhoneIcon size={17} aria-hidden="true" />
+              )}
+              <span>{copiedContact === "phone" ? "已复制电话" : "电话联系"}</span>
+            </button>
+
+            <a
+              href="/resume"
+              aria-label="查看最新简历"
+              title={sidebarCollapsed ? "查看最新简历" : undefined}
+            >
+              <FileTextIcon size={17} aria-hidden="true" />
+              <span>查看最新简历</span>
+            </a>
 
             <div className="privacy-note">
-              <ShieldCheckIcon size={15} aria-hidden="true" />
-              <p>仅基于公开资料回答；对话记录只保存在此浏览器</p>
+              <ShieldCheckIcon size={17} aria-hidden="true" />
+              <p>仅基于候选人公开资料回答；对话记录只保存在此浏览器</p>
             </div>
           </div>
         </aside>

@@ -544,3 +544,40 @@ test("滴滴实习与风控挑战问题通过 /api/chat 返回完整第一人称
   assert.match(challengeAnswer, /45\s*秒/);
   assert.equal((challengeMeta.followUpQuestions as string[] | undefined)?.length, 3);
 });
+
+test("口语化求职动机问题与同会话重复核心问题均稳定返回回答而不误触发服务不可用", async () => {
+  const whyPmEvents = await events(await POST(request({
+    sessionId: "api-why-pm",
+    messages: [{ role: "user", content: "你为什么做产品经理" }],
+  })));
+  const whyPmAnswer = whyPmEvents.filter((event) => event.type === "delta").map((event) => event.content).join("");
+  assert.equal(metaEvent(whyPmEvents).mode, "stable");
+  assert.equal(whyPmEvents.at(-1)?.responseStatus, "completed");
+  assert.doesNotMatch(whyPmAnswer, /抱歉，这次回答没有成功生成/);
+  assert.match(whyPmAnswer, /产品经理/);
+  assert.match(whyPmAnswer, /滴滴|百度|百川/);
+
+  const firstRoleFitEvents = await events(await POST(request({
+    sessionId: "api-repeat-role-fit",
+    messages: [{ role: "user", content: "你为什么适合 AI 产品经理岗位？" }],
+  })));
+  const firstRoleFitAnswer = firstRoleFitEvents.filter((event) => event.type === "delta").map((event) => event.content).join("");
+  assert.equal(firstRoleFitEvents.at(-1)?.responseStatus, "completed");
+
+  const secondRoleFitEvents = await events(await POST(request({
+    sessionId: "api-repeat-role-fit",
+    messages: [
+      { role: "user", content: "你为什么适合 AI 产品经理岗位？" },
+      { role: "assistant", content: firstRoleFitAnswer },
+      { role: "user", content: "你为什么做产品经理" },
+      { role: "assistant", content: "抱歉，这次回答没有成功生成。为了避免展示不完整或不准确的内容，我先没有保留它。你可以点击“重新回答”再试一次。" },
+      { role: "user", content: "你为什么适合 AI 产品经理岗位？" },
+    ],
+  })));
+  const secondRoleFitAnswer = secondRoleFitEvents.filter((event) => event.type === "delta").map((event) => event.content).join("");
+  assert.equal(metaEvent(secondRoleFitEvents).mode, "stable");
+  assert.equal(secondRoleFitEvents.at(-1)?.responseStatus, "completed");
+  assert.doesNotMatch(secondRoleFitAnswer, /抱歉，这次回答没有成功生成/);
+  assert.match(secondRoleFitAnswer, /适合 AI 产品经理岗位/);
+});
+
