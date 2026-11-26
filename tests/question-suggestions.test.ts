@@ -14,10 +14,10 @@ test("首屏问题按招聘关注点分组", () => {
   assert.doesNotMatch(questionGroups.flatMap((group) => group.questions).join(" "), /(^|\s)他|他的|帮助他|体现了他/);
 });
 
-test("代表项目问题优先推荐 RAG 贡献并保持话题覆盖", () => {
+test("代表项目问题优先推荐滴滴风控挑战并保持话题覆盖", () => {
   const questions = getFollowUpQuestions("哪个项目最能代表他的 AI 产品能力？");
   assert.equal(inferQuestionCategory("哪个项目最能代表他的 AI 产品能力？"), "project");
-  assert.match(questions[0], /RAG 项目中负责/);
+  assert.match(questions[0], /租车准入预审工作台遇到的最大挑战/);
   assert.equal(new Set(questions.map((question) => findQuestionContract(question)?.frame.topic)).size, 3);
 });
 
@@ -88,7 +88,7 @@ test("首页和动态追问不主动推荐刁难型问题", () => {
   assert.doesNotMatch(surfacedQuestions.join(" "), /短板|最应该核实|真实用户增长|独立训练大模型|录用结论/);
 });
 
-test("HR 追问固定覆盖证据、复盘和岗位匹配", () => {
+test("HR 追问固定覆盖证据、复盘和岗位匹配且优先推荐滴滴问题", () => {
   const suggestions = getHrFollowUpQuestions(
     "哪个项目最能代表你的 AI 产品能力？",
     ["哪个项目最能代表你的 AI 产品能力？"],
@@ -96,4 +96,11 @@ test("HR 追问固定覆盖证据、复盘和岗位匹配", () => {
   assert.deepEqual(suggestions.map((suggestion) => suggestion.kind), ["evidence", "retrospective", "fit"]);
   assert.deepEqual(suggestions.map((suggestion) => suggestion.label), ["证据追问", "项目复盘", "岗位匹配"]);
   assert.equal(new Set(suggestions.map((suggestion) => suggestion.question)).size, 3);
+  assert.equal(suggestions.some((suggestion) => /租车|滴滴|DiVA|37 条|机票/.test(suggestion.question)), true);
+
+  const introSuggestions = getHrFollowUpQuestions(
+    "请介绍一下你自己。",
+    ["请介绍一下你自己。"],
+  );
+  assert.equal(introSuggestions.some((suggestion) => /滴滴/.test(suggestion.question)), true);
 });

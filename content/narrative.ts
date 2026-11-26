@@ -9,7 +9,7 @@ export const candidateNarrative = {
     { id: "enterprise", label: "业务与风控", statement: "理解真实业务 SOP、证据链、风险控制，分清模型、确定性程序与人工各自边界。" },
     { id: "delivery", label: "产品落地", statement: "从百川医疗 RAG、百度 E2E 评测到滴滴风控预审、DiVA 素材与比价 Skill，以及 Ask Me、DeepFlow，持续把诉求推进成可用闭环。" },
   ],
-  projectAnchors: ["RAG Knowledge Base System", "租车商家准入 AI 预审工作台"],
+  projectAnchors: ["租车商家准入 AI 预审工作台", "RAG Knowledge Base System"],
   roleDirections: ["AI 应用产品", "模型评测产品", "企业工作流产品"],
   careerTransition: {
     thesis: "我从财会和审计走向产品，并不是突然换赛道，而是在连续的学习与实践中逐步确认：我更擅长也更愿意做连接业务问题、数据判断和技术落地的工作。",

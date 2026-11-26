@@ -103,10 +103,10 @@ test("安全拒答、证据不足与核心稳定回答返回标准 NDJSON 状态
   assert.equal(verifiedMeta.mode, "stable");
   assert.equal(verifiedMeta.responseStatus, "completed");
   assert.equal(verifiedMeta.disposition, "answer");
-  assert.equal((verifiedMeta.claimIds as string[]).includes("C3"), true);
-  assert.equal((verifiedMeta.sourceIds as string[]).includes("S3"), true);
+  assert.equal((verifiedMeta.claimIds as string[]).includes("C32"), true);
+  assert.equal((verifiedMeta.sourceIds as string[]).includes("S14"), true);
   assert.equal(Array.isArray(verifiedMeta.citations), true);
-  assert.equal((verifiedMeta.citations as Array<{ sourceIds: string[] }>).some((citation) => citation.sourceIds.includes("S3")), true);
+  assert.equal((verifiedMeta.citations as Array<{ sourceIds: string[] }>).some((citation) => citation.sourceIds.includes("S14")), true);
   assert.equal(typeof verified.at(-1).latencyMs, "number");
   assert.equal(verified[0].type, "stage");
   assert.equal(verified[0].stage, "understanding");
@@ -418,7 +418,7 @@ test("核心稳定回答不进入模型且始终使用事实骨架", async () =>
   const answer = responseEvents.filter((event) => event.type === "delta").map((event) => event.content).join("");
   assert.equal(calls, 0);
   assert.equal(metaEvent(responseEvents).mode, "stable");
-  assert.match(answer, /RAG Knowledge Base System/);
+  assert.match(answer, /租车商家准入/);
   assert.doesNotMatch(answer, /AI Coding Evaluator Agent|百度实习/);
   assert.doesNotMatch(answer, /校园数据门户|30 人|90%/);
   assert.equal(responseEvents.at(-1).responseStatus, "completed");

@@ -27,7 +27,7 @@ export const interviewRoles = [
 export const questionCategories = [
   { id: "sixty_second_intro", name: "60 秒介绍", question: "请你用 60 秒做自我介绍，并说明最值得继续面试的三个差异点。", semanticGroups: [["AI 产品"], ["数据", "统计", "评测"], ["业务", "审计", "企业流程", "企业场景"]], targetLength: { min: 430, max: 600 } },
   { id: "role_fit", name: "岗位匹配", question: "你为什么适合初级 AI 产品经理岗位？", semanticGroups: [["AI 产品"], ["评测", "数据"], ["业务", "审计", "企业"]], targetLength: { min: 360, max: 480 } },
-  { id: "representative_project", name: "代表项目", question: "哪个项目最能代表你的 AI 产品能力？请说明项目价值。", semanticGroups: [["RAG"], ["检索", "Dense Retrieval"], ["产品", "需求", "取舍"]], targetLength: { min: 390, max: 520 } },
+  { id: "representative_project", name: "代表项目", question: "哪个项目最能代表你的 AI 产品能力？请说明项目价值。", semanticGroups: [["租车", "风控", "预审"], ["规则", "OCR", "模型"], ["产品", "取舍", "试点"]], targetLength: { min: 390, max: 540 } },
   { id: "personal_contribution", name: "个人贡献", question: "你在 RAG 项目中具体做了什么？请区分你的判断与 AI 辅助。", semanticGroups: [["负责", "判断", "取舍"], ["AI", "工具"], ["验收", "评测", "复核"]], targetLength: { min: 400, max: 560 } },
   { id: "ai_coding_share", name: "AI 编程占比", question: "你的项目里 AI 编程工具承担了多少工作？请说明你本人判断与 AI 辅助的边界。", semanticGroups: [["AI"], ["负责", "判断"], ["工具", "编程"]], targetLength: { min: 350, max: 500 } },
   { id: "challenge_or_failure", name: "挑战或失败", question: "请你讲一个项目中的真实挑战或失败，并说明如何定位、调整和验证。", semanticGroups: [["问题", "挑战", "跑偏"], ["取舍", "调整"], ["验证", "评测", "检查"]], targetLength: { min: 400, max: 560 } },

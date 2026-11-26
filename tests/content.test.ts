@@ -102,10 +102,10 @@ test("Obsidian 审核通过的九条知识保留精确来源映射", () => {
 test("核心问题稳定匹配标准答案和评测要求", () => {
   const matched = matchStableAnswer("哪个项目最能代表他的 AI 产品能力？");
   assert.equal(matched?.id, "A03");
-  assert.match(matched?.standardAnswer ?? "", /RAG Knowledge Base System/);
+  assert.match(matched?.standardAnswer ?? "", /租车商家准入|预审/);
   assert.doesNotMatch(matched?.standardAnswer ?? "", /AI Coding Evaluator Agent|百度实习/);
-  assert.deepEqual(matched?.requiredClaimIds, ["C3", "C17", "C18", "C19", "C20", "C21"]);
-  assert.equal(matched?.requiredSourceIds.includes("S3"), true);
+  assert.deepEqual(matched?.requiredClaimIds, ["C31", "C32", "C33", "C34"]);
+  assert.equal(matched?.requiredSourceIds.includes("S14"), true);
 });
 
 test("60 秒介绍提供招聘判断、核心证据与完整来源", () => {
@@ -137,14 +137,14 @@ test("核心回答用克制的短词组突出招聘重点", () => {
 test("百川实习按最新简历日期归档且 RAG 明确归属该实习", () => {
   const internship = matchStableAnswer("请介绍一下你的百川智能实习。");
   const experience = knowledge.find((item) => item.id === "K27");
-  const representative = matchStableAnswer("哪个项目最能代表他的 AI 产品能力？");
+  const ragProject = matchStableAnswer("请介绍一下你的 RAG 知识库项目。");
   assert.equal(internship?.id, "A35");
   assert.match(internship?.standardAnswer ?? "", /2026 年 4 月到 6 月/);
   assert.match(internship?.standardAnswer ?? "", /医疗 RAG/);
   assert.equal(internship?.requiredSourceIds.includes("S12"), true);
   assert.match(experience?.content ?? "", /2026 年 4 月至 6 月/);
-  assert.equal(representative?.requiredClaimIds.includes("C18"), true);
-  assert.equal(representative?.requiredSourceIds.includes("S12"), true);
+  assert.equal(ragProject?.requiredClaimIds.includes("C18"), true);
+  assert.equal(ragProject?.requiredSourceIds.includes("S12"), true);
 });
 
 test("最新简历成为回答主线并串联实习与全部项目", () => {
